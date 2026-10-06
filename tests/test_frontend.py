@@ -140,6 +140,10 @@ class ClientTests(unittest.TestCase):
         self.assertIn("FlorinaTheme", self.js)
         self.assertNotIn('classList.add("mode-', self.js)
 
+    def test_client_puts_the_weather_theme_on_the_root(self):
+        self.assertNotIn("document.body.className", self.js)
+        self.assertIn("document.documentElement", self.js)
+
     def test_one_failing_section_does_not_blank_the_page(self):
         self.assertIn("function safely(", self.js)
         self.assertIn("console.error", self.js)
@@ -200,8 +204,15 @@ class StylesheetTests(unittest.TestCase):
 
     def test_defines_both_materials_for_every_weather_theme(self):
         for theme in ("clear-day", "clear-night", "cloud", "rain", "snow", "storm", "fog"):
-            self.assertIn("html.mode-light body.theme-" + theme, self.css,
+            self.assertIn("html.mode-light.theme-" + theme, self.css,
                           "light palette missing for " + theme)
+
+    def test_weather_theme_is_applied_to_the_root_element(self):
+        """Both classes must land on <html>, so the canvas colour is always
+        right — putting the theme on <body> left <html> flashing a flat
+        fallback colour for one frame."""
+        self.assertNotIn("body.theme-", self.css)
+        self.assertIn("html.theme-clear-day", self.css)
 
     def test_light_and_dark_materials_are_both_defined(self):
         self.assertIn("html.mode-light", self.css)

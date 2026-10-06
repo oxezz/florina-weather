@@ -5,8 +5,14 @@
 
      html.mode-light / html.mode-dark   set by theme.js, decides the material
                                         (text colours, glass tint, shadows)
-     body.theme-*                       set by app.js from the current weather,
+     html.theme-*                       set by app.js from the current weather,
                                         decides the backdrop hue
+
+   Both classes live on <html>, so the root element can pick the correct base
+   colour for the canvas and the overscroll area. When the weather theme lived
+   on <body> instead, <html> was left with a flat fallback colour that flashed
+   for one frame on desktop, before the fixed .backdrop layer had been
+   composited.
 
    PERFORMANCE NOTES — this file is deliberately frugal on phones.
 
@@ -125,22 +131,22 @@ html.mode-light {
 }
 
 /* --- backdrop per weather (dark) ---------------------------------------- */
-body.theme-clear-day   { --g1: #2f7fd0; --g2: #3fb6d8; --b1: #0b2b4a; --b2: #12557f; --b3: #2b93b8; }
-body.theme-clear-night { --g1: #1d2f63; --g2: #27356b; --b1: #070d20; --b2: #101a3a; --b3: #1d2b5c; }
-body.theme-cloud       { --g1: #48607a; --g2: #3d6b86; --b1: #131f2c; --b2: #24384a; --b3: #38607a; }
-body.theme-rain        { --g1: #2c4a68; --g2: #2f6b84; --b1: #0d1a26; --b2: #1b3145; --b3: #2b5a75; }
-body.theme-storm       { --g1: #3b3468; --g2: #4a3b6e; --b1: #0d0b1c; --b2: #221c3d; --b3: #3d3566; }
-body.theme-snow        { --g1: #5b7f9e; --g2: #6f9bb5; --b1: #16232f; --b2: #2b4055; --b3: #4a6d88; }
-body.theme-fog         { --g1: #5c6b78; --g2: #5f7d8c; --b1: #1a2229; --b2: #303c46; --b3: #4c5f6d; }
+html.theme-clear-day   { --g1: #2f7fd0; --g2: #3fb6d8; --b1: #0b2b4a; --b2: #12557f; --b3: #2b93b8; }
+html.theme-clear-night { --g1: #1d2f63; --g2: #27356b; --b1: #070d20; --b2: #101a3a; --b3: #1d2b5c; }
+html.theme-cloud       { --g1: #48607a; --g2: #3d6b86; --b1: #131f2c; --b2: #24384a; --b3: #38607a; }
+html.theme-rain        { --g1: #2c4a68; --g2: #2f6b84; --b1: #0d1a26; --b2: #1b3145; --b3: #2b5a75; }
+html.theme-storm       { --g1: #3b3468; --g2: #4a3b6e; --b1: #0d0b1c; --b2: #221c3d; --b3: #3d3566; }
+html.theme-snow        { --g1: #5b7f9e; --g2: #6f9bb5; --b1: #16232f; --b2: #2b4055; --b3: #4a6d88; }
+html.theme-fog         { --g1: #5c6b78; --g2: #5f7d8c; --b1: #1a2229; --b2: #303c46; --b3: #4c5f6d; }
 
 /* --- backdrop per weather (light) --------------------------------------- */
-html.mode-light body.theme-clear-day   { --g1: #8ac6f0; --g2: #a6e0f0; --b1: #f0f7fd; --b2: #dcebf8; --b3: #c3ddf2; }
-html.mode-light body.theme-clear-night { --g1: #93a9e0; --g2: #a8b6e8; --b1: #eef1f8; --b2: #dde3f2; --b3: #c9d2ea; }
-html.mode-light body.theme-cloud       { --g1: #b3c0cd; --g2: #c2ccd6; --b1: #f2f4f7; --b2: #e2e7ec; --b3: #ced6de; }
-html.mode-light body.theme-rain        { --g1: #93aec7; --g2: #a5bdd2; --b1: #eef2f6; --b2: #dbe3eb; --b3: #c5d1dd; }
-html.mode-light body.theme-storm       { --g1: #a49ecb; --g2: #b4aed6; --b1: #f1f0f6; --b2: #e0ddee; --b3: #cbc6e0; }
-html.mode-light body.theme-snow        { --g1: #aac4d8; --g2: #bcd3e2; --b1: #f4f8fb; --b2: #e4edf4; --b3: #d0dfeb; }
-html.mode-light body.theme-fog         { --g1: #b6bfc6; --g2: #c4ccd2; --b1: #f3f5f6; --b2: #e6eaed; --b3: #d4dade; }
+html.mode-light.theme-clear-day   { --g1: #8ac6f0; --g2: #a6e0f0; --b1: #f0f7fd; --b2: #dcebf8; --b3: #c3ddf2; }
+html.mode-light.theme-clear-night { --g1: #93a9e0; --g2: #a8b6e8; --b1: #eef1f8; --b2: #dde3f2; --b3: #c9d2ea; }
+html.mode-light.theme-cloud       { --g1: #b3c0cd; --g2: #c2ccd6; --b1: #f2f4f7; --b2: #e2e7ec; --b3: #ced6de; }
+html.mode-light.theme-rain        { --g1: #93aec7; --g2: #a5bdd2; --b1: #eef2f6; --b2: #dbe3eb; --b3: #c5d1dd; }
+html.mode-light.theme-storm       { --g1: #a49ecb; --g2: #b4aed6; --b1: #f1f0f6; --b2: #e0ddee; --b3: #cbc6e0; }
+html.mode-light.theme-snow        { --g1: #aac4d8; --g2: #bcd3e2; --b1: #f4f8fb; --b2: #e4edf4; --b3: #d0dfeb; }
+html.mode-light.theme-fog         { --g1: #b6bfc6; --g2: #c4ccd2; --b1: #f3f5f6; --b2: #e6eaed; --b3: #d4dade; }
 
 /* --- base --------------------------------------------------------------- */
 *,
@@ -149,10 +155,11 @@ html.mode-light body.theme-fog         { --g1: #b6bfc6; --g2: #c4ccd2; --b1: #f3
 
 * { margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
-/* The mode class lives on <html>, so this picks up the right base colour for
-   the rubber-band area even though the weather theme is on <body>. */
+/* The mode *and* weather class both live on <html>, so this is always the
+   right base colour, and it is what the browser uses for the canvas and the
+   overscroll area. */
 html {
-  background: var(--b3);
+  background: var(--b1);
   scrollbar-color: var(--track) transparent;
 }
 

@@ -82,7 +82,8 @@
   /* ---------------------------------------------------------------- theme */
 
   /* Light/dark lives in theme.js on <html>; this only picks the backdrop hue
-     from the current conditions, on <body>. */
+     from the current conditions. It goes on <html> too, so the root element
+     can colour the canvas correctly from the very first frame. */
   function weatherThemeFor(current) {
     var code = Number(current.code);
     if (code >= 95) return "storm";
@@ -94,19 +95,21 @@
   }
 
   function applyWeatherTheme(current) {
+    var root = document.documentElement;
     var next = "theme-" + weatherThemeFor(current);
-    var classes = document.body.className.split(/\s+/).filter(function (name) {
+    var classes = root.className.split(/\s+/).filter(function (name) {
       return name && name.indexOf("theme-") !== 0;
     });
     classes.push(next);
-    document.body.className = classes.join(" ");
+    root.className = classes.join(" ");
   }
 
   /* Keep the browser chrome (iOS status bar, Android toolbar) in step. */
   function syncThemeColor() {
     var meta = document.querySelector('meta[name="theme-color"]');
     if (!meta) return;
-    var value = getComputedStyle(document.body).getPropertyValue("--b1").trim();
+    var value = getComputedStyle(document.documentElement)
+      .getPropertyValue("--b1").trim();
     if (value) meta.setAttribute("content", value);
   }
 
