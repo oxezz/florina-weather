@@ -532,6 +532,38 @@ a:hover { text-decoration: underline; }
   background: linear-gradient(90deg, #6cc4f0, #ffd166, #fb923c);
 }
 
+/* --- local conditions --------------------------------------------------- */
+/* Only the cards that have something to say are rendered, so the panel is
+   absent entirely for most of the summer. */
+.local-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  justify-items: start;
+}
+.local-card {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  /* Capped, so a lone card in October does not stretch the full panel width. */
+  max-width: 420px;
+  padding: 15px 16px;
+  border-radius: var(--radius-md);
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border-soft);
+  /* a coloured hairline on the left, like the alert cards */
+  box-shadow: inset 3px 0 0 var(--tone, transparent);
+}
+.local-card .lbl { margin-bottom: 0; }
+.local-card .val {
+  font-size: 1.55rem;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--tone, inherit);
+  font-variant-numeric: tabular-nums;
+}
+.local-card .sub { margin-top: 0; line-height: 1.4; }
+
 /* --- air quality -------------------------------------------------------- */
 .air-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 18px; align-items: start; }
 .air-stat { text-align: center; }

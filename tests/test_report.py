@@ -21,8 +21,9 @@ def snapshot(**overrides):
     data = {
         "forecast": fixtures.forecast(),
         "air": fixtures.air(),
+        "history": fixtures.daily_history(),
         "alerts": fixtures.alerts(),
-        "ages": {"forecast": 4.0, "air": 60.0, "alerts": 30.0},
+        "ages": {"forecast": 4.0, "air": 60.0, "history": 120.0, "alerts": 30.0},
         "errors": {},
         "stale": False,
     }
@@ -199,7 +200,126 @@ class AlertTests(unittest.TestCase):
         self.assertEqual(alerts[0]["level"], "red")
 
 
-class AirTests(unittest.TestCase):
+class LocalConditionTests(unittest.TestCase):
+    """The hyper-local block: frost, heating degree days and wood smoke."""
+
+    # -- frost -------------------------------------------------------------
+
+    def test_frost_is_absent_when_no_night_gets_near_freezing(self):
+        # The default fixture is mild, so the card should simply not exist.
+        self.assertIsNone((build()["local"] or {}).get("frost"))
+
+    def _with_minima(self, minima):
+        forecast = fixtures.forecast()
+        forecast["daily"]["temperature_2m_min"] = list(minima)
+        return report.build_report(snapshot(forecast=forecast),
+                                   sources.Config(), now=NOW)
+
+    def test_frost_reports_the_coldest_night(self):
+        data = self._with_minima([3.0, -1.4, 0.5, -2.6, 5.0, 4.0, 3.0])
+        frost = data["local"]["frost"]
+        self.assertEqual(frost["lowest"], -2.6)
+        self.assertEqual(frost["level"], "hard")      # -2.6 crosses the -2 band
+        self.assertEqual(frost["count"], 2)           # -1.4 and -2.6
+        self.assertEqual(frost["first"]["iso"], "2026-10-07")
+
+    def test_frost_levels_follow_the_bands(self):
+        cases = [(-6.0, "severe"), (-3.0, "hard"), (-0.5, "frost"), (1.5, "risk")]
+        for value, expected in cases:
+            data = self._with_minima([value, 5, 5, 5, 5, 5, 5])
+            self.assertEqual(data["local"]["frost"]["level"], expected,
+                             "%s C should be %s" % (value, expected))
+
+    def test_mild_nights_are_not_counted_as_frost(self):
+        data = self._with_minima([1.0, 1.8, 5.0, 5.0, 5.0, 5.0, 5.0])
+        frost = data["local"]["frost"]
+        self.assertEqual(frost["count"], 0)           # nothing below zero
+        self.assertEqual(frost["level"], "risk")      # but still worth a word
+
+    # -- heating degree days -----------------------------------------------
+
+    def test_heating_totals_today_and_the_month_so_far(self):
+        # Derive the expectation from the fixture itself, so this tests the
+        # arithmetic rather than the fixture's rounding.
+        history = fixtures.daily_history()["daily"]
+        october = [mean for stamp, mean in
+                   zip(history["time"], history["temperature_2m_mean"])
+                   if stamp.startswith("2026-10")]
+        heating = build()["local"]["heating"]
+        self.assertAlmostEqual(
+            heating["month"], sum(max(0.0, 18.0 - m) for m in october), places=3)
+        self.assertEqual(heating["month_days"], len(october))
+        self.assertAlmostEqual(
+            heating["today"], max(0.0, 18.0 - history["temperature_2m_mean"][-1]),
+            places=3)
+        self.assertEqual(heating["month_name"], "Οκτωβρίου")
+        self.assertEqual(heating["base"], 18.0)
+
+    def test_heating_hides_itself_when_nothing_needs_heating(self):
+        history = fixtures.daily_history()
+        history["daily"]["temperature_2m_mean"] = [25.0] * 46
+        data = report.build_report(snapshot(history=history),
+                                   sources.Config(), now=NOW)
+        self.assertIsNone((data["local"] or {}).get("heating"))
+
+    def test_heating_needs_the_history_source(self):
+        data = build(history=None)
+        self.assertNotIn("heating", data["local"] or {})
+
+    # -- wood smoke --------------------------------------------------------
+
+    def test_smog_finds_the_evening_peak(self):
+        smog = build()["local"]["smog"]
+        self.assertEqual(smog["peak"], 34.0)
+        self.assertEqual(smog["peak_time"], "21:00")
+        self.assertEqual(smog["level"], "warn")       # 34 ug/m3 is over 25
+        self.assertEqual(smog["label"], "Αιθαλομίχλη")
+
+    def test_smog_reports_the_calm_wind_that_lets_it_pool(self):
+        smog = build()["local"]["smog"]
+        self.assertAlmostEqual(smog["wind"], 7.9, places=2)
+        self.assertTrue(smog["calm"])                 # 7.9 km/h is under 12
+
+    def test_smog_suggests_when_the_air_is_cleanest(self):
+        smog = build()["local"]["smog"]
+        self.assertLess(smog["cleanest"], smog["peak"])
+        self.assertRegex(smog["cleanest_time"], r"^\d{2}:\d{2}$")
+
+    def test_clean_air_means_no_smog_card(self):
+        air = fixtures.air()
+        air["hourly"]["pm2_5"] = [4.0] * 72
+        data = report.build_report(snapshot(air=air), sources.Config(), now=NOW)
+        self.assertIsNone((data["local"] or {}).get("smog"))
+
+    def test_smog_survives_a_missing_wind_series(self):
+        forecast = fixtures.forecast()
+        forecast["hourly"].pop("wind_speed_10m")
+        data = report.build_report(snapshot(forecast=forecast),
+                                   sources.Config(), now=NOW)
+        smog = (data["local"] or {}).get("smog")
+        self.assertIsNotNone(smog)
+        self.assertIsNone(smog["wind"])
+        self.assertFalse(smog["calm"])
+
+    # -- assembly ----------------------------------------------------------
+
+    def test_the_block_is_absent_entirely_when_nothing_applies(self):
+        forecast = fixtures.forecast()
+        forecast["daily"]["temperature_2m_min"] = [12.0] * 7
+        air = fixtures.air()
+        air["hourly"]["pm2_5"] = [3.0] * 72
+        history = fixtures.daily_history()
+        history["daily"]["temperature_2m_mean"] = [26.0] * 46
+        data = report.build_report(
+            snapshot(forecast=forecast, air=air, history=history),
+            sources.Config(), now=NOW)
+        self.assertIsNone(data["local"])
+
+    def test_local_is_carried_in_the_payload(self):
+        self.assertIn("local", build())
+
+
+
 
     def test_values(self):
         air = build()["air"]

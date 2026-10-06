@@ -533,6 +533,79 @@
     });
   }
 
+  /* ---------------------------------------------------- local conditions */
+
+  /* Each block is optional and is simply absent when it has nothing to say,
+     so the panel itself disappears for most of the summer. */
+  function renderLocal(local) {
+    var panel = $("local-panel");
+    if (!panel) return;
+    if (!local) { panel.hidden = true; return; }
+
+    var shown = 0;
+    shown += renderFrost(local.frost);
+    shown += renderHeating(local.heating);
+    shown += renderSmog(local.smog);
+    panel.hidden = shown === 0;
+  }
+
+  function toneFor(node, colour) {
+    if (colour) node.style.setProperty("--tone", colour);
+  }
+
+  function renderFrost(frost) {
+    var card = $("local-frost");
+    if (!card) return 0;
+    if (!frost) { card.hidden = true; return 0; }
+    card.hidden = false;
+    toneFor(card, frost.color);
+
+    setBig("frost-val", num(frost.lowest, 1) + "°");
+    var nights = frost.count === 1 ? "1 νύχτα με παγετό"
+                                   : frost.count + " νύχτες με παγετό";
+    var text;
+    if (frost.count > 0) {
+      text = frost.label + " · " + nights + " · πρώτη " + frost.first.label;
+    } else {
+      text = frost.label + " · καμία νύχτα κάτω από 0° στους δρόμους";
+    }
+    setText($("frost-sub"), text + " · χαμηλότερη " + frost.lowest_label);
+    return 1;
+  }
+
+  function renderHeating(heating) {
+    var card = $("local-heating");
+    if (!card) return 0;
+    if (!heating) { card.hidden = true; return 0; }
+    card.hidden = false;
+    toneFor(card, null);
+
+    setBig("heating-val", num(heating.month, 0));
+    setText($("heating-sub"),
+      "βαθμοημέρες τον " + heating.month_name + " (" + heating.month_days +
+      " ημέρες) · σήμερα " + num(heating.today, 1) +
+      " · βάση " + num(heating.base, 0) + "°");
+    return 1;
+  }
+
+  function renderSmog(smog) {
+    var card = $("local-smog");
+    if (!card) return 0;
+    if (!smog) { card.hidden = true; return 0; }
+    card.hidden = false;
+    toneFor(card, smog.color);
+
+    setBig("smog-val", num(smog.peak, 1));
+    var parts = [smog.label, "αιχμή " + smog.peak_time];
+    if (smog.wind !== null && smog.wind !== undefined) {
+      parts.push("άνεμος " + num(smog.wind, 1) + " km/h" +
+                 (smog.calm ? " (άπνοια)" : ""));
+    }
+    parts.push("καθαρότερος αέρας " + smog.cleanest_time);
+    setText($("smog-sub"), parts.join(" · "));
+    return 1;
+  }
+
   /* ------------------------------------------------------------------ air */
 
   function renderAir(air) {
@@ -635,6 +708,7 @@
     }
 
     safely("air", function () { renderAir(data.air); });
+    safely("local", function () { renderLocal(data.local); });
     safely("status", function () { renderStatus(data); });
     safely("title", function () { document.title = "Καιρός · " + data.place; });
     safely("skeletons", dropSkeletons);

@@ -68,6 +68,7 @@ covered by this project's MIT licence.
 | **7-day forecast** | per-day icon, description, min/max with a relative range bar, rainfall, UV and peak gusts |
 | **Official warnings** | live **Meteoalarm / EMY** alerts for West Macedonia, colour-coded, shown as a banner at the top |
 | **Air quality** | European AQI, PM2.5 / PM10 and pollen (grass, olive, ragweed, mugwort, birch, alder) |
+| **Local conditions** | Hyper-local cards for the basin climate: **frost risk** for growers, **heating degree days** for the month, and the evening **wood-smoke** build-up. Each card is simply absent when it has nothing to say, so the whole panel disappears in summer |
 | **Live updates** | the page refreshes itself in place — no reload, no flicker — and pauses while the tab is hidden |
 | **Installable (PWA)** | A manifest and a service worker, so "Add to Home Screen" gives a standalone app with no URL bar — and the refresh button is always there for an immediate update |
 | **Works offline** | The shell is cached, so a repeat launch is instant and an offline reload still shows the last weather with an «εκτός σύνδεσης» note rather than the browser's error page |
@@ -94,29 +95,19 @@ saving it, so a particular look is linkable.
 ## How it works
 
 ```
-       ┌────────────┐   ┌────────────┐   ┌────────────┐
-       │ Open-Meteo │   │ Open-Meteo │   │ Meteoalarm │
-       │  forecast  │   │    air     │   │  warnings  │
-       └─────┬──────┘   └─────┬──────┘   └─────┬──────┘
-             └────────────────┼────────────────┘
-                        ┌─────▼─────┐
-                        │ sources.py│  fetch + TTL cache + stale-if-error
-                        └─────┬─────┘
-                        ┌─────▼─────┐
-                        │ report.py │  normalise into one JSON document
-                        └─────┬─────┘
-                        ┌─────▼─────┐
-                        │  app.py   │  HTTP: HTML shell, JSON API, static files
-                        └─────┬─────┘
-                        ┌─────▼─────┐
-                        │  app.js   │  renders the page, polls every N seconds
-                        └───────────┘
+   ┌──────────────────────┐
+   │ Open-Meteo  forecast │──┐
+   │ Open-Meteo  air      │──┤
+   │ Open-Meteo  history  │──┼──►  sources.py  ──►  report.py  ──►  app.py  ──►  app.js
+   │ Meteoalarm  warnings │──┘     fetch,           normalise        HTTP:        render,
+   └──────────────────────┘         TTL cache,       into one         shell,       poll,
+                                    stale-if-error   JSON doc         JSON API     update in place
 ```
 
 | File | Purpose |
 |------|---------|
 | `app.py` | CLI, HTTP server, routing. Serves the shell, `/api/weather`, `/api/health` and an allow-list of static files |
-| `sources.py` | Configuration plus the three upstream clients, the TTL cache and stale-if-error handling |
+| `sources.py` | Configuration plus the four upstream clients, the TTL cache and stale-if-error handling |
 | `report.py` | Pure functions that turn raw upstream payloads into the document the UI consumes |
 | `greek.py` | Greek vocabulary: WMO code → description + emoji, compass, Beaufort, UV/AQI bands, dates |
 | `template.html` | The page shell. Only five placeholders, all server-filled |
@@ -127,7 +118,7 @@ saving it, so a particular look is linkable.
 | `manifest.webmanifest` | Web app manifest — name, icons, standalone display |
 | `Dockerfile` | Container image for Render / Fly / any container host |
 | `cacert.pem` | Mozilla CA bundle, used when the host has no trust store |
-| `tests/` | 167 tests, all offline |
+| `tests/` | 187 tests, all offline |
 
 ### API
 
@@ -160,6 +151,7 @@ FLORINA_PORT=8080 FLORINA_REFRESH=120 python app.py
 | `--cache-ttl` | `FLORINA_CACHE_TTL` | `600` | Server-side forecast cache, seconds |
 | `--forecast-days` | `FLORINA_FORECAST_DAYS` | `7` | Days in the daily forecast |
 | `--forecast-hours` | `FLORINA_FORECAST_HOURS` | `48` | Hours in the chart and strip |
+| — | `FLORINA_HISTORY_DAYS` | `45` | Days of daily history fetched for the heating-degree total |
 | `--alert-areas` | `FLORINA_ALERT_AREAS` | `west macedonia,δυτική μακεδονία` | Which Meteoalarm areas to show |
 | `--alert-emma-ids` | `FLORINA_ALERT_EMMA_IDS` | *(empty)* | Match warnings by EMMA region code instead of name |
 | `--open` | — | off | Open the browser on start |
@@ -189,7 +181,7 @@ warning is shown.
 python -m unittest discover -s tests -t .
 ```
 
-All 167 tests run offline: upstream responses are replaced by fixtures, and the
+All 187 tests run offline: upstream responses are replaced by fixtures, and the
 HTTP tests start a real server on an ephemeral port with an injected opener.
 
 ## Greek wording
@@ -212,8 +204,7 @@ A few labels were deliberately chosen over the obvious alternative:
   package). It then falls back to the `utc_offset_seconds` value Open-Meteo
   returns for the coordinates, which is correct for the forecast window. Which
   source was used is reported as `status.timezone_source`.
-* **Installing it.** On Android Chrome the site offers "Install app"; on iOS use
-  Share → Add to Home Screen. Either way you get a proper icon and a standalone
+* **Installing it.** On Android Chrome the site offers "Install app"; on iOS use  Share → Add to Home Screen. Either way you get a proper icon and a standalone
   window with no URL bar.
 
   The service worker is deliberately conservative, because stale weather is
@@ -223,6 +214,24 @@ A few labels were deliberately chosen over the obvious alternative:
   Bump `CACHE_VERSION` in `sw.js` only when something must never be served
   stale. The worker registers over https, and on loopback so local development
   behaves the same.
+* **Local conditions.** Florina sits in a basin at ~660 m, which gives the town a
+  climate of its own. Three readings of data we already fetch, each shown only
+  when it means something:
+
+  - **Frost risk** — the coldest night in the 7-day window, banded at 2 / 0 /
+    −2 / −4 °C. −2 °C is roughly where flowering fruit trees start to suffer,
+    −4 °C is a crop-damaging freeze. Absent whenever no night gets near zero,
+    which is why it disappears from late spring to early autumn.
+  - **Heating degree days** — `18 °C − daily mean`, totalled for the month to
+    date. Uses a daily-only history call (~2 KB) so it costs one extra request.
+  - **Wood smoke** — the peak PM2.5 between 18:00 and 02:00, with the wind that
+    lets it pool, plus the cleanest hour of the next day. Thresholds are the
+    WHO 2021 24-hour guideline (15 µg/m³) and the EU daily limit (25), so it
+    only appears on a genuinely smoky evening.
+
+  None of it is invented: every number is a straight reading of the forecast,
+  the air-quality call or the history call, and a failing source drops its own
+  card rather than breaking the page.
 * **Caching.** Upstream calls are cached server-side and served stale (up to six
   hours) if the network fails, so a brief outage shows slightly old data instead
   of an error page.

@@ -320,6 +320,42 @@ class PwaTests(unittest.TestCase):
         self.assertIn("localhost", js)
 
 
+class LocalPanelTests(unittest.TestCase):
+    """The hyper-local block: frost, heating degree days, wood smoke."""
+
+    def setUp(self):
+        self.template = read("template.html")
+        self.css = read("style.css")
+        self.js = read("app.js")
+
+    def test_everything_starts_hidden(self):
+        # The server decides nothing here; every card hides itself when its
+        # block has nothing to say, and the panel hides when all three do.
+        self.assertIn('id="local-panel" hidden', self.template)
+        for card in ("local-frost", "local-heating", "local-smog"):
+            self.assertIn('id="%s" hidden' % card, self.template)
+
+    def test_client_renders_each_block(self):
+        for name in ("renderLocal", "renderFrost", "renderHeating", "renderSmog"):
+            self.assertIn("function " + name, self.js)
+
+    def test_client_hides_the_panel_when_no_block_applies(self):
+        self.assertIn("panel.hidden = true", self.js)
+        self.assertIn("shown === 0", self.js)
+
+    def test_local_render_is_guarded_like_every_other_section(self):
+        self.assertIn('safely("local"', self.js)
+
+    def test_a_lone_card_is_width_capped(self):
+        # Otherwise one card in October stretches across the whole panel.
+        block = self.css.split(".local-card {")[1].split("}")[0]
+        self.assertIn("max-width", block)
+
+    def test_the_tone_hairline_has_a_fallback(self):
+        # --tone is set from data, so the CSS must survive its absence.
+        self.assertIn("var(--tone, transparent)", self.css)
+
+
 class StylesheetTests(unittest.TestCase):
 
     def setUp(self):
@@ -363,7 +399,7 @@ class StylesheetTests(unittest.TestCase):
         used = set(re.findall(r"var\((--[a-z0-9-]+)", self.css))
         # These are written by app.js in response to the pointer or to data,
         # so they have no stylesheet default (var() sites supply a fallback).
-        runtime = {"--c", "--level", "--mx", "--my"}
+        runtime = {"--c", "--level", "--mx", "--my", "--tone"}
         self.assertEqual(sorted(used - declared - runtime), [],
                          "style.css uses custom properties it never defines")
 

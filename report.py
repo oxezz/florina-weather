@@ -269,6 +269,181 @@ def parse_air(raw):
 
 
 # --------------------------------------------------------------------------
+# Hyper-local conditions
+# --------------------------------------------------------------------------
+#
+# Florina sits in a basin at ~660 m, which gives the town a climate of its own:
+# a long heating season, hard winter inversions, wood-smoke that pools on calm
+# evenings, and late/early frosts that matter to the apple and pepper growers.
+# Nothing here is invented — each block is a straight reading of data we
+# already have, and each is simply absent when it has nothing to say.
+
+HDD_BASE = 18.0          # the conventional heating-degree-day base, °C
+SMOG_EVENING_FROM = 18   # the wood-smoke window runs 18:00 -> 02:00
+SMOG_EVENING_TO = 2
+SMOG_CALM_KMH = 12.0     # above this the valley ventilates itself
+
+
+def _air_hourly(air):
+    """The hourly block of an air-quality payload, if there is one."""
+    if not isinstance(air, dict):
+        return None
+    hourly = air.get("hourly")
+    if not isinstance(hourly, dict) or not hourly.get("time"):
+        return None
+    return hourly
+
+
+def build_frost(days):
+    """Frost risk across the forecast window, for growers.
+
+    Returns ``None`` when no night in range gets near freezing, which keeps the
+    card off the page from late spring to early autumn.
+    """
+    nights = []
+    for day in days or []:
+        level = greek.frost_level(day.get("min"))
+        if level is None or day.get("min") is None:
+            continue
+        nights.append({
+            "label": day["label"],
+            "iso": day["iso"],
+            "weekday": day["weekday"],
+            "min": day["min"],
+            "level": level[0],
+        })
+    if not nights:
+        return None
+
+    coldest = min(nights, key=lambda night: night["min"])
+    key, label, colour = greek.frost_level(coldest["min"])
+    frosty = [night for night in nights if night["min"] <= 0]
+    return {
+        "level": key,
+        "label": label,
+        "color": colour,
+        "lowest": coldest["min"],
+        "lowest_label": coldest["label"],
+        "count": len(frosty),
+        "first": nights[0],
+        "nights": nights,
+    }
+
+
+def build_heating(history, now_local):
+    """Heating degree days: today, and the month so far."""
+    if not isinstance(history, dict):
+        return None
+    # Accept either the raw payload or its "daily" block.
+    if isinstance(history.get("daily"), dict):
+        history = history["daily"]
+    times = history.get("time") or []
+    means = history.get("temperature_2m_mean") or []
+    if not times or not means:
+        return None
+
+    prefix = now_local.strftime("%Y-%m")
+    month_values = []
+    today_mean = None
+    for stamp, mean in zip(times, means):
+        if mean is None:
+            continue
+        today_mean = mean  # the last usable entry is today
+        if str(stamp).startswith(prefix):
+            month_values.append(mean)
+
+    if not month_values or today_mean is None:
+        return None
+
+    month_hdd = sum(max(0.0, HDD_BASE - value) for value in month_values)
+    if month_hdd <= 0.0:
+        return None  # nothing to heat: hide it for the summer
+
+    return {
+        "base": HDD_BASE,
+        "today": max(0.0, HDD_BASE - today_mean),
+        "today_mean": today_mean,
+        "month": month_hdd,
+        "month_days": len(month_values),
+        "month_name": greek.month_name(now_local),
+    }
+
+
+def build_smog(air_hourly, forecast_hourly, now_local):
+    """Evening particulate build-up on calm nights — the wood-smoke signature.
+
+    Reports the peak PM2.5 in tonight's window, the wind that goes with it, and
+    the cleanest hour of the next day, which is the actionable part.
+    """
+    if not air_hourly:
+        return None
+    times = air_hourly.get("time") or []
+    values = air_hourly.get("pm2_5") or []
+    if not times or not values:
+        return None
+
+    wind_by_time = {}
+    for stamp, speed in zip((forecast_hourly or {}).get("time") or [],
+                            (forecast_hourly or {}).get("wind_speed_10m") or []):
+        wind_by_time[str(stamp)] = speed
+
+    start = now_local.replace(minute=0, second=0, microsecond=0, tzinfo=None)
+    end = start + timedelta(hours=24)
+
+    evening = []
+    whole_day = []
+    for stamp, value in zip(times, values):
+        if value is None:
+            continue
+        parsed = _parse_local(str(stamp), None)
+        if parsed is None or not (start <= parsed <= end):
+            continue
+        whole_day.append((parsed, value))
+        hour = parsed.hour
+        if hour >= SMOG_EVENING_FROM or hour < SMOG_EVENING_TO:
+            evening.append((parsed, value, wind_by_time.get(str(stamp))))
+
+    if not evening:
+        return None
+
+    peak_at, peak_value, peak_wind = max(evening, key=lambda item: item[1])
+    level = greek.smog_level(peak_value)
+    if level is None:
+        return None  # air is clean; the air-quality panel already covers it
+
+    winds = [w for _t, _v, w in evening if w is not None]
+    mean_wind = sum(winds) / len(winds) if winds else None
+    cleanest_at, cleanest_value = min(whole_day, key=lambda item: item[1])
+
+    key, label, colour = level
+    return {
+        "level": key,
+        "label": label,
+        "color": colour,
+        "peak": peak_value,
+        "peak_time": peak_at.strftime("%H:%M"),
+        "wind": mean_wind,
+        "calm": mean_wind is not None and mean_wind < SMOG_CALM_KMH,
+        "cleanest_time": cleanest_at.strftime("%H:%M"),
+        "cleanest": cleanest_value,
+    }
+
+
+def build_local_conditions(snapshot, days, forecast_hourly, now_local):
+    """Assemble the hyper-local block, dropping anything with nothing to say."""
+    blocks = {
+        "frost": build_frost(days),
+        "heating": build_heating(snapshot.get("history"), now_local),
+        "smog": build_smog(_air_hourly(snapshot.get("air")),
+                           forecast_hourly, now_local),
+    }
+    present = {key: value for key, value in blocks.items() if value}
+    if not present:
+        return None
+    return present
+
+
+# --------------------------------------------------------------------------
 # Forecast
 # --------------------------------------------------------------------------
 
@@ -454,6 +629,7 @@ def build_report(snapshot, config, now=None):
 
     today = days[0] if days else None
     alerts = parse_alerts(snapshot.get("alerts"), config, now_local)
+    local = build_local_conditions(snapshot, days, hourly_raw, now_local)
 
     ages = snapshot.get("ages") or {}
     errors = snapshot.get("errors") or {}
@@ -469,6 +645,7 @@ def build_report(snapshot, config, now=None):
         "today": today,
         "hourly": hours,
         "daily": days,
+        "local": local,
         "air": parse_air(snapshot.get("air")),
         "alerts": alerts,
         "status": {

@@ -186,6 +186,55 @@ _UV_QUALITY = (
     "Μειωμένη ορατότητα", "Πολύ μειωμένη ορατότητα",
 )
 
+# Frost bands for growers, coldest first. -2 °C is the usual damage threshold
+# for flowering fruit trees; -4 °C is a hard, crop-damaging freeze.
+_FROST_BANDS = (
+    (-4.0, "severe", "Ισχυρός παγετός", "#a5b4fc"),
+    (-2.0, "hard", "Έντονος παγετός", "#93c5fd"),
+    (0.0, "frost", "Παγετός", "#7dd3fc"),
+    (2.0, "risk", "Πιθανός παγετός", "#bae6fd"),
+)
+
+# Winter wood-smoke build-up, in µg/m³ of PM2.5. The 15 figure is the WHO 2021
+# 24-hour guideline; 25 is the EU daily limit value.
+_SMOG_BANDS = (
+    (50.0, "alert", "Έντονη αιθαλομίχλη", "#f87171"),
+    (25.0, "warn", "Αιθαλομίχλη", "#fb923c"),
+    (15.0, "note", "Αυξημένα σωματίδια", "#facc15"),
+)
+
+
+def frost_level(min_temp):
+    """(key, Greek label, hex colour) for a forecast minimum, or ``None``.
+
+    ``None`` means the night is warm enough not to be worth mentioning, which
+    is what keeps the frost card off the page for most of the year.
+    """
+    try:
+        value = float(min_temp)
+    except (TypeError, ValueError):
+        return None
+    if value != value:  # NaN
+        return None
+    for limit, key, label, colour in _FROST_BANDS:
+        if value <= limit:
+            return (key, label, colour)
+    return None
+
+
+def smog_level(pm25):
+    """(key, Greek label, hex colour) for a peak PM2.5 value, or ``None``."""
+    try:
+        value = float(pm25)
+    except (TypeError, ValueError):
+        return None
+    if value != value:  # NaN
+        return None
+    for limit, key, label, colour in _SMOG_BANDS:
+        if value >= limit:
+            return (key, label, colour)
+    return None
+
 
 def uv_level(value):
     """(Greek label, hex colour) for a UV index value."""

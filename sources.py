@@ -118,6 +118,14 @@ AIR_CURRENT = (
     "mugwort_pollen,olive_pollen,ragweed_pollen"
 )
 
+# Hourly PM2.5 is what drives the wood-smoke indicator; it rides along on the
+# air call we already make, so it costs no extra request.
+AIR_HOURLY = "pm2_5,pm10,european_aqi"
+
+# Heating degree days need daily means going back far enough to cover a full
+# month. Daily-only, so the payload stays under 2 KB.
+HISTORY_DAILY = "temperature_2m_mean,temperature_2m_min,temperature_2m_max"
+
 
 class SourceError(RuntimeError):
     """Raised when an upstream source cannot be read."""
@@ -163,11 +171,13 @@ class Config:
     refresh: int = 600          # client refresh interval; models update ~15 min
     cache_ttl: float = 600.0    # forecast cache lifetime
     air_cache_ttl: float = 900.0
+    history_cache_ttl: float = 1800.0
     alerts_cache_ttl: float = 300.0
     max_stale: float = 6 * 3600.0
     timeout: float = 20.0
     forecast_days: int = 7
     forecast_hours: int = 48
+    history_days: int = 45      # enough to cover any month-to-date window
     alert_country: str = "greece"
     alert_areas: list = field(default_factory=lambda: ["west macedonia", "δυτική μακεδονία"])
     alert_emma_ids: list = field(default_factory=list)
@@ -191,10 +201,13 @@ class Config:
             refresh=_env_int("FLORINA_REFRESH", cls.refresh),
             cache_ttl=_env_float("FLORINA_CACHE_TTL", cls.cache_ttl),
             air_cache_ttl=_env_float("FLORINA_AIR_CACHE_TTL", cls.air_cache_ttl),
+            history_cache_ttl=_env_float("FLORINA_HISTORY_CACHE_TTL",
+                                         cls.history_cache_ttl),
             alerts_cache_ttl=_env_float("FLORINA_ALERTS_CACHE_TTL", cls.alerts_cache_ttl),
             timeout=_env_float("FLORINA_TIMEOUT", cls.timeout),
             forecast_days=_env_int("FLORINA_FORECAST_DAYS", cls.forecast_days),
             forecast_hours=_env_int("FLORINA_FORECAST_HOURS", cls.forecast_hours),
+            history_days=_env_int("FLORINA_HISTORY_DAYS", cls.history_days),
             alert_country=os.environ.get("FLORINA_ALERT_COUNTRY", cls.alert_country),
             alert_areas=_env_list("FLORINA_ALERT_AREAS", cls().alert_areas),
             alert_emma_ids=_env_list("FLORINA_ALERT_EMMA_IDS", ()),
@@ -345,6 +358,19 @@ class WeatherService:
             "latitude": cfg.lat,
             "longitude": cfg.lon,
             "current": AIR_CURRENT,
+            "hourly": AIR_HOURLY,
+            "forecast_days": 3,
+            "timezone": cfg.timezone,
+        }
+
+    def _history_params(self):
+        cfg = self.config
+        return {
+            "latitude": cfg.lat,
+            "longitude": cfg.lon,
+            "daily": HISTORY_DAILY,
+            "past_days": cfg.history_days,
+            "forecast_days": 1,
             "timezone": cfg.timezone,
         }
 
@@ -354,6 +380,10 @@ class WeatherService:
 
     def fetch_air(self):
         return get_json(AIR_URL, self._air_params(),
+                        timeout=self.config.timeout, opener=self._opener)
+
+    def fetch_history(self):
+        return get_json(FORECAST_URL, self._history_params(),
                         timeout=self.config.timeout, opener=self._opener)
 
     def fetch_alerts(self):
@@ -407,6 +437,14 @@ class WeatherService:
         except Exception as exc:  # noqa: BLE001
             air_error = str(exc)
 
+        history = history_age = None
+        history_error = None
+        try:
+            history, history_age, _history_stale, history_error = self._cached(
+                "history", cfg.history_cache_ttl, self.fetch_history)
+        except Exception as exc:  # noqa: BLE001
+            history_error = str(exc)
+
         alerts = alerts_age = None
         alerts_error = None
         try:
@@ -418,6 +456,7 @@ class WeatherService:
         errors = {}
         for name, message in (("forecast", forecast_error),
                               ("air", air_error),
+                              ("history", history_error),
                               ("alerts", alerts_error)):
             if message:
                 errors[name] = message
@@ -425,10 +464,12 @@ class WeatherService:
         return {
             "forecast": forecast,
             "air": air,
+            "history": history,
             "alerts": alerts,
             "ages": {
                 "forecast": forecast_age,
                 "air": air_age,
+                "history": history_age,
                 "alerts": alerts_age,
             },
             "errors": errors,

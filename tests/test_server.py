@@ -33,6 +33,10 @@ def recording_opener(counter):
         if "meteoalarm" in url:
             counter["alerts"] = counter.get("alerts", 0) + 1
             return fixtures.dumps(fixtures.alerts())
+        # Same host as the forecast, but daily-only: the HDD history call.
+        if "temperature_2m_mean" in url:
+            counter["history"] = counter.get("history", 0) + 1
+            return fixtures.dumps(fixtures.daily_history())
         counter["forecast"] = counter.get("forecast", 0) + 1
         return fixtures.dumps(fixtures.forecast())
     return opener

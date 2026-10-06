@@ -93,7 +93,24 @@ def forecast(days=DAYS, start=START, code=2):
 
 
 def air():
-    """An Open-Meteo air-quality response."""
+    """An Open-Meteo air-quality response, with the hourly PM2.5 series.
+
+    PM2.5 is shaped so a wood-smoke evening shows up clearly: quiet by day,
+    a build-up from 18:00, peaking at 21:00 on the second evening.
+    """
+    times = [(START + datetime.timedelta(hours=i)).strftime("%Y-%m-%dT%H:%M")
+             for i in range(72)]
+    pm25 = []
+    for i in range(72):
+        stamp = START + datetime.timedelta(hours=i)
+        hour = stamp.hour
+        if stamp.date() == datetime.date(2026, 10, 7) and hour == 21:
+            pm25.append(34.0)          # the peak
+        elif hour >= 18 or hour < 2:
+            pm25.append(26.0)          # smoky evening
+        else:
+            pm25.append(6.0)           # clean daytime
+
     return {
         "timezone": "Europe/Athens",
         "current": {
@@ -108,6 +125,38 @@ def air():
             "mugwort_pollen": 1.0,
             "olive_pollen": 0.0,
             "ragweed_pollen": 0.0,
+        },
+        "hourly": {
+            "time": times,
+            "pm2_5": pm25,
+            "pm10": [round(v * 1.25, 1) for v in pm25],
+            "european_aqi": [int(min(100, v * 2)) for v in pm25],
+        },
+    }
+
+
+def daily_history(days=46, end=datetime.date(2026, 10, 6)):
+    """The daily-only call that feeds heating degree days.
+
+    Means ramp steadily downward, so the month-to-date total is easy to
+    recompute by hand in a test.
+    """
+    start = end - datetime.timedelta(days=days - 1)
+    times, means, mins, maxs = [], [], [], []
+    for index in range(days):
+        day = start + datetime.timedelta(days=index)
+        mean = round(20.0 - 0.25 * index, 1)
+        times.append(day.isoformat())
+        means.append(mean)
+        mins.append(round(mean - 5.0, 1))
+        maxs.append(round(mean + 5.0, 1))
+    return {
+        "timezone": "Europe/Athens",
+        "daily": {
+            "time": times,
+            "temperature_2m_mean": means,
+            "temperature_2m_min": mins,
+            "temperature_2m_max": maxs,
         },
     }
 
