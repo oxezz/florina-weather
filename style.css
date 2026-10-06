@@ -541,18 +541,17 @@ a:hover { text-decoration: underline; }
 /* --- local conditions --------------------------------------------------- */
 /* Only the cards that have something to say are rendered, so the panel is
    absent entirely for most of the summer. */
+/* The cards share whatever row they land in, so a lone card fills the panel
+   and two or three sit side by side. Capping a lone card's width instead left
+   a large void beside it that read as a rendering fault. */
 .local-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 14px;
-  justify-items: start;
 }
 .local-card {
   display: grid;
   gap: 5px;
-  width: 100%;
-  /* Capped, so a lone card in October does not stretch the full panel width. */
-  max-width: 420px;
   padding: 15px 16px;
   border-radius: var(--radius-md);
   background: var(--glass-inner);

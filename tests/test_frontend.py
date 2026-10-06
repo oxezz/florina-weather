@@ -346,10 +346,13 @@ class LocalPanelTests(unittest.TestCase):
     def test_local_render_is_guarded_like_every_other_section(self):
         self.assertIn('safely("local"', self.js)
 
-    def test_a_lone_card_is_width_capped(self):
-        # Otherwise one card in October stretches across the whole panel.
-        block = self.css.split(".local-card {")[1].split("}")[0]
-        self.assertIn("max-width", block)
+    def test_the_cards_share_the_row_evenly(self):
+        """A lone card must fill the panel. Capping its width left a large void
+        beside it on desktop, which reads as a rendering fault."""
+        card = self.css.split(".local-card {")[1].split("}")[0]
+        self.assertNotIn("max-width", card)
+        grid = self.css.split(".local-grid {")[1].split("}")[0]
+        self.assertIn("minmax(200px, 1fr)", grid)
 
     def test_the_tone_hairline_has_a_fallback(self):
         # --tone is set from data, so the CSS must survive its absence.
