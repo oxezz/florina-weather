@@ -5,6 +5,12 @@ __pycache__/
 .venv/
 venv/
 
+# Scratch files: a leading underscore means "not part of the project".
+/_*.py
+/_*.txt
+/_*.mjs
+/_*.log
+
 # Tooling
 .pytest_cache/
 .mypy_cache/
