@@ -34,7 +34,7 @@ import greek
 import report as report_mod
 import sources
 
-__version__ = "2.5.2"
+__version__ = "2.6.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(BASE_DIR, "template.html")

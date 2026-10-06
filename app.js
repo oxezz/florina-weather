@@ -560,16 +560,24 @@
     card.hidden = false;
     toneFor(card, frost.color);
 
-    setBig("frost-val", num(frost.lowest, 1) + "°");
-    var nights = frost.count === 1 ? "1 νύχτα με παγετό"
-                                   : frost.count + " νύχτες με παγετό";
-    var text;
+    setBig("frost-val", num(frost.min, 1) + "°");
+
+    var parts = [frost.label];
     if (frost.count > 0) {
-      text = frost.label + " · " + nights + " · πρώτη " + frost.first.label;
+      parts.push(frost.count === 1 ? "1 νύχτα με παγετό"
+                                   : frost.count + " νύχτες με παγετό");
+      parts.push("πρώτη " + frost.first.label);
     } else {
-      text = frost.label + " · καμία νύχτα κάτω από 0° στους δρόμους";
+      parts.push("καμία νύχτα κάτω από 0°");
     }
-    setText($("frost-sub"), text + " · χαμηλότερη " + frost.lowest_label);
+    // The two readings disagree, and the gap is the interesting part: the
+    // ground freezes while the air is still above zero.
+    if (frost.ground_min !== null && frost.ground_min !== undefined &&
+        frost.air_min !== null && frost.air_min !== undefined) {
+      parts.push("έδαφος " + num(frost.ground_min, 1) + "° · αέρας " +
+                 num(frost.air_min, 1) + "°");
+    }
+    setText($("frost-sub"), parts.join(" · "));
     return 1;
   }
 

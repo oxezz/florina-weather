@@ -294,22 +294,57 @@ def _air_hourly(air):
     return hourly
 
 
-def build_frost(days):
+def _surface_minima(hourly):
+    """Coldest ground-surface temperature per date, from the hourly series.
+
+    Only the 0 cm layer is a frost sensor. At 6 cm the soil stays 5-8 °C
+    warmer than the surface, which is root-zone warmth, not frost risk.
+    """
+    times = (hourly or {}).get("time") or []
+    values = (hourly or {}).get("soil_temperature_0cm") or []
+    by_day = {}
+    for stamp, value in zip(times, values):
+        if value is None:
+            continue
+        try:
+            day = str(stamp)[:10]
+        except Exception:  # noqa: BLE001
+            continue
+        if day not in by_day or value < by_day[day]:
+            by_day[day] = value
+    return by_day
+
+
+def build_frost(days, forecast_hourly=None):
     """Frost risk across the forecast window, for growers.
 
-    Returns ``None`` when no night in range gets near freezing, which keeps the
-    card off the page from late spring to early autumn.
+    Two sensors, because they disagree: the 2 m air minimum and the ground
+    surface. On a clear calm night the surface radiates heat away and runs
+    1-3 °C colder, so it can freeze while the air is still above zero — which
+    is exactly the radiation frost that catches low crops such as peppers.
+
+    Returns ``None`` when no night in range comes near freezing, which keeps
+    the card off the page from late spring to early autumn.
     """
+    surface = _surface_minima(forecast_hourly)
     nights = []
     for day in days or []:
-        level = greek.frost_level(day.get("min"))
-        if level is None or day.get("min") is None:
+        air = day.get("min")
+        ground = surface.get(day.get("iso"))
+        readings = [value for value in (air, ground) if value is not None]
+        if not readings:
+            continue
+        effective = min(readings)
+        level = greek.frost_level(effective)
+        if level is None:
             continue
         nights.append({
             "label": day["label"],
             "iso": day["iso"],
             "weekday": day["weekday"],
-            "min": day["min"],
+            "air": air,
+            "ground": ground,
+            "min": effective,
             "level": level[0],
         })
     if not nights:
@@ -318,11 +353,19 @@ def build_frost(days):
     coldest = min(nights, key=lambda night: night["min"])
     key, label, colour = greek.frost_level(coldest["min"])
     frosty = [night for night in nights if night["min"] <= 0]
+    air_values = [n["air"] for n in nights if n["air"] is not None]
+    ground_values = [n["ground"] for n in nights if n["ground"] is not None]
     return {
         "level": key,
         "label": label,
         "color": colour,
-        "lowest": coldest["min"],
+        "min": coldest["min"],
+        "air_min": min(air_values) if air_values else None,
+        "ground_min": min(ground_values) if ground_values else None,
+        # Which sensor drove the warning: the surface almost always does.
+        "driver": ("ground" if coldest["ground"] is not None
+                   and (coldest["air"] is None or coldest["ground"] <= coldest["air"])
+                   else "air"),
         "lowest_label": coldest["label"],
         "count": len(frosty),
         "first": nights[0],
@@ -432,7 +475,7 @@ def build_smog(air_hourly, forecast_hourly, now_local):
 def build_local_conditions(snapshot, days, forecast_hourly, now_local):
     """Assemble the hyper-local block, dropping anything with nothing to say."""
     blocks = {
-        "frost": build_frost(days),
+        "frost": build_frost(days, forecast_hourly),
         "heating": build_heating(snapshot.get("history"), now_local),
         "smog": build_smog(_air_hourly(snapshot.get("air")),
                            forecast_hourly, now_local),

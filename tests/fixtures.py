@@ -70,6 +70,9 @@ def forecast(days=DAYS, start=START, code=2):
                          for i in range(len(times))],
             "cloud_cover": [3 for _ in times],
             "visibility": [41220.0 for _ in times],
+            # The ground surface runs ~2 C below the 2 m air on a clear night,
+            # which is the whole point of the frost card.
+            "soil_temperature_0cm": [round(t - 2.0, 1) for t in temperature],
         },
         "daily": {
             "time": daily_dates,

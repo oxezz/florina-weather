@@ -102,7 +102,7 @@ FORECAST_HOURLY = (
     "temperature_2m,apparent_temperature,relative_humidity_2m,"
     "precipitation_probability,precipitation,weather_code,is_day,"
     "wind_speed_10m,wind_gusts_10m,wind_direction_10m,uv_index,cloud_cover,"
-    "visibility"
+    "visibility,soil_temperature_0cm"
 )
 
 FORECAST_DAILY = (

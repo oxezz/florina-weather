@@ -210,15 +210,35 @@ class LocalConditionTests(unittest.TestCase):
         self.assertIsNone((build()["local"] or {}).get("frost"))
 
     def _with_minima(self, minima):
+        """Set the daily air minima, leaving the ground series at its default.
+
+        The fixture's ground series bottoms out at 7.0 °C each day, so these
+        cases exercise the air sensor on its own.
+        """
         forecast = fixtures.forecast()
         forecast["daily"]["temperature_2m_min"] = list(minima)
+        return report.build_report(snapshot(forecast=forecast),
+                                   sources.Config(), now=NOW)
+
+    def _with_ground(self, air_minima, ground_minima):
+        """Set both sensors. The ground series is written flat per day, so its
+        daily minimum is exactly the value asked for."""
+        forecast = fixtures.forecast()
+        forecast["daily"]["temperature_2m_min"] = list(air_minima)
+        series = []
+        for stamp in forecast["hourly"]["time"]:
+            offset = (datetime.date.fromisoformat(stamp[:10])
+                      - datetime.date(2026, 10, 6)).days
+            series.append(ground_minima[offset]
+                          if 0 <= offset < len(ground_minima) else 10.0)
+        forecast["hourly"]["soil_temperature_0cm"] = series
         return report.build_report(snapshot(forecast=forecast),
                                    sources.Config(), now=NOW)
 
     def test_frost_reports_the_coldest_night(self):
         data = self._with_minima([3.0, -1.4, 0.5, -2.6, 5.0, 4.0, 3.0])
         frost = data["local"]["frost"]
-        self.assertEqual(frost["lowest"], -2.6)
+        self.assertEqual(frost["min"], -2.6)
         self.assertEqual(frost["level"], "hard")      # -2.6 crosses the -2 band
         self.assertEqual(frost["count"], 2)           # -1.4 and -2.6
         self.assertEqual(frost["first"]["iso"], "2026-10-07")
@@ -235,6 +255,50 @@ class LocalConditionTests(unittest.TestCase):
         frost = data["local"]["frost"]
         self.assertEqual(frost["count"], 0)           # nothing below zero
         self.assertEqual(frost["level"], "risk")      # but still worth a word
+
+    # -- ground frost: the sensor the 2 m air misses -----------------------
+
+    def test_ground_frost_is_caught_while_the_air_stays_above_zero(self):
+        """A clear calm night radiates heat off the surface, which can freeze
+        while the air at 2 m is still positive — the radiation frost that
+        catches low crops such as peppers."""
+        data = self._with_ground([2.5, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0],
+                                 [-1.0, 2.0, 3.0, 4.0, 5.0, 4.0, 3.0])
+        frost = (data["local"] or {}).get("frost")
+        self.assertIsNotNone(frost, "air +2.5 C should not hide a frozen surface")
+        self.assertEqual(frost["min"], -1.0)
+        self.assertEqual(frost["level"], "frost")
+        self.assertEqual(frost["count"], 1)
+        self.assertEqual(frost["driver"], "ground")
+        self.assertEqual(frost["air_min"], 2.5)
+        self.assertEqual(frost["ground_min"], -1.0)
+
+    def test_the_air_still_wins_when_it_is_the_colder_sensor(self):
+        data = self._with_ground([-5.0, 5, 5, 5, 5, 5, 5],
+                                 [-2.0, 10, 10, 10, 10, 10, 10])
+        frost = data["local"]["frost"]
+        self.assertEqual(frost["min"], -5.0)
+        self.assertEqual(frost["driver"], "air")
+        self.assertEqual(frost["level"], "severe")
+
+    def test_a_frozen_surface_raises_the_severity(self):
+        # +1.5 C air alone would read as a mild risk; a -2.5 C surface does not.
+        alone = self._with_minima([1.5, 5, 5, 5, 5, 5, 5])["local"]["frost"]
+        with_ground = self._with_ground([1.5, 5, 5, 5, 5, 5, 5],
+                                        [-2.5, 10, 10, 10, 10, 10, 10])["local"]["frost"]
+        self.assertEqual(alone["level"], "risk")
+        self.assertEqual(with_ground["level"], "hard")
+
+    def test_a_missing_ground_series_falls_back_to_air_alone(self):
+        forecast = fixtures.forecast()
+        forecast["daily"]["temperature_2m_min"] = [3.0, -1.4, 5, 5, 5, 5, 5]
+        forecast["hourly"].pop("soil_temperature_0cm")
+        data = report.build_report(snapshot(forecast=forecast),
+                                   sources.Config(), now=NOW)
+        frost = data["local"]["frost"]
+        self.assertIsNone(frost["ground_min"])
+        self.assertEqual(frost["min"], -1.4)
+        self.assertEqual(frost["driver"], "air")
 
     # -- heating degree days -----------------------------------------------
 
