@@ -1,0 +1,13 @@
+.git
+.github
+.gitignore
+.gitattributes
+.dockerignore
+__pycache__
+**/__pycache__
+*.py[cod]
+docs
+archive
+tests
+README.md
+Dockerfile

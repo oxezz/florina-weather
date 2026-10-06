@@ -1,0 +1,13 @@
+# Keep line endings consistent across Windows, macOS and Linux checkouts.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+
+# GitHub's linguist should not count the archived HTML dumps.
+archive/*.html linguist-vendored
