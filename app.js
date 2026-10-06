@@ -607,9 +607,10 @@
     var parts = [smog.label, "αιχμή " + smog.peak_time];
     if (smog.wind !== null && smog.wind !== undefined) {
       parts.push("άνεμος " + num(smog.wind, 1) + " km/h" +
-                 (smog.calm ? " (άπνοια)" : ""));
+                 (smog.pooling ? " (άπνοια)" : " — διασκορπίζονται"));
     }
-    parts.push("καθαρότερος αέρας " + smog.cleanest_time);
+    // Ventilation advice only makes sense while the smoke is actually pooling.
+    if (smog.pooling) parts.push("καθαρότερος αέρας " + smog.cleanest_time);
     setText($("smog-sub"), parts.join(" · "));
     return 1;
   }

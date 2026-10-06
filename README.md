@@ -118,7 +118,7 @@ saving it, so a particular look is linkable.
 | `manifest.webmanifest` | Web app manifest — name, icons, standalone display |
 | `Dockerfile` | Container image for Render / Fly / any container host |
 | `cacert.pem` | Mozilla CA bundle, used when the host has no trust store |
-| `tests/` | 199 tests, all offline |
+| `tests/` | 203 tests, all offline |
 
 ### API
 
@@ -181,7 +181,7 @@ warning is shown.
 python -m unittest discover -s tests -t .
 ```
 
-All 199 tests run offline: upstream responses are replaced by fixtures, and the
+All 203 tests run offline: upstream responses are replaced by fixtures, and the
 HTTP tests start a real server on an ephemeral port with an injected opener.
 
 ## Greek wording
@@ -231,10 +231,13 @@ A few labels were deliberately chosen over the obvious alternative:
     warmer than the surface, which is root-zone warmth rather than frost risk.
   - **Heating degree days** — `18 °C − daily mean`, totalled for the month to
     date. Uses a daily-only history call (~2 KB) so it costs one extra request.
-  - **Wood smoke** — the peak PM2.5 between 18:00 and 02:00, with the wind that
-    lets it pool, plus the cleanest hour of the next day. Thresholds are the
-    WHO 2021 24-hour guideline (15 µg/m³) and the EU daily limit (25), so it
-    only appears on a genuinely smoky evening.
+  - **Wood smoke** — the peak PM2.5 between 18:00 and 02:00, plus the wind that
+    lets it pool. Thresholds are the WHO 2021 24-hour guideline (15 µg/m³) and
+    the EU daily limit (25), so it only appears on a genuinely polluted evening.
+    The wind decides the *framing*, not the severity: under 12 km/h it reads as
+    «αιθαλομίχλη» pooling in the basin, with the cleanest hour of the next day;
+    above that the same PM2.5 is particulate blowing through, so it is labelled
+    «αυξημένα σωματίδια» and the ventilation advice is dropped.
   - **Still to come: the inversion index.** Comparing the valley against a
     mid-slope point (the 1073 m ground 4 km north) would show the basin locking
     in cold air. It is deliberately last, because it needs verified comparison

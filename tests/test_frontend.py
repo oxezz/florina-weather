@@ -397,10 +397,29 @@ class ExplainerTests(unittest.TestCase):
             self.assertRegex(hint, "[\\u0370-\\u03ff]",
                              "explanation is not in Greek")
 
-    def test_the_client_wires_them_up(self):
+    def test_the_client_wires_the_explainers(self):
         self.assertIn("function initInfo", self.js)
         self.assertIn("initInfo();", self.js)
         self.assertIn("aria-expanded", self.js)
+
+    def test_the_smog_card_tells_pooling_from_dispersal(self):
+        """High PM2.5 with a breeze is particulate blowing through, not wood
+        smoke sitting on the town, and the card must say which."""
+        self.assertIn("smog.pooling", self.js)
+        self.assertIn("άπνοια", self.js)
+        self.assertIn("διασκορπίζονται", self.js)
+
+    def test_ventilation_advice_is_gated_on_pooling(self):
+        # A "cleanest hour" suggestion is meaningless when it is blowing through.
+        lines = [line for line in self.js.splitlines() if "καθαρότερος αέρας" in line]
+        self.assertEqual(len(lines), 1)
+        self.assertIn("smog.pooling", lines[0])
+
+    def test_the_frost_card_shows_both_sensors(self):
+        self.assertIn("frost.ground_min", self.js)
+        self.assertIn("frost.air_min", self.js)
+        self.assertIn("έδαφος", self.js)
+        self.assertIn("αέρας", self.js)
 
     def test_a_thumb_can_hit_the_button(self):
         # 16px is small for a finger; the padding keeps the tap target usable

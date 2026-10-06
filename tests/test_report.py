@@ -342,7 +342,26 @@ class LocalConditionTests(unittest.TestCase):
     def test_smog_reports_the_calm_wind_that_lets_it_pool(self):
         smog = build()["local"]["smog"]
         self.assertAlmostEqual(smog["wind"], 7.9, places=2)
-        self.assertTrue(smog["calm"])                 # 7.9 km/h is under 12
+        self.assertTrue(smog["calm"])
+        self.assertTrue(smog["pooling"])
+        self.assertEqual(smog["label"], "Αιθαλομίχλη")
+
+    def test_a_breeze_means_it_is_not_wood_smoke(self):
+        """The same PM2.5 with a real wind is particulate passing through, not
+        smoke pooling in the basin, so the smog framing would be wrong."""
+        forecast = fixtures.forecast()
+        forecast["hourly"]["wind_speed_10m"] = [28.0] * len(forecast["hourly"]["time"])
+        data = report.build_report(snapshot(forecast=forecast),
+                                   sources.Config(), now=NOW)
+        smog = (data["local"] or {}).get("smog")
+        self.assertIsNotNone(smog)
+        self.assertFalse(smog["pooling"])
+        self.assertFalse(smog["calm"])
+        self.assertGreater(smog["wind"], 12.0)
+        # The health-relevant severity is unchanged; only the framing is.
+        self.assertEqual(smog["level"], "warn")
+        self.assertEqual(smog["peak"], 34.0)
+        self.assertEqual(smog["label"], "Αυξημένα σωματίδια")
 
     def test_smog_suggests_when_the_air_is_cleanest(self):
         smog = build()["local"]["smog"]

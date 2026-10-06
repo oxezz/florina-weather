@@ -456,9 +456,15 @@ def build_smog(air_hourly, forecast_hourly, now_local):
 
     winds = [w for _t, _v, w in evening if w is not None]
     mean_wind = sum(winds) / len(winds) if winds else None
+    # Wood smoke only pools when the valley is calm. The same PM2.5 with a real
+    # breeze is particulate passing through, not smog sitting on the town, and
+    # the ventilation advice does not apply.
+    pooling = mean_wind is None or mean_wind < SMOG_CALM_KMH
     cleanest_at, cleanest_value = min(whole_day, key=lambda item: item[1])
 
     key, label, colour = level
+    if not pooling:
+        label = "Αυξημένα σωματίδια"
     return {
         "level": key,
         "label": label,
@@ -466,6 +472,7 @@ def build_smog(air_hourly, forecast_hourly, now_local):
         "peak": round(peak_value, 1),
         "peak_time": peak_at.strftime("%H:%M"),
         "wind": round(mean_wind, 1) if mean_wind is not None else None,
+        "pooling": pooling,
         "calm": mean_wind is not None and mean_wind < SMOG_CALM_KMH,
         "cleanest_time": cleanest_at.strftime("%H:%M"),
         "cleanest": round(cleanest_value, 1),
