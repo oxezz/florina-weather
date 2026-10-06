@@ -135,7 +135,21 @@
 </section>
 
 <section class="card glass panel">
-  <div class="panel-head"><h2>Πρόβλεψη 7 ημερών</h2></div>
+  <div class="panel-head">
+    <h2>Πρόβλεψη 7 ημερών</h2>
+    <span class="chip muted" id="agreement-note">συμφωνία μοντέλων
+      <button class="info" type="button" aria-expanded="false"
+              aria-controls="hint-agreement" aria-label="Τι σημαίνει;">?</button>
+    </span>
+  </div>
+  <p class="hint panel-hint" id="hint-agreement" hidden>
+    Κάθε ημέρα προέρχεται από περισσότερα του ενός μοντέλα &mdash; το
+    &laquo;best match&raquo; που βλέπετε, μαζί με τα ICON-EU (DWD), ECMWF και
+    GFS (NOAA). Όταν συμφωνούν, η πρόβλεψη είναι σχετικά σίγουρη. Όταν
+    διαφωνούν, το &plusmn; δείχνει πόσο απέχουν. Σε ορεινές κοιλάδες όπως η
+    Φλώρινα η διαφωνία είναι συχνά μεγάλη, γιατί κάθε μοντέλο χειρίζεται
+    διαφορετικά το ανάγλυφο.
+  </p>
   <div class="days" id="days">
     <div class="day skel day-skel" data-skeleton></div>
     <div class="day skel day-skel" data-skeleton></div>
@@ -153,6 +167,22 @@
     <span class="chip muted">μικροκλίμα κοιλάδας</span>
   </div>
   <div class="local-grid">
+    <div class="local-card" id="local-inversion" hidden>
+      <span class="lbl">Θερμοκρασιακή αναστροφή
+        <button class="info" type="button" aria-expanded="false"
+                aria-controls="hint-inversion" aria-label="Τι σημαίνει;">?</button>
+      </span>
+      <span class="val" id="inversion-val"><span class="skel skel-value"></span></span>
+      <span class="sub" id="inversion-sub"></span>
+      <p class="hint" id="hint-inversion" hidden>
+        Τις καθαρές άπνοες νύχτες ο ψυχρός αέρας &laquo;κάθεται&raquo; στον κάμπο
+        της Φλώρινας και η πόλη γίνεται ψυχρότερη από τα υψώματα γύρω της.
+        Συγκρίνουμε τη θερμοκρασία στην πόλη με σημείο στα 1.073 μ. νοτιοδυτικά:
+        όταν το ύψωμα είναι θερμότερο από ό,τι προβλέπει η κανονική πτώση της
+        θερμοκρασίας με το ύψος (&minus;0,65&deg;C ανά 100 μ.), έχουμε αναστροφή.
+        Η διαφωνία των μοντέλων δείχνει πόσο αξιόπιστη είναι η μέτρηση.
+      </p>
+    </div>
     <div class="local-card" id="local-frost" hidden>
       <span class="lbl">Κίνδυνος παγετού
         <button class="info" type="button" aria-expanded="false"

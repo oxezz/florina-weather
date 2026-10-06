@@ -138,6 +138,40 @@ def air():
     }
 
 
+def terrain(models=("best_match", "icon_eu", "ecmwf_ifs025", "gfs_seamless"),
+            valley_temp=8.4, slope_temp=10.3, offsets=None, slope_offsets=None,
+            valley_z=662.0, slope_z=1073.0, days=7):
+    """The two-location, multi-model call behind the inversion index.
+
+    ``offsets`` nudges each model at the valley, which is what drives the
+    daily model-agreement spread. ``slope_offsets`` nudges them at the slope,
+    which is what moves the inversion's own error bar — note that a bias
+    applied equally to both places cancels out of the difference.
+    """
+    offsets = offsets or {name: 0.0 for name in models}
+    slope_offsets = slope_offsets or {}
+    times = [(START + datetime.timedelta(hours=i)).strftime("%Y-%m-%dT%H:%M")
+             for i in range(days * 24)]
+    dates = [(START + datetime.timedelta(days=d)).strftime("%Y-%m-%d")
+             for d in range(days)]
+
+    def location(elevation, base, daily_base, table):
+        hourly = {"time": times}
+        daily = {"time": dates}
+        for name in models:
+            nudge = table.get(name, 0.0)
+            hourly["temperature_2m_" + name] = [round(base + nudge, 1) for _ in times]
+            daily["temperature_2m_max_" + name] = [
+                round(daily_base + day + nudge, 1) for day in range(days)]
+            daily["temperature_2m_min_" + name] = [
+                round(daily_base - 8 + day + nudge, 1) for day in range(days)]
+        return {"latitude": 40.78, "longitude": 21.4, "elevation": elevation,
+                "hourly": hourly, "daily": daily}
+
+    return [location(valley_z, valley_temp, 20.0, offsets),
+            location(slope_z, slope_temp, 18.0, slope_offsets)]
+
+
 def daily_history(days=46, end=datetime.date(2026, 10, 6)):
     """The daily-only call that feeds heating degree days.
 

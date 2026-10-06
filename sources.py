@@ -126,6 +126,13 @@ AIR_HOURLY = "pm2_5,pm10,european_aqi"
 # month. Daily-only, so the payload stays under 2 KB.
 HISTORY_DAILY = "temperature_2m_mean,temperature_2m_min,temperature_2m_max"
 
+# Models used both to score their disagreement and to put an error bar on the
+# inversion index. `best_match` is included deliberately: it is what the
+# headline forecast is drawn from, so leaving it out let the displayed
+# temperature fall outside the range the spread implied.
+# AROME and ICON-D2 are absent because neither covers Greece.
+DEFAULT_MODELS = ("best_match", "icon_eu", "ecmwf_ifs025", "gfs_seamless")
+
 
 class SourceError(RuntimeError):
     """Raised when an upstream source cannot be read."""
@@ -178,6 +185,14 @@ class Config:
     forecast_days: int = 7
     forecast_hours: int = 48
     history_days: int = 45      # enough to cover any month-to-date window
+
+    # Terrain comparison point for the inversion index: high ground close enough
+    # to share the valley's weather. 1073 m, about 3 km south-west of town.
+    slope_lat: float = 40.7622
+    slope_lon: float = 21.3797
+    slope_name: str = "υψίπεδο 1073 μ."
+    compare_models: list = field(default_factory=lambda: list(DEFAULT_MODELS))
+    terrain_cache_ttl: float = 900.0
     alert_country: str = "greece"
     alert_areas: list = field(default_factory=lambda: ["west macedonia", "δυτική μακεδονία"])
     alert_emma_ids: list = field(default_factory=list)
@@ -374,6 +389,25 @@ class WeatherService:
             "timezone": cfg.timezone,
         }
 
+    def _terrain_params(self):
+        """Two locations, several models, one request.
+
+        Serves both the inversion index (valley against slope) and the model
+        disagreement shown on the daily cards. `current` is deliberately not
+        used: with several models it returns a single unsuffixed value, so the
+        per-model comparison has to come from `hourly`.
+        """
+        cfg = self.config
+        return {
+            "latitude": "%s,%s" % (cfg.lat, cfg.slope_lat),
+            "longitude": "%s,%s" % (cfg.lon, cfg.slope_lon),
+            "hourly": "temperature_2m",
+            "daily": "temperature_2m_max,temperature_2m_min",
+            "models": ",".join(cfg.compare_models),
+            "forecast_days": cfg.forecast_days,
+            "timezone": cfg.timezone,
+        }
+
     def fetch_forecast(self):
         return get_json(FORECAST_URL, self._forecast_params(),
                         timeout=self.config.timeout, opener=self._opener)
@@ -384,6 +418,10 @@ class WeatherService:
 
     def fetch_history(self):
         return get_json(FORECAST_URL, self._history_params(),
+                        timeout=self.config.timeout, opener=self._opener)
+
+    def fetch_terrain(self):
+        return get_json(FORECAST_URL, self._terrain_params(),
                         timeout=self.config.timeout, opener=self._opener)
 
     def fetch_alerts(self):
@@ -445,6 +483,14 @@ class WeatherService:
         except Exception as exc:  # noqa: BLE001
             history_error = str(exc)
 
+        terrain = terrain_age = None
+        terrain_error = None
+        try:
+            terrain, terrain_age, _terrain_stale, terrain_error = self._cached(
+                "terrain", cfg.terrain_cache_ttl, self.fetch_terrain)
+        except Exception as exc:  # noqa: BLE001
+            terrain_error = str(exc)
+
         alerts = alerts_age = None
         alerts_error = None
         try:
@@ -457,6 +503,7 @@ class WeatherService:
         for name, message in (("forecast", forecast_error),
                               ("air", air_error),
                               ("history", history_error),
+                              ("terrain", terrain_error),
                               ("alerts", alerts_error)):
             if message:
                 errors[name] = message
@@ -465,11 +512,13 @@ class WeatherService:
             "forecast": forecast,
             "air": air,
             "history": history,
+            "terrain": terrain,
             "alerts": alerts,
             "ages": {
                 "forecast": forecast_age,
                 "air": air_age,
                 "history": history_age,
+                "terrain": terrain_age,
                 "alerts": alerts_age,
             },
             "errors": errors,

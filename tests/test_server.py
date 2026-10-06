@@ -37,6 +37,10 @@ def recording_opener(counter):
         if "temperature_2m_mean" in url:
             counter["history"] = counter.get("history", 0) + 1
             return fixtures.dumps(fixtures.daily_history())
+        # Two locations and several models: the terrain / inversion call.
+        if "models=" in url:
+            counter["terrain"] = counter.get("terrain", 0) + 1
+            return fixtures.dumps(fixtures.terrain())
         counter["forecast"] = counter.get("forecast", 0) + 1
         return fixtures.dumps(fixtures.forecast())
     return opener

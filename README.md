@@ -118,7 +118,7 @@ saving it, so a particular look is linkable.
 | `manifest.webmanifest` | Web app manifest — name, icons, standalone display |
 | `Dockerfile` | Container image for Render / Fly / any container host |
 | `cacert.pem` | Mozilla CA bundle, used when the host has no trust store |
-| `tests/` | 203 tests, all offline |
+| `tests/` | 216 tests, all offline |
 
 ### API
 
@@ -181,7 +181,7 @@ warning is shown.
 python -m unittest discover -s tests -t .
 ```
 
-All 203 tests run offline: upstream responses are replaced by fixtures, and the
+All 216 tests run offline: upstream responses are replaced by fixtures, and the
 HTTP tests start a real server on an ephemeral port with an injected opener.
 
 ## Greek wording
@@ -238,11 +238,16 @@ A few labels were deliberately chosen over the obvious alternative:
     «αιθαλομίχλη» pooling in the basin, with the cleanest hour of the next day;
     above that the same PM2.5 is particulate blowing through, so it is labelled
     «αυξημένα σωματίδια» and the ventilation advice is dropped.
-  - **Still to come: the inversion index.** Comparing the valley against a
-    mid-slope point (the 1073 m ground 4 km north) would show the basin locking
-    in cold air. It is deliberately last, because it needs verified comparison
-    points and a backtest before it can be trusted as a reading rather than a
-    guess.
+  - **Thermal inversion** — the reason Florina is colder than the villages
+    above it. A standard atmosphere loses 0.65 °C per 100 m, so the card
+    compares the town with a **1073 m point about 3 km south-west** and reports
+    how much warmer the slope is than that rule predicts. Everything is in the
+    anomaly, measured in °C, and the card says «πιθανή» rather than asserting an
+    inversion when the models straddle it by more than the anomaly itself.
+
+    Note the comparison point's height is Open-Meteo's own DEM reading, which
+    disagrees with third-party elevation tools by several hundred metres. Since
+    Open-Meteo also produces the temperatures, only its figure is usable here.
 
   None of it is invented: every number is a straight reading of the forecast,
   the air-quality call or the history call, and a failing source drops its own
@@ -253,6 +258,20 @@ A few labels were deliberately chosen over the obvious alternative:
   sets `display` silently outranks it. Without the guard, `.local-card` and
   `.chip` stayed on screen with blank contents while the attribute insisted they
   were hidden.
+* **Model agreement.** The daily cards carry a ± figure from four models —
+  `best_match`, `icon_eu` (DWD, 7 km), `ecmwf_ifs025` and `gfs_seamless`. In a
+  basin they routinely disagree by 4–6 °C, which is more than a typical day's
+  change, so a single number would be hiding the interesting part.
+
+  `best_match` is included deliberately even though it is a composite: it is what
+  the headline forecast comes from, and leaving it out let the displayed
+  temperature fall **outside** the range the spread implied.
+
+  AROME and ICON-D2 are absent because neither covers Greece — both return
+  "no data is available for this location". This measures *inter-model* spread,
+  which is the structural uncertainty that matters in mountains. A single-model
+  ensemble would understate it badly: ICON-EU's own 40 members spread about
+  1 °C, while the models disagree by 4–6 °C.
 * **Caching.** Upstream calls are cached server-side and served stale (up to six
   hours) if the network fails, so a brief outage shows slightly old data instead
   of an error page.

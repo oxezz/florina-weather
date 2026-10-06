@@ -283,6 +283,140 @@ SMOG_EVENING_FROM = 18   # the wood-smoke window runs 18:00 -> 02:00
 SMOG_EVENING_TO = 2
 SMOG_CALM_KMH = 12.0     # above this the valley ventilates itself
 
+STANDARD_LAPSE = 0.65    # °C lost per 100 m of ascent, standard atmosphere
+
+
+def _model_series(block, prefix):
+    """``{model: [values]}`` from an Open-Meteo block with suffixed keys.
+
+    With several models requested, Open-Meteo names the variables
+    ``temperature_2m_icon_eu`` and so on. ``current`` is the exception: it
+    comes back unsuffixed, which is why the inversion reads from ``hourly``.
+    """
+    out = {}
+    for key, values in (block or {}).items():
+        if not key.startswith(prefix) or not isinstance(values, list):
+            continue
+        model = key[len(prefix):].strip("_") or "default"
+        out[model] = values
+    return out
+
+
+def build_agreement(terrain, config):
+    """Per-date spread between the models, for the daily cards."""
+    if not isinstance(terrain, list) or not terrain:
+        return {}
+    daily = terrain[0].get("daily") or {}
+    times = daily.get("time") or []
+    maxima = _model_series(daily, "temperature_2m_max")
+    minima = _model_series(daily, "temperature_2m_min")
+    if not times or not maxima:
+        return {}
+
+    spread = {}
+    for index, stamp in enumerate(times):
+        highs = [v[index] for v in maxima.values()
+                 if index < len(v) and v[index] is not None]
+        lows = [v[index] for v in minima.values()
+                if index < len(v) and v[index] is not None]
+        # Two models is the minimum for a disagreement to mean anything.
+        if len(highs) < 2:
+            continue
+        worst = max(highs) - min(highs)
+        if len(lows) > 1:
+            worst = max(worst, max(lows) - min(lows))
+        key, label, colour = greek.agreement_level(worst)
+        spread[str(stamp)] = {
+            "spread": round(worst, 1),
+            "level": key,
+            "label": label,
+            "color": colour,
+            "models": len(highs),
+            "range": [round(min(highs), 1), round(max(highs), 1)],
+        }
+    return spread
+
+
+def build_inversion(terrain, config, now_local):
+    """The basin's thermal inversion, read from the valley against a slope.
+
+    A standard atmosphere loses 0.65 °C per 100 m. When the slope comes out
+    *warmer* than that predicts, cold air has pooled in the basin — which is
+    the whole reason Florina is colder than the villages above it.
+
+    The anomaly is averaged over the models, and their disagreement is
+    reported alongside it, because a single model's claim here is not worth
+    much on its own.
+    """
+    if not isinstance(terrain, list) or len(terrain) < 2:
+        return None
+    valley, slope = terrain[0], terrain[1]
+    z_low, z_high = valley.get("elevation"), slope.get("elevation")
+    if not z_low or not z_high or z_high <= z_low:
+        return None
+    rise = z_high - z_low
+    expected = STANDARD_LAPSE * rise / 100.0
+
+    floor = now_local.replace(minute=0, second=0, microsecond=0, tzinfo=None)
+
+    def reading(location):
+        hourly = location.get("hourly") or {}
+        times = hourly.get("time") or []
+        index = None
+        for position, stamp in enumerate(times):
+            parsed = _parse_local(str(stamp), None)
+            if parsed is not None and parsed >= floor:
+                index = position
+                break
+        if index is None:
+            return {}
+        found = {}
+        for model, values in _model_series(hourly, "temperature_2m").items():
+            if index < len(values) and values[index] is not None:
+                found[model] = values[index]
+        return found
+
+    low, high = reading(valley), reading(slope)
+    shared = sorted(set(low) & set(high))
+    if not shared:
+        return None
+
+    anomalies = [high[m] - low[m] + expected for m in shared]
+    mean_anomaly = sum(anomalies) / len(anomalies)
+    spread = max(anomalies) - min(anomalies)
+    level = greek.inversion_level(mean_anomaly)
+    if level is None:
+        return None
+    key, label, colour = level
+
+    # If the models disagree by more than the anomaly itself, some of them are
+    # saying there is no inversion at all. Report it as a hint, not a fact.
+    confident = spread < abs(mean_anomaly)
+    if not confident:
+        key, label, colour = greek.UNCERTAIN_INVERSION
+
+    valley_temp = sum(low[m] for m in shared) / len(shared)
+    slope_temp = sum(high[m] for m in shared) / len(shared)
+    delta = slope_temp - valley_temp
+    return {
+        "level": key,
+        "label": label,
+        "color": colour,
+        "confident": confident,
+        "delta": round(delta, 1),
+        "anomaly": round(mean_anomaly, 1),
+        "peak_anomaly": round(max(anomalies), 1),
+        "lapse": round(delta / rise * 100.0, 2),
+        "valley_temp": round(valley_temp, 1),
+        "slope_temp": round(slope_temp, 1),
+        "valley_elev": round(z_low),
+        "slope_elev": round(z_high),
+        "slope_name": config.slope_name,
+        "models": len(shared),
+        # How much the models disagree about the anomaly itself.
+        "spread": round(spread, 1),
+    }
+
 
 def _air_hourly(air):
     """The hourly block of an air-quality payload, if there is one."""
@@ -479,9 +613,10 @@ def build_smog(air_hourly, forecast_hourly, now_local):
     }
 
 
-def build_local_conditions(snapshot, days, forecast_hourly, now_local):
+def build_local_conditions(snapshot, days, forecast_hourly, now_local, config):
     """Assemble the hyper-local block, dropping anything with nothing to say."""
     blocks = {
+        "inversion": build_inversion(snapshot.get("terrain"), config, now_local),
         "frost": build_frost(days, forecast_hourly),
         "heating": build_heating(snapshot.get("history"), now_local),
         "smog": build_smog(_air_hourly(snapshot.get("air")),
@@ -536,7 +671,7 @@ def _hourly_points(hourly, start_index, count, tz):
     return points
 
 
-def _daily_points(daily, tz, today, config):
+def _daily_points(daily, tz, today, config, agreement=None):
     times = daily.get("time") or []
     points = []
     for index, stamp in enumerate(times):
@@ -574,6 +709,8 @@ def _daily_points(daily, tz, today, config):
             "wind_max": _at(daily.get("wind_speed_10m_max"), index),
             "gust_max": _at(daily.get("wind_gusts_10m_max"), index),
             "wind_dir_text": greek.compass(direction) if direction is not None else None,
+            # How far apart the models are on this particular day.
+            "agreement": (agreement or {}).get(str(stamp)),
         })
     return points
 
@@ -640,7 +777,8 @@ def build_report(snapshot, config, now=None):
 
     start = _start_index(hourly_raw, now_local)
     hours = _hourly_points(hourly_raw, start, max(1, config.forecast_hours), tz)
-    days = _daily_points(daily_raw, tz, now_local.date(), config)
+    agreement = build_agreement(snapshot.get("terrain"), config)
+    days = _daily_points(daily_raw, tz, now_local.date(), config, agreement)
 
     visibility = hours[0]["visibility"] if hours else None
     code = current_raw.get("weather_code", 0)
@@ -679,7 +817,7 @@ def build_report(snapshot, config, now=None):
 
     today = days[0] if days else None
     alerts = parse_alerts(snapshot.get("alerts"), config, now_local)
-    local = build_local_conditions(snapshot, days, hourly_raw, now_local)
+    local = build_local_conditions(snapshot, days, hourly_raw, now_local, config)
 
     ages = snapshot.get("ages") or {}
     errors = snapshot.get("errors") or {}

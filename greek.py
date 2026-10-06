@@ -236,6 +236,58 @@ def smog_level(pm25):
     return None
 
 
+# How far apart the weather models are on a day's temperature, in °C. A spread
+# of a degree is normal; five degrees means the forecast deserves a caveat.
+_AGREEMENT_BANDS = (
+    (1.5, "tight", "Τα μοντέλα συμφωνούν", "#4ade80"),
+    (3.5, "fair", "Μικρή διαφωνία μοντέλων", "#facc15"),
+)
+_AGREEMENT_WIDE = ("wide", "Τα μοντέλα διαφωνούν", "#fb923c")
+
+# A thermal inversion, measured as how much warmer the slope is than the
+# standard atmosphere would make it.
+_INVERSION_BANDS = (
+    (3.5, "strong", "Ισχυρή αναστροφή", "#f472b6"),
+    (1.5, "inversion", "Θερμοκρασιακή αναστροφή", "#c084fc"),
+)
+
+# When the models disagree by more than the anomaly itself, the reading is a
+# hint rather than a fact and should say so.
+UNCERTAIN_INVERSION = ("uncertain", "Πιθανή αναστροφή", "#a5b4fc")
+
+
+def agreement_level(spread):
+    """(key, Greek label, hex colour) for an inter-model temperature spread."""
+    try:
+        value = float(spread)
+    except (TypeError, ValueError):
+        return _AGREEMENT_WIDE
+    if value != value:
+        return _AGREEMENT_WIDE
+    for limit, key, label, colour in _AGREEMENT_BANDS:
+        if value < limit:
+            return (key, label, colour)
+    return _AGREEMENT_WIDE
+
+
+def inversion_level(anomaly):
+    """(key, Greek label, hex colour) for an inversion anomaly in °C.
+
+    ``None`` means the atmosphere is behaving normally, which is what keeps
+    the card off the page on a well-mixed day.
+    """
+    try:
+        value = float(anomaly)
+    except (TypeError, ValueError):
+        return None
+    if value != value:  # NaN
+        return None
+    for limit, key, label, colour in _INVERSION_BANDS:
+        if value >= limit:
+            return (key, label, colour)
+    return None
+
+
 def uv_level(value):
     """(Greek label, hex colour) for a UV index value."""
     try:

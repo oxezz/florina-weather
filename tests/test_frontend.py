@@ -381,18 +381,20 @@ class ExplainerTests(unittest.TestCase):
         self.js = read("app.js")
 
     def test_every_local_card_has_one(self):
-        self.assertEqual(self.template.count('class="info"'), 3)
-        for card in ("frost", "heating", "smog"):
+        # Four cards, plus the model-agreement explainer on the 7-day panel.
+        self.assertEqual(self.template.count('class="info"'), 5)
+        for card in ("inversion", "frost", "heating", "smog"):
             self.assertIn('aria-controls="hint-%s"' % card, self.template)
             self.assertIn('id="hint-%s" hidden' % card, self.template)
+        self.assertIn('aria-controls="hint-agreement"', self.template)
 
     def test_they_start_collapsed_and_are_labelled(self):
         self.assertNotIn('aria-expanded="true"', self.template)
-        self.assertEqual(self.template.count('aria-label="Τι σημαίνει;"'), 3)
+        self.assertEqual(self.template.count('aria-label="Τι σημαίνει;"'), 5)
 
     def test_explanations_are_written_in_greek(self):
-        hints = re.findall(r'<p class="hint"[^>]*>(.*?)</p>', self.template, re.S)
-        self.assertEqual(len(hints), 3)
+        hints = re.findall(r'<p class="hint[^"]*"[^>]*>(.*?)</p>', self.template, re.S)
+        self.assertEqual(len(hints), 5)   # four cards and the panel
         for hint in hints:
             self.assertRegex(hint, "[\\u0370-\\u03ff]",
                              "explanation is not in Greek")

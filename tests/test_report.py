@@ -22,8 +22,10 @@ def snapshot(**overrides):
         "forecast": fixtures.forecast(),
         "air": fixtures.air(),
         "history": fixtures.daily_history(),
+        "terrain": fixtures.terrain(),
         "alerts": fixtures.alerts(),
-        "ages": {"forecast": 4.0, "air": 60.0, "history": 120.0, "alerts": 30.0},
+        "ages": {"forecast": 4.0, "air": 60.0, "history": 120.0,
+                 "terrain": 90.0, "alerts": 30.0},
         "errors": {},
         "stale": False,
     }
@@ -394,7 +396,9 @@ class LocalConditionTests(unittest.TestCase):
         history = fixtures.daily_history()
         history["daily"]["temperature_2m_mean"] = [26.0] * 46
         data = report.build_report(
-            snapshot(forecast=forecast, air=air, history=history),
+            snapshot(forecast=forecast, air=air, history=history,
+                     # A normal lapse, so the inversion block stays out too.
+                     terrain=fixtures.terrain(valley_temp=10.0, slope_temp=7.3)),
             sources.Config(), now=NOW)
         self.assertIsNone(data["local"])
 
@@ -402,14 +406,15 @@ class LocalConditionTests(unittest.TestCase):
         self.assertIn("local", build())
 
     def test_no_float_noise_reaches_the_client(self):
-        """A raw 3.9000000000000004 in the JSON is sloppy and needless."""
+        """A raw 3.9000000000000004 in the JSON is sloppy and needless. Two
+        decimals are allowed: the lapse rate needs them to mean anything."""
         import json as _json
         blob = _json.dumps(build()["local"], ensure_ascii=False)
         for token in blob.replace('"', " ").split():
             if "." not in token or not token.split(".")[-1][:1].isdigit():
                 continue
             decimals = len(token.split(".")[-1].rstrip("},"))
-            self.assertLessEqual(decimals, 1, "too many decimals: " + token)
+            self.assertLessEqual(decimals, 2, "too many decimals: " + token)
 
 
 
@@ -428,6 +433,119 @@ class LocalConditionTests(unittest.TestCase):
 
     def test_missing_air_data_is_fine(self):
         self.assertIsNone(build(air=None)["air"])
+
+
+class InversionTests(unittest.TestCase):
+    """The basin inversion, read from the valley against a slope."""
+
+    def _with_terrain(self, **kwargs):
+        return report.build_report(snapshot(terrain=fixtures.terrain(**kwargs)),
+                                   sources.Config(), now=NOW)
+
+    def test_a_warm_slope_over_a_cold_valley_is_an_inversion(self):
+        # The fixture: 10.3 C at 1073 m against 8.4 C at 662 m. A standard
+        # atmosphere would put the slope 2.67 C colder, so this is a strong one.
+        inversion = self._with_terrain()["local"]["inversion"]
+        self.assertIsNotNone(inversion)
+        self.assertEqual(inversion["level"], "strong")
+        self.assertAlmostEqual(inversion["delta"], 1.9, places=1)
+        self.assertAlmostEqual(inversion["anomaly"], 4.6, places=1)
+        self.assertGreater(inversion["lapse"], 0)      # rising with height
+        self.assertEqual(inversion["valley_elev"], 662)
+        self.assertEqual(inversion["slope_elev"], 1073)
+        self.assertEqual(inversion["models"], 4)
+        self.assertTrue(inversion["confident"])   # the fixture models agree
+
+    def test_disagreement_bigger_than_the_signal_reads_as_uncertain(self):
+        """If the models straddle the anomaly by more than the anomaly itself,
+        some of them are saying there is no inversion at all."""
+        data = self._with_terrain(valley_temp=10.0, slope_temp=9.0,
+                                  slope_offsets={"best_match": -3.0,
+                                                 "gfs_seamless": 3.0})
+        inversion = data["local"]["inversion"]
+        self.assertFalse(inversion["confident"])
+        self.assertEqual(inversion["level"], "uncertain")
+        self.assertEqual(inversion["label"], "Πιθανή αναστροφή")
+        self.assertGreater(inversion["spread"], abs(inversion["anomaly"]))
+
+    def test_normal_lapse_means_no_card(self):
+        # Slope 2.7 C colder than the valley: exactly the standard atmosphere.
+        data = self._with_terrain(valley_temp=10.0, slope_temp=7.3)
+        self.assertIsNone((data["local"] or {}).get("inversion"))
+
+    def test_a_weaker_than_standard_lapse_crosses_the_band(self):
+        # 1.5 C drop where standard predicts 2.67 is still not enough; 1.0 is.
+        data = self._with_terrain(valley_temp=10.0, slope_temp=8.5)
+        self.assertIsNone((data["local"] or {}).get("inversion"))
+        data = self._with_terrain(valley_temp=10.0, slope_temp=9.0)
+        self.assertEqual(data["local"]["inversion"]["level"], "inversion")
+
+    def test_a_higher_slope_than_the_valley_never_triggers(self):
+        data = self._with_terrain(valley_z=1200.0, slope_z=800.0)
+        self.assertIsNone((data["local"] or {}).get("inversion"))
+
+    def test_missing_terrain_is_not_an_error(self):
+        for broken in (None, [], [{"elevation": 662.0}]):
+            data = report.build_report(snapshot(terrain=broken),
+                                       sources.Config(), now=NOW)
+            self.assertIsNone((data["local"] or {}).get("inversion"))
+
+    def test_model_disagreement_about_the_profile_is_reported(self):
+        """Only disagreement about the *vertical difference* moves the
+        anomaly; a bias applied equally to both places cancels out."""
+        data = self._with_terrain(slope_offsets={"icon_eu": -0.5,
+                                                 "gfs_seamless": 0.5})
+        self.assertAlmostEqual(data["local"]["inversion"]["spread"], 1.0, places=1)
+
+    def test_a_uniform_model_bias_cancels_out_of_the_difference(self):
+        both = {"icon_eu": -0.5, "gfs_seamless": 0.5}
+        data = self._with_terrain(offsets=both, slope_offsets=both)
+        self.assertAlmostEqual(data["local"]["inversion"]["spread"], 0.0, places=1)
+
+
+class AgreementTests(unittest.TestCase):
+    """How far apart the models are, per day."""
+
+    def _days_with(self, offsets):
+        data = report.build_report(
+            snapshot(terrain=fixtures.terrain(offsets=offsets)),
+            sources.Config(), now=NOW)
+        return data["daily"]
+
+    def test_agreeing_models_read_tight(self):
+        days = self._days_with({"best_match": 0.0, "icon_eu": 0.0,
+                                "ecmwf_ifs025": 0.0, "gfs_seamless": 0.0})
+        for day in days:
+            self.assertEqual(day["agreement"]["spread"], 0.0)
+            self.assertEqual(day["agreement"]["level"], "tight")
+            self.assertEqual(day["agreement"]["models"], 4)
+
+    def test_a_five_degree_split_reads_as_disagreement(self):
+        days = self._days_with({"icon_eu": 0.0, "ecmwf_ifs025": 1.5,
+                                "gfs_seamless": 5.0})
+        first = days[0]["agreement"]
+        self.assertEqual(first["spread"], 5.0)
+        self.assertEqual(first["level"], "wide")
+        self.assertEqual(first["range"], [20.0, 25.0])
+
+    def test_a_moderate_split_sits_in_the_middle(self):
+        days = self._days_with({"icon_eu": 0.0, "ecmwf_ifs025": 0.0,
+                                "gfs_seamless": 2.5})
+        self.assertEqual(days[0]["agreement"]["level"], "fair")
+
+    def test_one_model_alone_is_not_a_disagreement(self):
+        data = report.build_report(
+            snapshot(terrain=fixtures.terrain(models=("icon_eu",))),
+            sources.Config(), now=NOW)
+        for day in data["daily"]:
+            self.assertIsNone(day["agreement"])
+
+    def test_missing_terrain_leaves_the_days_intact(self):
+        data = report.build_report(snapshot(terrain=None),
+                                   sources.Config(), now=NOW)
+        self.assertEqual(len(data["daily"]), 7)
+        for day in data["daily"]:
+            self.assertIsNone(day["agreement"])
 
 
 class DegradedTests(unittest.TestCase):

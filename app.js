@@ -527,6 +527,20 @@
         day.precip_sum > 0.05
           ? num(day.precip_sum, 1) + " mm · " + num(day.precip_prob) + "%"
           : "\u2013 "));
+
+      // How far apart the models are on this particular day. Always rendered so
+      // the cards stay the same height, empty when only one model answered.
+      var agree = el("span", "agree");
+      if (day.agreement) {
+        agree.textContent = "\u00b1" + num(day.agreement.spread, 1) + "°";
+        agree.title = day.agreement.label + " · " + day.agreement.models +
+                      " μοντέλα · εύρος " + num(day.agreement.range[0], 1) + "° έως " +
+                      num(day.agreement.range[1], 1) + "°";
+        agree.style.setProperty("--tone", day.agreement.color);
+        if (day.agreement.level === "wide") agree.classList.add("wide");
+      }
+      card.appendChild(agree);
+
       card.appendChild(el("span", "up",
         "UV " + num(day.uv_max, 1) + " · ριπές ανέμου " + num(day.gust_max) + " km/h"));
       host.appendChild(card);
@@ -543,6 +557,7 @@
     if (!local) { panel.hidden = true; return; }
 
     var shown = 0;
+    shown += renderInversion(local.inversion);
     shown += renderFrost(local.frost);
     shown += renderHeating(local.heating);
     shown += renderSmog(local.smog);
@@ -551,6 +566,24 @@
 
   function toneFor(node, colour) {
     if (colour) node.style.setProperty("--tone", colour);
+  }
+
+  function renderInversion(inversion) {
+    var card = $("local-inversion");
+    if (!card) return 0;
+    if (!inversion) { card.hidden = true; return 0; }
+    card.hidden = false;
+    toneFor(card, inversion.color);
+
+    setBig("inversion-val", "+" + num(inversion.anomaly, 1) + "°");
+    var parts = [inversion.label];
+    parts.push("η πόλη " + num(inversion.valley_temp, 1) + "° έναντι " +
+               num(inversion.slope_temp, 1) + "° στα " + num(inversion.slope_elev) + " μ.");
+    if (inversion.spread !== null && inversion.spread !== undefined) {
+      parts.push("μοντέλα ±" + num(inversion.spread, 1) + "°");
+    }
+    setText($("inversion-sub"), parts.join(" · "));
+    return 1;
   }
 
   function renderFrost(frost) {
