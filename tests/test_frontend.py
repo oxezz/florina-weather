@@ -5,6 +5,7 @@ These catch the classic failure mode of a split front-end: an id renamed in
 one file and not the other, which no Python test would otherwise notice.
 """
 
+import json
 import os
 import re
 import sys
@@ -24,7 +25,9 @@ def read(name):
 
 
 # Placeholders app.py knows how to substitute.
-KNOWN_PLACEHOLDERS = {"TITLE", "PLACE", "REGION", "REFRESH", "VERSION"}
+KNOWN_PLACEHOLDERS = {"TITLE", "PLACE", "REGION", "REFRESH", "REFRESH_TEXT", "VERSION"}
+
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
 
 class TemplateTests(unittest.TestCase):
@@ -88,10 +91,13 @@ class GreekLabelTests(unittest.TestCase):
         # The card shows rain + showers + snow, so "Βροχή" would be wrong.
         self.assertIn(">Υετός<", self.template)
 
-    def test_footer_abbreviates_seconds_in_greek(self):
-        self.assertIn("δευτ.", self.template)
+    def test_footer_states_the_interval_in_words(self):
+        # The template carries a placeholder; app.py renders the wording, so a
+        # 600 second default reads "10 λεπτά" rather than "600 δευτ.".
+        self.assertIn("{{REFRESH_TEXT}}", self.template)
         self.assertNotIn("{{REFRESH}}s", self.template)
-        self.assertNotIn('"s")', self.js)
+        rendered = app.ShellCache(app.TEMPLATE).render(sources.Config())
+        self.assertIn("Ανανέωση κάθε 10 λεπτά", rendered)
 
 
 class ClientTests(unittest.TestCase):
@@ -224,6 +230,94 @@ class SkeletonTests(unittest.TestCase):
     def test_the_client_sweeps_leftover_skeletons(self):
         self.assertIn("dropSkeletons", self.js)
         self.assertIn("data-skeleton", self.js)
+
+
+class PwaTests(unittest.TestCase):
+    """Installability: manifest, icons, service worker and the iOS meta tags."""
+
+    def setUp(self):
+        self.template = read("template.html")
+        self.manifest = json.loads(read("manifest.webmanifest"))
+        self.sw = read("sw.js")
+
+    # -- manifest ----------------------------------------------------------
+
+    def test_manifest_has_what_an_install_prompt_requires(self):
+        for key in ("name", "short_name", "start_url", "display", "icons",
+                    "background_color", "theme_color"):
+            self.assertIn(key, self.manifest)
+        self.assertEqual(self.manifest["display"], "standalone")
+        self.assertEqual(self.manifest["start_url"], "/")
+        self.assertEqual(self.manifest["lang"], "el")
+
+    def test_manifest_declares_both_icon_purposes(self):
+        purposes = set()
+        for icon in self.manifest["icons"]:
+            purposes.update(icon.get("purpose", "any").split())
+        self.assertIn("any", purposes)
+        # Android needs a maskable icon or it letterboxes the artwork.
+        self.assertIn("maskable", purposes)
+
+    def test_manifest_offers_the_sizes_android_asks_for(self):
+        sizes = {icon["sizes"] for icon in self.manifest["icons"]}
+        self.assertIn("192x192", sizes)
+        self.assertIn("512x512", sizes)
+
+    def test_every_declared_icon_exists_and_is_a_real_png(self):
+        for icon in self.manifest["icons"]:
+            name = icon["src"].lstrip("/")
+            path = os.path.join(ROOT, name)
+            self.assertTrue(os.path.isfile(path), "missing icon " + name)
+            with open(path, "rb") as handle:
+                self.assertEqual(handle.read(8), PNG_MAGIC, name + " is not a PNG")
+            self.assertLess(os.path.getsize(path), 200 * 1024, name + " is oversized")
+
+    # -- iOS ---------------------------------------------------------------
+
+    def test_template_links_the_manifest_and_apple_icon(self):
+        self.assertIn('rel="manifest"', self.template)
+        self.assertIn('rel="apple-touch-icon"', self.template)
+        self.assertTrue(os.path.isfile(os.path.join(ROOT, "icon-180.png")))
+
+    def test_template_has_the_ios_standalone_meta_tags(self):
+        # Without these, Safari opens the icon in a normal browser tab.
+        self.assertIn('name="apple-mobile-web-app-capable"', self.template)
+        self.assertIn('name="mobile-web-app-capable"', self.template)
+
+    # -- service worker ----------------------------------------------------
+
+    def test_worker_handles_the_lifecycle_and_fetch(self):
+        for event in ('"install"', '"activate"', '"fetch"'):
+            self.assertIn(event, self.sw)
+        self.assertIn("skipWaiting", self.sw)
+        self.assertIn("clients.claim", self.sw)
+
+    def test_worker_never_serves_stale_weather_from_cache_first(self):
+        # Weather goes network-first; only the shell is allowed to come from
+        # cache immediately.
+        self.assertIn("networkFirst(request)", self.sw)
+        self.assertIn('url.pathname === "/api/weather"', self.sw)
+        self.assertIn("staleWhileRevalidate", self.sw)
+
+    def test_worker_only_touches_same_origin_get_requests(self):
+        self.assertIn('request.method !== "GET"', self.sw)
+        self.assertIn("url.origin !== self.location.origin", self.sw)
+
+    def test_worker_prunes_old_caches(self):
+        self.assertIn("caches.delete", self.sw)
+        self.assertIn("CACHE_VERSION", self.sw)
+
+    def test_worker_ignores_non_ok_responses(self):
+        self.assertIn("response.ok", self.sw)
+
+    def test_client_registers_the_worker(self):
+        js = read("app.js")
+        self.assertIn('navigator.serviceWorker.register("/sw.js")', js)
+        # Over https, or on loopback which browsers treat as a secure context —
+        # requiring https outright would break local development.
+        self.assertIn('location.protocol === "https:"', js)
+        self.assertIn("127.0.0.1", js)
+        self.assertIn("localhost", js)
 
 
 class StylesheetTests(unittest.TestCase):

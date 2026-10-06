@@ -151,6 +151,16 @@ class TimeTests(unittest.TestCase):
         self.assertEqual(greek.format_duration(None), "—")
         self.assertEqual(greek.format_duration(-4), "—")
 
+    def test_format_interval(self):
+        # Only genuinely short intervals stay in seconds.
+        self.assertEqual(greek.format_interval(30), "30 δευτ.")
+        self.assertEqual(greek.format_interval(119), "119 δευτ.")
+        self.assertEqual(greek.format_interval(120), "2 λεπτά")
+        self.assertEqual(greek.format_interval(180), "3 λεπτά")
+        self.assertEqual(greek.format_interval(600), "10 λεπτά")
+        self.assertEqual(greek.format_interval(900), "15 λεπτά")
+        self.assertEqual(greek.format_interval(None), "—")
+
     def test_day_labels(self):
         today = datetime.date(2026, 10, 6)
         self.assertEqual(greek.day_label(today, today), "Σήμερα")

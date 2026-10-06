@@ -221,6 +221,32 @@ class StaticTests(unittest.TestCase):
             self.assertIn("javascript", headers["Content-Type"])
             self.assertIn(b"prefers-color-scheme", body)
 
+    def test_service_worker_is_served_and_never_cached(self):
+        with RunningServer(recording_opener({})) as server:
+            status, headers, body = server.request("/sw.js")
+            self.assertEqual(status, 200)
+            self.assertIn("javascript", headers["Content-Type"])
+            # A cached worker means a browser keeps running the old version.
+            self.assertEqual(headers["Cache-Control"], "no-cache")
+            self.assertIn(b"addEventListener", body)
+
+    def test_manifest_is_served_with_the_right_type(self):
+        with RunningServer(recording_opener({})) as server:
+            status, headers, body = server.request("/manifest.webmanifest")
+            self.assertEqual(status, 200)
+            self.assertEqual(headers["Cache-Control"], "no-cache")
+            data = json.loads(body.decode("utf-8"))
+            self.assertEqual(data["start_url"], "/")
+
+    def test_pwa_icons_are_served(self):
+        with RunningServer(recording_opener({})) as server:
+            for path in ("/icon-180.png", "/icon-192.png", "/icon-512.png",
+                         "/icon-maskable-512.png", "/icon-square.svg"):
+                status, headers, body = server.request(path)
+                self.assertEqual(status, 200, path)
+                self.assertTrue(headers["Content-Type"].startswith("image/"), path)
+                self.assertGreater(len(body), 100, path)
+
     def test_favicon(self):
         with RunningServer(recording_opener({})) as server:
             status, headers, _body = server.request("/favicon.svg")
@@ -263,6 +289,13 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.forecast_hours, 48)
         self.assertEqual(config.forecast_days, 7)
         self.assertIn("west macedonia", config.alert_areas)
+
+    def test_refresh_is_not_faster_than_the_models_update(self):
+        # Open-Meteo refreshes roughly every 15 minutes; polling far more often
+        # than that just burns the user's bandwidth.
+        config = sources.Config()
+        self.assertGreaterEqual(config.refresh, 300)
+        self.assertGreaterEqual(config.cache_ttl, config.refresh / 2)
 
     def test_env_overrides(self):
         os.environ["FLORINA_PLACE"] = "Testville"

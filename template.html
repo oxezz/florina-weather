@@ -8,6 +8,12 @@
 <meta name="theme-color" content="#0c2339">
 <title>{{TITLE}}</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<!-- Both spellings: Safari needs the apple- prefixed one, Chrome the other. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="{{PLACE}}">
 <link rel="stylesheet" href="/style.css">
 <script src="/theme.js"></script>
 </head>
@@ -168,7 +174,7 @@
   <div class="foot-row">
     <span>Δεδομένα: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>
       &middot; <a href="https://www.meteoalarm.org" target="_blank" rel="noopener">Meteoalarm</a></span>
-    <span>Ανανέωση κάθε {{REFRESH}} δευτ.</span>
+    <span>Ανανέωση κάθε {{REFRESH_TEXT}}</span>
   </div>
   <div class="foot-row muted" id="foot-status"></div>
 </footer>

@@ -577,12 +577,15 @@
     if (status.age !== null && status.age !== undefined) {
       parts.push("δεδομένα πριν " + Math.round(status.age) + " δευτ.");
     }
+    if (navigator.onLine === false) parts.push("εκτός σύνδεσης");
     if (status.degraded && status.degraded.length) {
       parts.push("\u26a0 μη διαθέσιμα: " + status.degraded.join(", "));
     }
     if (state.error) parts.push("\u26a0 " + state.error);
     setText(node, parts.join(" · "));
-    node.classList.toggle("warn", Boolean(state.error) || Boolean(status.degraded && status.degraded.length));
+    node.classList.toggle("warn", navigator.onLine === false ||
+      Boolean(state.error) ||
+      Boolean(status.degraded && status.degraded.length));
   }
 
   /* ---------------------------------------------------------------- render */
@@ -682,11 +685,47 @@
     state.timer = window.setTimeout(function () { load(false); }, REFRESH * 1000);
   }
 
+  /* ------------------------------------------------------- offline & PWA */
+
+  /* Browsers treat loopback as a secure context, so the worker runs in local
+     development too — but not over plain http on a LAN address. */
+  function serviceWorkersAllowed() {
+    if (location.protocol === "https:") return true;
+    var host = location.hostname;
+    return host === "localhost" || host === "127.0.0.1" ||
+           host === "::1" || host === "[::1]";
+  }
+
+  /* Installed to the home screen only, this is what turns the page into a
+     standalone app on Android; iOS uses the apple-touch-icon meta tags in the
+     template and needs no worker. */
+  function initServiceWorker() {
+    if (!("serviceWorker" in navigator)) return;
+    if (!serviceWorkersAllowed()) return;
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("/sw.js").catch(function (error) {
+        if (window.console && window.console.warn) {
+          window.console.warn("[florina] service worker not registered:", error);
+        }
+      });
+    });
+  }
+
+  function initOffline() {
+    window.addEventListener("offline", function () {
+      // Re-render the footer so the notice appears immediately.
+      if (state.lastGenerated !== null) renderStatus({ status: {} });
+    });
+    window.addEventListener("online", function () { load(true); });
+  }
+
   /* ------------------------------------------------------------------ boot */
 
   initModes();
   initGlassHighlight();
   initHourlyFade();
+  initServiceWorker();
+  initOffline();
   syncThemeColor();
 
   var button = $("refresh");
@@ -701,8 +740,6 @@
       load(false);
     }
   });
-
-  window.addEventListener("online", function () { load(true); });
 
   load(false);
 })();

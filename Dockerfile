@@ -13,7 +13,8 @@ WORKDIR /app
 # Only the files the server actually serves. cacert.pem is the fallback trust
 # store for hosts whose image ships no CA bundle.
 COPY app.py greek.py report.py sources.py cacert.pem ./
-COPY template.html style.css app.js theme.js favicon.svg ./
+COPY template.html style.css app.js theme.js manifest.webmanifest sw.js ./
+COPY favicon.svg icon-square.svg icon-180.png icon-192.png icon-512.png icon-maskable-512.png ./
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

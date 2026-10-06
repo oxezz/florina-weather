@@ -69,6 +69,8 @@ covered by this project's MIT licence.
 | **Official warnings** | live **Meteoalarm / EMY** alerts for West Macedonia, colour-coded, shown as a banner at the top |
 | **Air quality** | European AQI, PM2.5 / PM10 and pollen (grass, olive, ragweed, mugwort, birch, alder) |
 | **Live updates** | the page refreshes itself in place — no reload, no flicker — and pauses while the tab is hidden |
+| **Installable (PWA)** | A manifest and a service worker, so "Add to Home Screen" gives a standalone app with no URL bar — and the refresh button is always there for an immediate update |
+| **Works offline** | The shell is cached, so a repeat launch is instant and an offline reload still shows the last weather with an «εκτός σύνδεσης» note rather than the browser's error page |
 | **Loading skeletons** | 31 placeholders shaped like the real content, so the first paint already looks finished and nothing jumps when the data lands. They stay invisible for the first 350 ms, because a skeleton that flashes for two frames looks worse than none |
 | **Light & dark** | an iOS-style segmented control (Αυτόματα / Φωτεινό / Σκοτεινό). The choice is remembered and can be linked with `?mode=dark` |
 | **Liquid-glass surfaces** | translucent saturated blur, a specular rim along the top edge, a sheen out of the top-left corner, and a highlight that follows the pointer. All of it degrades gracefully — with no hover or no JavaScript the panels still read correctly |
@@ -121,9 +123,11 @@ saving it, so a particular look is linkable.
 | `theme.js` | Appearance bootstrap, loaded from `<head>` so light mode never flashes dark |
 | `app.js` | Fetches `/api/weather` and renders it. Never injects upstream text as HTML |
 | `style.css` | Glass material, light/dark tokens, the seven weather backdrops, layout |
+| `sw.js` | Service worker: offline shell, and what lets Android offer "Install app" |
+| `manifest.webmanifest` | Web app manifest — name, icons, standalone display |
 | `Dockerfile` | Container image for Render / Fly / any container host |
 | `cacert.pem` | Mozilla CA bundle, used when the host has no trust store |
-| `tests/` | 150 tests, all offline |
+| `tests/` | 167 tests, all offline |
 
 ### API
 
@@ -152,8 +156,8 @@ FLORINA_PORT=8080 FLORINA_REFRESH=120 python app.py
 | `--place` | `FLORINA_PLACE` | `Φλώρινα` | Town name on the page |
 | `--region` | `FLORINA_REGION` | `Δυτική Μακεδονία` | Region name on the page |
 | `--lat` / `--lon` | `FLORINA_LAT` / `FLORINA_LON` | `40.7822` / `21.4097` | Coordinates |
-| `--refresh` | `FLORINA_REFRESH` | `180` | Client refresh interval, seconds |
-| `--cache-ttl` | `FLORINA_CACHE_TTL` | `300` | Server-side forecast cache, seconds |
+| `--refresh` | `FLORINA_REFRESH` | `600` | Client refresh interval, seconds. Open-Meteo's models update roughly every 15 minutes, so polling much faster only burns bandwidth |
+| `--cache-ttl` | `FLORINA_CACHE_TTL` | `600` | Server-side forecast cache, seconds |
 | `--forecast-days` | `FLORINA_FORECAST_DAYS` | `7` | Days in the daily forecast |
 | `--forecast-hours` | `FLORINA_FORECAST_HOURS` | `48` | Hours in the chart and strip |
 | `--alert-areas` | `FLORINA_ALERT_AREAS` | `west macedonia,δυτική μακεδονία` | Which Meteoalarm areas to show |
@@ -185,7 +189,7 @@ warning is shown.
 python -m unittest discover -s tests -t .
 ```
 
-All 150 tests run offline: upstream responses are replaced by fixtures, and the
+All 167 tests run offline: upstream responses are replaced by fixtures, and the
 HTTP tests start a real server on an ephemeral port with an injected opener.
 
 ## Greek wording
@@ -208,6 +212,17 @@ A few labels were deliberately chosen over the obvious alternative:
   package). It then falls back to the `utc_offset_seconds` value Open-Meteo
   returns for the coordinates, which is correct for the forecast window. Which
   source was used is reported as `status.timezone_source`.
+* **Installing it.** On Android Chrome the site offers "Install app"; on iOS use
+  Share → Add to Home Screen. Either way you get a proper icon and a standalone
+  window with no URL bar.
+
+  The service worker is deliberately conservative, because stale weather is
+  worse than none: `/api/weather` and navigations are **network-first**, cached
+  only as an offline fallback, while the shell uses **stale-while-revalidate**
+  so repeat launches are instant and a deploy is picked up on the next load.
+  Bump `CACHE_VERSION` in `sw.js` only when something must never be served
+  stale. The worker registers over https, and on loopback so local development
+  behaves the same.
 * **Caching.** Upstream calls are cached server-side and served stale (up to six
   hours) if the network fails, so a brief outage shows slightly old data instead
   of an error page.

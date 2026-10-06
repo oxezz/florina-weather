@@ -160,8 +160,8 @@ class Config:
     timezone: str = "Europe/Athens"
     host: str = "127.0.0.1"
     port: int = 8000
-    refresh: int = 180          # seconds between client refreshes
-    cache_ttl: float = 300.0    # forecast cache lifetime
+    refresh: int = 600          # client refresh interval; models update ~15 min
+    cache_ttl: float = 600.0    # forecast cache lifetime
     air_cache_ttl: float = 900.0
     alerts_cache_ttl: float = 300.0
     max_stale: float = 6 * 3600.0

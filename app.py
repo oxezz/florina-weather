@@ -30,10 +30,11 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
+import greek
 import report as report_mod
 import sources
 
-__version__ = "2.3.0"
+__version__ = "2.4.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(BASE_DIR, "template.html")
@@ -43,8 +44,19 @@ STATIC_FILES = {
     "/style.css": ("style.css", "text/css; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/theme.js": ("theme.js", "text/javascript; charset=utf-8"),
+    "/sw.js": ("sw.js", "text/javascript; charset=utf-8"),
+    "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
     "/favicon.svg": ("favicon.svg", "image/svg+xml"),
+    "/icon-square.svg": ("icon-square.svg", "image/svg+xml"),
+    "/icon-180.png": ("icon-180.png", "image/png"),
+    "/icon-192.png": ("icon-192.png", "image/png"),
+    "/icon-512.png": ("icon-512.png", "image/png"),
+    "/icon-maskable-512.png": ("icon-maskable-512.png", "image/png"),
 }
+
+# The service worker and the manifest must never be served stale, or a browser
+# keeps running the previous version.
+UNCACHED_STATIC = ("/sw.js", "/manifest.webmanifest")
 
 MIN_GZIP_BYTES = 512
 
@@ -93,6 +105,7 @@ class ShellCache:
             "PLACE": config.place,
             "REGION": config.region,
             "REFRESH": str(config.refresh),
+            "REFRESH_TEXT": greek.format_interval(config.refresh),
             "VERSION": __version__,
         }
         for key, value in values.items():
@@ -268,8 +281,8 @@ class Handler(BaseHTTPRequestHandler):
             "Content-Security-Policy": (
                 "default-src 'self'; img-src 'self' data:; "
                 "style-src 'self' 'unsafe-inline'; script-src 'self'; "
-                "connect-src 'self'; base-uri 'none'; "
-                "form-action 'none'; frame-ancestors 'none'"
+                "worker-src 'self'; manifest-src 'self'; connect-src 'self'; "
+                "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
             ),
         })
 
@@ -309,7 +322,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send(HTTPStatus.OK, body, content_type, {
             "ETag": tag,
-            "Cache-Control": "public, max-age=300",
+            "Cache-Control": ("no-cache" if path in UNCACHED_STATIC
+                              else "public, max-age=300"),
         })
 
     def _not_found(self):

@@ -301,6 +301,24 @@ def format_duration(seconds):
     return "%dλ" % minutes
 
 
+def format_interval(seconds):
+    """Refresh interval in words: ``600`` -> ``"10 λεπτά"``.
+
+    Short intervals stay in seconds, because "1 λεπτά" would be wrong and
+    "0 λεπτά" is useless.
+    """
+    try:
+        total = int(seconds)
+    except (TypeError, ValueError):
+        return "—"
+    if total < 120:
+        return "%d δευτ." % total
+    minutes = total // 60
+    if minutes == 1:
+        return "1 λεπτό"
+    return "%d λεπτά" % minutes
+
+
 # --------------------------------------------------------------------------
 # Meteoalarm warnings
 # --------------------------------------------------------------------------
