@@ -318,6 +318,16 @@ class LocalConditionTests(unittest.TestCase):
     def test_local_is_carried_in_the_payload(self):
         self.assertIn("local", build())
 
+    def test_no_float_noise_reaches_the_client(self):
+        """A raw 3.9000000000000004 in the JSON is sloppy and needless."""
+        import json as _json
+        blob = _json.dumps(build()["local"], ensure_ascii=False)
+        for token in blob.replace('"', " ").split():
+            if "." not in token or not token.split(".")[-1][:1].isdigit():
+                continue
+            decimals = len(token.split(".")[-1].rstrip("},"))
+            self.assertLessEqual(decimals, 1, "too many decimals: " + token)
+
 
 
 

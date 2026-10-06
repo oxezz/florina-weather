@@ -361,9 +361,9 @@ def build_heating(history, now_local):
 
     return {
         "base": HDD_BASE,
-        "today": max(0.0, HDD_BASE - today_mean),
-        "today_mean": today_mean,
-        "month": month_hdd,
+        "today": round(max(0.0, HDD_BASE - today_mean), 1),
+        "today_mean": round(today_mean, 1),
+        "month": round(month_hdd, 1),
         "month_days": len(month_values),
         "month_name": greek.month_name(now_local),
     }
@@ -420,12 +420,12 @@ def build_smog(air_hourly, forecast_hourly, now_local):
         "level": key,
         "label": label,
         "color": colour,
-        "peak": peak_value,
+        "peak": round(peak_value, 1),
         "peak_time": peak_at.strftime("%H:%M"),
-        "wind": mean_wind,
+        "wind": round(mean_wind, 1) if mean_wind is not None else None,
         "calm": mean_wind is not None and mean_wind < SMOG_CALM_KMH,
         "cleanest_time": cleanest_at.strftime("%H:%M"),
-        "cleanest": cleanest_value,
+        "cleanest": round(cleanest_value, 1),
     }
 
 
