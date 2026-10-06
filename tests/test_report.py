@@ -683,6 +683,36 @@ class SkyTests(unittest.TestCase):
                                    sources.Config(), now=NOW)
         self.assertIsNone(data["sky"])
 
+    def test_the_hero_moon_is_the_real_one(self):
+        """A stock crescent in the hero above a card reading Πανσέληνος would
+        be the page contradicting itself."""
+        forecast = fixtures.forecast()
+        forecast["daily"]["moon_phase"] = [0.5] + [0.5] * 6   # full
+        forecast["current"]["is_day"] = 0
+        forecast["current"]["weather_code"] = 0
+        data = report.build_report(snapshot(forecast=forecast),
+                                   sources.Config(), now=NOW)
+        self.assertEqual(data["current"]["emoji"], "🌕")
+        self.assertEqual(data["sky"]["emoji"], "🌕")
+
+    def test_a_cloudy_night_keeps_its_weather_icon(self):
+        forecast = fixtures.forecast()
+        forecast["daily"]["moon_phase"] = [0.5] + [0.5] * 6
+        forecast["current"]["is_day"] = 0
+        forecast["current"]["weather_code"] = 3          # overcast
+        data = report.build_report(snapshot(forecast=forecast),
+                                   sources.Config(), now=NOW)
+        self.assertNotEqual(data["current"]["emoji"], "🌕")
+
+    def test_a_clear_day_shows_the_sun(self):
+        forecast = fixtures.forecast()
+        forecast["daily"]["moon_phase"] = [0.5] + [0.5] * 6
+        forecast["current"]["is_day"] = 1
+        forecast["current"]["weather_code"] = 0
+        data = report.build_report(snapshot(forecast=forecast),
+                                   sources.Config(), now=NOW)
+        self.assertNotEqual(data["current"]["emoji"], "🌕")
+
 
 class DegradedTests(unittest.TestCase):
 

@@ -849,10 +849,9 @@ def build_outfit(hours, now_local):
     }
 
 
-def build_sky(snapshot, now_local, hours, air):
-    """Moon phase, rise and set, and whether tonight is worth looking up."""
-    forecast = snapshot.get("forecast") or {}
-    daily = forecast.get("daily") or {}
+def _moon_facts(snapshot, now_local):
+    """Today's moon, or ``None`` when the API did not supply one."""
+    daily = ((snapshot.get("forecast") or {}).get("daily")) or {}
     times = daily.get("time") or []
     if not times:
         return None
@@ -860,12 +859,28 @@ def build_sky(snapshot, now_local, hours, air):
         index = times.index(now_local.date().isoformat())
     except ValueError:
         index = 0
-
     phase = _at(daily.get("moon_phase"), index)
     if phase is None:
         return None
     key, name, emoji = greek.moon_phase(phase)
-    lit = greek.moon_illumination(phase)
+    return {
+        "phase": key,
+        "name": name,
+        "emoji": emoji,
+        "illumination": greek.moon_illumination(phase),
+        "rise": greek.format_hhmm(_at(daily.get("moonrise"), index)),
+        "set": greek.format_hhmm(_at(daily.get("moonset"), index)),
+    }
+
+
+def build_sky(moon, hours, air):
+    """The moon row, plus whether tonight is worth looking up.
+
+    ``moon`` comes from :func:`_moon_facts`; it is passed in rather than read
+    again here because the hero icon needs the same phase.
+    """
+    if not moon:
+        return None
 
     # Tonight is the dark stretch after sunset. Cloud and haze are read from
     # the same hours the observing would actually happen in.
@@ -874,7 +889,7 @@ def build_sky(snapshot, now_local, hours, air):
     cover = round(sum(clouds) / len(clouds)) if clouds else None
 
     aqi = (air or {}).get("aqi")
-    verdict = greek.stargazing_level(cover, aqi, lit)
+    verdict = greek.stargazing_level(cover, aqi, moon["illumination"])
     if verdict is None:
         stargazing = None
     else:
@@ -888,12 +903,12 @@ def build_sky(snapshot, now_local, hours, air):
         }
 
     return {
-        "phase": key,
-        "name": name,
-        "emoji": emoji,
-        "illumination": lit,
-        "rise": greek.format_hhmm(_at(daily.get("moonrise"), index)),
-        "set": greek.format_hhmm(_at(daily.get("moonset"), index)),
+        "phase": moon["phase"],
+        "name": moon["name"],
+        "emoji": moon["emoji"],
+        "illumination": moon["illumination"],
+        "rise": moon["rise"],
+        "set": moon["set"],
         "stargazing": stargazing,
     }
 
@@ -930,6 +945,14 @@ def build_report(snapshot, config, now=None):
     direction = current_raw.get("wind_direction_10m")
     speed = current_raw.get("wind_speed_10m")
     beaufort = greek.beaufort(speed)
+    moon = _moon_facts(snapshot, now_local)
+
+    # On a clear night the hero shows the real moon, not a stock crescent:
+    # a full moon drawn as a sliver, two panels above a card reading
+    # Πανσέληνος, is the page contradicting itself.
+    icon = greek.emoji(code, is_day)
+    if moon and not is_day and code in (0, 1):
+        icon = moon["emoji"]
 
     current = {
         "iso": current_raw.get("time"),
@@ -944,7 +967,7 @@ def build_report(snapshot, config, now=None):
         "snowfall": current_raw.get("snowfall"),
         "code": code,
         "text": greek.describe(code),
-        "emoji": greek.emoji(code, is_day),
+        "emoji": icon,
         "is_day": is_day,
         "cloud": current_raw.get("cloud_cover"),
         "pressure": current_raw.get("pressure_msl"),
@@ -965,7 +988,7 @@ def build_report(snapshot, config, now=None):
     greeting = build_greeting(now_local, current)
     outfit = build_outfit(hours, now_local)
     air = parse_air(snapshot.get("air"))
-    sky = build_sky(snapshot, now_local, hours, air)
+    sky = build_sky(moon, hours, air)
 
     ages = snapshot.get("ages") or {}
     errors = snapshot.get("errors") or {}
