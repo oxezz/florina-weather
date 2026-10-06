@@ -91,6 +91,12 @@ def forecast(days=DAYS, start=START, code=2):
             "wind_speed_10m_max": [8.7 + d for d in range(days)],
             "wind_gusts_10m_max": [16.2 + d for d in range(days)],
             "wind_direction_10m_dominant": [189 for _ in range(days)],
+            # Fraction of the synodic month. 0.887 is a waning crescent three
+            # days short of new, which is what the live API returns for the
+            # frozen date these fixtures use.
+            "moon_phase": [round((0.887 + 0.034 * i) % 1.0, 3) for i in range(days)],
+            "moonrise": ["%sT03:%02d" % (d, 54 + i) for i, d in enumerate(daily_dates)],
+            "moonset": ["%sT17:%02d" % (d, 30 + i) for i, d in enumerate(daily_dates)],
         },
     }
 

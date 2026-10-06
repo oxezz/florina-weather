@@ -13,6 +13,8 @@ Conventions
 * Beaufort thresholds are the official km/h bands.
 """
 
+import math
+
 # --------------------------------------------------------------------------
 # WMO weather interpretation codes
 # https://open-meteo.com/en/docs (WMO Code table 4677, abridged)
@@ -286,6 +288,141 @@ def inversion_level(anomaly):
         if value >= limit:
             return (key, label, colour)
     return None
+
+
+# The eight phases, as the fraction of the synodic month they sit near.
+# Αμφίκυρτος is the standard Greek astronomical term for a gibbous moon.
+_MOON_PHASES = (
+    (0.03, "new", "Νέα Σελήνη", "🌑"),
+    (0.22, "waxing-crescent", "Αύξουσα Ημισέληνος", "🌒"),
+    (0.28, "first-quarter", "Πρώτο Τέταρτο", "🌓"),
+    (0.47, "waxing-gibbous", "Αύξουσα Αμφίκυρτος", "🌔"),
+    (0.53, "full", "Πανσέληνος", "🌕"),
+    (0.72, "waning-gibbous", "Φθίνουσα Αμφίκυρτος", "🌖"),
+    (0.78, "last-quarter", "Τελευταίο Τέταρτο", "🌗"),
+    (0.97, "waning-crescent", "Φθίνουσα Ημισέληνος", "🌘"),
+)
+_MOON_NEW = ("new", "Νέα Σελήνη", "🌑")
+
+
+def moon_phase(fraction):
+    """(key, Greek name, emoji) for Open-Meteo's ``moon_phase`` fraction."""
+    try:
+        value = float(fraction) % 1.0
+    except (TypeError, ValueError):
+        return _MOON_NEW
+    if value != value:  # NaN
+        return _MOON_NEW
+    for limit, key, name, emoji in _MOON_PHASES:
+        if value < limit:
+            return (key, name, emoji)
+    return _MOON_NEW
+
+
+def moon_illumination(fraction):
+    """Share of the disc lit, 0 at new moon and 1 at full."""
+    try:
+        value = float(fraction) % 1.0
+    except (TypeError, ValueError):
+        return 0.0
+    return round((1.0 - math.cos(2.0 * math.pi * value)) / 2.0, 3)
+
+
+def stargazing_level(cloud, aqi, illumination):
+    """(key, Greek verdict, hex colour) for tonight's observing conditions.
+
+    Cloud is the thing that actually stops you seeing anything, so it leads;
+    moonlight and haze only matter once the sky is clear.
+    """
+    try:
+        cover = float(cloud)
+    except (TypeError, ValueError):
+        return None
+    if cover != cover:  # NaN
+        return None
+    bright = 0.0
+    try:
+        bright = float(illumination)
+    except (TypeError, ValueError):
+        bright = 0.0
+    hazy = False
+    try:
+        hazy = float(aqi) > 40.0
+    except (TypeError, ValueError):
+        hazy = False
+
+    if cover <= 20.0 and not hazy and bright <= 0.45:
+        return ("ideal", "Ιδανικές συνθήκες για αστροπαρατήρηση", "#7dd3fc")
+    if cover <= 25.0 and not hazy:
+        # Clear, but the moon will wash out the faint stuff.
+        return ("moonlit", "Καθαρός ουρανός, αλλά φωτεινό φεγγάρι", "#c4b5fd")
+    if cover <= 45.0:
+        return ("fair", "Καλές συνθήκες", "#4ade80")
+    if cover <= 75.0:
+        return ("poor", "Μέτριες συνθήκες", "#facc15")
+    return ("none", "Συννεφιά, όχι απόψε", "#94a3b8")
+
+
+# Layers by apparent temperature, coldest first so the first match wins.
+_OUTFIT_LAYERS = (
+    (0.0, "severe", "Βαρύ μπουφάν, γάντια & σκούφος", "🧣"),
+    (6.0, "cold", "Βαρύ μπουφάν", "🧥"),
+    (12.0, "cool", "Μπουφάν", "🧥"),
+    (18.0, "mild", "Ζακέτα", "🧥"),
+    (25.0, "warm", "Άνετα ρούχα", "👕"),
+)
+_OUTFIT_LIGHT = ("light", "Ελαφριά ρούχα", "👕")
+
+
+def outfit_layer(apparent):
+    """(key, Greek suggestion, emoji) for what to wear, by feels-like °C."""
+    try:
+        value = float(apparent)
+    except (TypeError, ValueError):
+        return None
+    if value != value:  # NaN
+        return None
+    for limit, key, text, emoji in _OUTFIT_LAYERS:
+        if value < limit:
+            return (key, text, emoji)
+    return _OUTFIT_LIGHT
+
+
+# Extras layered on top of the main suggestion. Several can apply at once.
+OUTFIT_UMBRELLA = ("umbrella", "Ομπρέλα", "☂️")
+OUTFIT_SUNSCREEN = ("sunscreen", "Αντηλιακό", "🧴")
+OUTFIT_HAT = ("hat", "Καπέλο", "🧢")
+OUTFIT_WIND = ("wind", "Προσοχή στον άνεμο", "💨")
+OUTFIT_ICE = ("ice", "Προσοχή στον πάγο", "⚠️")
+
+
+def greeting_word(hour):
+    """Καλημέρα before noon, Καλησπέρα after.
+
+    Καληνύχτα is deliberately absent. In Greek it is a farewell, not a
+    greeting, so a page must never open with it.
+    """
+    try:
+        value = int(hour)
+    except (TypeError, ValueError):
+        return "Καλησπέρα"
+    return "Καλημέρα" if 5 <= value < 12 else "Καλησπέρα"
+
+
+# The one-line observation that follows the greeting. Keyed by the condition
+# that wins, checked in this order.
+GREETING_LINES = {
+    "snow": "Χιόνι σήμερα, με προσοχή στους δρόμους.",
+    "storm": "Καταιγίδα σήμερα, καλύτερα να μην είστε έξω.",
+    "rain": "Βροχερή μέρα σήμερα.",
+    "fog": "Ομίχλη σήμερα, προσοχή στην οδήγηση.",
+    "frost": "Παγωνιά σήμερα, ντυθείτε καλά.",
+    "cold": "Κρύο σήμερα.",
+    "heat": "Ζέστη σήμερα, πιείτε νερό.",
+    "clear-night": "Ξάστερος ουρανός απόψε.",
+    "clear-day": "Καθαρός ουρανός σήμερα.",
+    "cloud": "Συννεφιά σήμερα.",
+}
 
 
 def uv_level(value):

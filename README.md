@@ -64,6 +64,8 @@ covered by this project's MIT licence.
 | | |
 |---|---|
 | **Current conditions** | temperature, apparent temperature, humidity, wind (speed, direction, arrow and Beaufort), gusts, precipitation, cloud cover, pressure and visibility |
+| **Greeting & outfit** | a hello keyed to the hour and the weather, and a «Τι να φορέσω;» card suggesting a layer from the feels-like temperature, with umbrella, sunscreen, hat or ice warnings layered on top |
+| **Moon & stargazing** | the lunar phase, how much of the disc is lit, moonrise and moonset, plus a verdict on whether tonight is worth looking up — cloud first, then haze, then moonlight |
 | **48-hour outlook** | an inline SVG chart of temperature with precipitation-probability bars and night shading, plus a horizontally scrollable hour-by-hour strip |
 | **7-day forecast** | per-day icon, description, min/max with a relative range bar, rainfall, UV and peak gusts |
 | **Official warnings** | live **Meteoalarm / EMY** alerts for West Macedonia, colour-coded, shown as a banner at the top |
@@ -118,7 +120,7 @@ saving it, so a particular look is linkable.
 | `manifest.webmanifest` | Web app manifest — name, icons, standalone display |
 | `Dockerfile` | Container image for Render / Fly / any container host |
 | `cacert.pem` | Mozilla CA bundle, used when the host has no trust store |
-| `tests/` | 221 tests, all offline |
+| `tests/` | 246 tests, all offline |
 
 ### API
 
@@ -181,7 +183,7 @@ warning is shown.
 python -m unittest discover -s tests -t .
 ```
 
-All 221 tests run offline: upstream responses are replaced by fixtures, and the
+All 246 tests run offline: upstream responses are replaced by fixtures, and the
 HTTP tests start a real server on an ephemeral port with an injected opener.
 
 ## Greek wording
@@ -279,6 +281,17 @@ A few labels were deliberately chosen over the obvious alternative:
   strip uses `scroll-snap-type: x mandatory` with `overscroll-behavior-x:
   contain`, so a fling settles card by card and never triggers the browser's
   back gesture at the edges.
+* **The moon comes from Open-Meteo after all.** `daily=moon_phase` returns a
+  fraction of the synodic month — 0 new, 0.25 first quarter, 0.5 full, 0.75
+  last. It is daily-only: `current` and `hourly` both reject it. Illumination is
+  derived rather than fetched, as `(1 − cos 2π·phase) / 2`.
+* **Καληνύχτα is never a greeting.** In Greek it is a farewell, so a page must
+  not open with it. Before noon the greeting is «Καλημέρα», after it
+  «Καλησπέρα», and there is a test asserting no hour produces anything else.
+* **The stargazing verdict leads with cloud**, because cloud is what actually
+  stops you seeing anything. Haze and moonlight only demote a clear sky, which
+  is why a clear night with a full moon reads «καθαρός ουρανός, αλλά φωτεινό
+  φεγγάρι» rather than «ιδανικές συνθήκες».
 * **Caching.** Upstream calls are cached server-side and served stale (up to six
   hours) if the network fails, so a brief outage shows slightly old data instead
   of an error page.

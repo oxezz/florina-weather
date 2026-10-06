@@ -110,7 +110,10 @@ FORECAST_DAILY = (
     "apparent_temperature_max,apparent_temperature_min,precipitation_sum,"
     "precipitation_probability_max,sunrise,sunset,daylight_duration,"
     "sunshine_duration,uv_index_max,wind_speed_10m_max,wind_gusts_10m_max,"
-    "wind_direction_10m_dominant"
+    "wind_direction_10m_dominant,"
+    # Lunar data is daily-only. `moon_phase` is a fraction of the synodic
+    # month: 0 new, 0.25 first quarter, 0.5 full, 0.75 last quarter.
+    "moon_phase,moonrise,moonset"
 )
 
 AIR_CURRENT = (

@@ -372,14 +372,79 @@ a:hover { text-decoration: underline; }
 /* --- stat grid ---------------------------------------------------------- */
 /* 8 cards: 2 across on phones, 4 across from tablets up, so they always
    make complete rows instead of a 6 + 2 remainder. */
+/* ---------------------------------------------------------------- extras */
+
+.greet {
+  margin: 16px 0 0;
+  font-size: .95rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-wrap: balance;
+}
+
+.ocard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+.ocard-ico { font-size: 1.9rem; line-height: 1; }
+.ocard-body { display: grid; gap: 2px; min-width: 0; }
+.ocard-lbl {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-faint);
+}
+.ocard-text { font-size: 1.02rem; font-weight: 650; }
+.ocard-items { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.ocard-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: .76rem;
+  font-weight: 600;
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border-soft);
+  color: var(--text-dim);
+}
+
+.moon-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--glass-border-soft);
+}
+.moon-ico { font-size: 2.1rem; line-height: 1; }
+/* The panel centres its text; this row reads as a left-aligned caption. */
+.moon-body { display: grid; gap: 2px; min-width: 0; text-align: left; }
+.moon-name { font-size: 1.02rem; font-weight: 650; }
+.moon-meta { font-size: .76rem; color: var(--text-faint); }
+.moon-verdict {
+  margin-left: auto;
+  padding: 6px 13px;
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--tone, var(--text-dim));
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border-soft);
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 20px;
 }
-@media (min-width: 640px) {
-  .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (min-width: 640px) {  .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 .card { padding: 16px 16px; text-align: center; }
 .lbl { display: block; font-size: .8rem; color: var(--text-faint); margin-bottom: 9px; }

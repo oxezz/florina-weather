@@ -224,6 +224,57 @@
 
   /* ----------------------------------------------------------------- hero */
 
+  /* ---------------------------------------------------------------- extras */
+
+  function renderGreeting(greeting) {
+    var node = $("greet");
+    if (!node) return;
+    if (!greeting || !greeting.word) { node.hidden = true; return; }
+    node.textContent = greeting.word + "!" +
+      (greeting.text ? " " + greeting.text : "");
+    node.hidden = false;
+  }
+
+  function renderOutfit(outfit) {
+    var panel = $("outfit-panel");
+    if (!panel) return;
+    if (!outfit) { panel.hidden = true; return; }
+    panel.hidden = false;
+    setText($("outfit-ico"), outfit.emoji);
+    setText($("outfit-text"), outfit.text);
+
+    var host = $("outfit-items");
+    if (!host) return;
+    clear(host);
+    (outfit.items || []).forEach(function (item) {
+      var chip = el("span", "ocard-item");
+      setText(chip, item.emoji + " " + item.text);
+      host.appendChild(chip);
+    });
+  }
+
+  function renderSky(sky) {
+    var row = $("moon-row");
+    if (!row) return;
+    if (!sky) { row.hidden = true; return; }
+    row.hidden = false;
+    setText($("moon-ico"), sky.emoji);
+    setText($("moon-name"), sky.name);
+    setText($("moon-meta"),
+      "φωτισμένο " + num(sky.illumination * 100, 0) + "% · ανατολή " +
+      sky.rise + " · δύση " + sky.set);
+
+    var verdict = $("moon-verdict");
+    if (!verdict) return;
+    if (sky.stargazing) {
+      setText(verdict, sky.stargazing.text);
+      verdict.style.setProperty("--tone", sky.stargazing.color);
+      verdict.hidden = false;
+    } else {
+      verdict.hidden = true;
+    }
+  }
+
   function renderHero(data) {
     var cur = data.current || {};
     setText($("sym"), cur.emoji || "\u2601\ufe0f");
@@ -745,6 +796,9 @@
     safely("theme", function () { applyWeatherTheme(data.current || {}); });
     safely("alerts", function () { renderAlerts(data.alerts); });
     safely("hero", function () { renderHero(data); });
+    safely("greeting", function () { renderGreeting(data.greeting); });
+    safely("outfit", function () { renderOutfit(data.outfit); });
+    safely("sky", function () { renderSky(data.sky); });
     safely("stats", function () { renderStats(data.current || {}); });
     safely("sun", function () { renderSun(data); });
 

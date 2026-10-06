@@ -36,6 +36,14 @@ def _at(values, index, default=None):
     return default if value is None else value
 
 
+def _is_number(value):
+    """True for a real, finite number — ``None``, strings and NaN all fail."""
+    try:
+        return value is not None and float(value) == float(value)
+    except (TypeError, ValueError):
+        return False
+
+
 def _zone(name):
     """IANA zone, or ``None`` when this Python has no timezone database.
 
@@ -754,6 +762,142 @@ def _summary(current, today, alerts):
     return head + (". " + tail + "." if tail else ".")
 
 
+# WMO groups, by what they mean for a greeting or a clothing hint.
+_CODES_SNOW = (71, 73, 75, 77, 85, 86)
+_CODES_STORM = (95, 96, 99)
+_CODES_RAIN = (51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82)
+_CODES_FOG = (45, 48)
+
+
+def build_greeting(now_local, current):
+    """A hello keyed to the hour, then to whatever the weather is doing.
+
+    Deliberately says nothing about clothing: that is the outfit card's job,
+    and repeating it here would just be noise.
+    """
+    code = current.get("code")
+    feels = current.get("apparent")
+    temp = current.get("temp")
+    hour = now_local.hour
+
+    if code in _CODES_SNOW:
+        key = "snow"
+    elif code in _CODES_STORM:
+        key = "storm"
+    elif code in _CODES_RAIN:
+        key = "rain"
+    elif code in _CODES_FOG:
+        key = "fog"
+    elif _is_number(feels) and feels <= 0:
+        key = "frost"
+    elif _is_number(feels) and feels <= 6:
+        key = "cold"
+    elif _is_number(temp) and temp >= 33:
+        key = "heat"
+    elif code == 0:
+        key = "clear-night" if not current.get("is_day", 1) else "clear-day"
+    else:
+        key = "cloud"
+
+    return {
+        "word": greek.greeting_word(hour),
+        "text": greek.GREETING_LINES.get(key, ""),
+        "key": key,
+    }
+
+
+def build_outfit(hours, now_local):
+    """What to wear, from the feels-like temperature and the hours ahead."""
+    if not hours:
+        return None
+    now = hours[0]
+    layer = greek.outfit_layer(now.get("apparent"))
+    if layer is None:
+        return None
+    key, headline, emoji = layer
+
+    items = []
+
+    # Rain within the next six hours is worth an umbrella; further out is not
+    # a decision anyone is making right now.
+    ahead = hours[:6]
+    wet = max((h.get("precip_prob") or 0) for h in ahead) if ahead else 0
+    if wet >= 50:
+        items.append(greek.OUTFIT_UMBRELLA)
+
+    uv = now.get("uv")
+    if _is_number(uv) and uv >= 6:
+        items.append(greek.OUTFIT_SUNSCREEN)
+        if _is_number(now.get("apparent")) and now["apparent"] >= 27:
+            items.append(greek.OUTFIT_HAT)
+
+    gusts = now.get("gusts")
+    if _is_number(gusts) and gusts >= 50:
+        items.append(greek.OUTFIT_WIND)
+
+    # Ice needs both a freezing surface and water about.
+    if _is_number(now.get("apparent")) and now["apparent"] <= 1 and wet >= 30:
+        items.append(greek.OUTFIT_ICE)
+
+    return {
+        "key": key,
+        "text": headline,
+        "emoji": emoji,
+        "apparent": now.get("apparent"),
+        "rain_chance": round(wet) if _is_number(wet) else None,
+        "items": [{"key": k, "text": t, "emoji": e} for k, t, e in items],
+    }
+
+
+def build_sky(snapshot, now_local, hours, air):
+    """Moon phase, rise and set, and whether tonight is worth looking up."""
+    forecast = snapshot.get("forecast") or {}
+    daily = forecast.get("daily") or {}
+    times = daily.get("time") or []
+    if not times:
+        return None
+    try:
+        index = times.index(now_local.date().isoformat())
+    except ValueError:
+        index = 0
+
+    phase = _at(daily.get("moon_phase"), index)
+    if phase is None:
+        return None
+    key, name, emoji = greek.moon_phase(phase)
+    lit = greek.moon_illumination(phase)
+
+    # Tonight is the dark stretch after sunset. Cloud and haze are read from
+    # the same hours the observing would actually happen in.
+    night = [h for h in hours if not h.get("is_day")][:8]
+    clouds = [h.get("cloud") for h in night if _is_number(h.get("cloud"))]
+    cover = round(sum(clouds) / len(clouds)) if clouds else None
+
+    aqi = (air or {}).get("aqi")
+    verdict = greek.stargazing_level(cover, aqi, lit)
+    if verdict is None:
+        stargazing = None
+    else:
+        vkey, vtext, vcolour = verdict
+        stargazing = {
+            "level": vkey,
+            "text": vtext,
+            "color": vcolour,
+            "cloud": cover,
+            "aqi": aqi,
+        }
+
+    return {
+        "phase": key,
+        "name": name,
+        "emoji": emoji,
+        "illumination": lit,
+        "rise": greek.format_hhmm(_at(daily.get("moonrise"), index)),
+        "set": greek.format_hhmm(_at(daily.get("moonset"), index)),
+        "stargazing": stargazing,
+    }
+
+
 def build_report(snapshot, config, now=None):
     """Assemble the JSON document served at ``/api/weather``."""
     forecast = snapshot.get("forecast")
@@ -818,6 +962,10 @@ def build_report(snapshot, config, now=None):
     today = days[0] if days else None
     alerts = parse_alerts(snapshot.get("alerts"), config, now_local)
     local = build_local_conditions(snapshot, days, hourly_raw, now_local, config)
+    greeting = build_greeting(now_local, current)
+    outfit = build_outfit(hours, now_local)
+    air = parse_air(snapshot.get("air"))
+    sky = build_sky(snapshot, now_local, hours, air)
 
     ages = snapshot.get("ages") or {}
     errors = snapshot.get("errors") or {}
@@ -834,7 +982,10 @@ def build_report(snapshot, config, now=None):
         "hourly": hours,
         "daily": days,
         "local": local,
-        "air": parse_air(snapshot.get("air")),
+        "greeting": greeting,
+        "outfit": outfit,
+        "sky": sky,
+        "air": air,
         "alerts": alerts,
         "status": {
             "stale": bool(snapshot.get("stale")),

@@ -464,6 +464,46 @@ class HourlyStripTests(unittest.TestCase):
         self.assertIn('gauge.setAttribute("aria-hidden", "true")', self.js)
 
 
+class ExtrasTests(unittest.TestCase):
+    """The greeting, the outfit card and the moon row."""
+
+    def setUp(self):
+        self.template = read("template.html")
+        self.js = read("app.js")
+        self.css = read("style.css")
+
+    def test_the_client_wires_all_three(self):
+        self.assertIn("function renderGreeting", self.js)
+        self.assertIn("function renderOutfit", self.js)
+        self.assertIn("function renderSky", self.js)
+        for name in ("greeting", "outfit", "sky"):
+            self.assertIn('safely("%s"' % name, self.js)
+
+    def test_the_greeting_shouts_once(self):
+        # "Καλησπέρα! Κρύο σήμερα." — the exclamation belongs to the greeting
+        # word, not to the sentence after it.
+        self.assertIn('greeting.word + "!"', self.js)
+
+    def test_each_extra_is_optional(self):
+        """All three hide themselves rather than rendering an empty shell."""
+        self.assertIn("if (!greeting || !greeting.word) { node.hidden = true; return; }",
+                      self.js)
+        self.assertIn("if (!outfit) { panel.hidden = true; return; }", self.js)
+        self.assertIn("if (!sky) { row.hidden = true; return; }", self.js)
+
+    def test_the_moon_row_is_left_aligned(self):
+        # .panel centres its text, which left the phase name floating.
+        block = self.css.split(".moon-body {")[1].split("}")[0]
+        self.assertIn("text-align: left", block)
+
+    def test_the_stargazing_verdict_carries_its_colour(self):
+        self.assertIn('verdict.style.setProperty("--tone"', self.js)
+
+    def test_outfit_items_are_escaped_as_text(self):
+        # Built through setText, never innerHTML.
+        self.assertIn("setText(chip, item.emoji", self.js)
+
+
 class StylesheetTests(unittest.TestCase):
 
     def setUp(self):

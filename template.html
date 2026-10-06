@@ -68,6 +68,8 @@
     </div>
   </div>
 
+  <p class="greet" id="greet" hidden></p>
+
   <div class="now">
     <span class="sym" id="sym" aria-hidden="true">&#9729;&#65039;</span>
     <div class="temp-block">
@@ -79,6 +81,15 @@
   <p class="summary" id="summary"><span class="skel skel-line"></span></p>
   <p class="stamp" id="stamp"><span class="skel skel-stamp"></span></p>
 </header>
+
+<section class="card glass ocard" id="outfit-panel" hidden>
+  <span class="ocard-ico" id="outfit-ico" aria-hidden="true"></span>
+  <div class="ocard-body">
+    <span class="ocard-lbl">Τι να φορέσω;</span>
+    <span class="ocard-text" id="outfit-text"></span>
+  </div>
+  <div class="ocard-items" id="outfit-items"></div>
+</section>
 
 <section class="grid" id="stats" aria-label="Τρέχουσες συνθήκες">
   <div class="card glass"><span class="lbl">Αίσθηση</span><span class="big" id="s-apparent"><span class="skel skel-value"></span></span></div>
@@ -112,6 +123,15 @@
       <span>Διάρκεια ημέρας <strong id="sun-daylight"><span class="skel skel-sun"></span></strong></span>
       <span>Ηλιοφάνεια <strong id="sun-sunshine"><span class="skel skel-sun"></span></strong></span>
     </div>
+  </div>
+
+  <div class="moon-row" id="moon-row" hidden>
+    <span class="moon-ico" id="moon-ico" aria-hidden="true"></span>
+    <div class="moon-body">
+      <span class="moon-name" id="moon-name"></span>
+      <span class="moon-meta" id="moon-meta"></span>
+    </div>
+    <span class="moon-verdict" id="moon-verdict"></span>
   </div>
 </section>
 

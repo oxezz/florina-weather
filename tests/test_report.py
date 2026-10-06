@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
 import fixtures  # noqa: E402
+import greek  # noqa: E402
 import report  # noqa: E402
 import sources  # noqa: E402
 
@@ -546,6 +547,141 @@ class AgreementTests(unittest.TestCase):
         self.assertEqual(len(data["daily"]), 7)
         for day in data["daily"]:
             self.assertIsNone(day["agreement"])
+
+
+class GreetingTests(unittest.TestCase):
+    """The one-line hello at the top of the page."""
+
+    def _greeting(self, **current):
+        data = report.build_report(snapshot(), sources.Config(), now=NOW)
+        merged = dict(data["current"])
+        merged.update(current)
+        return report.build_greeting(NOW, merged)
+
+    def test_the_word_follows_the_hour(self):
+        import datetime as _dt
+        morning = report.build_greeting(
+            _dt.datetime(2026, 10, 6, 8, 0), {"code": 0, "is_day": 1})
+        self.assertEqual(morning["word"], "Καλημέρα")
+        evening = report.build_greeting(
+            _dt.datetime(2026, 10, 6, 20, 0), {"code": 0, "is_day": 0})
+        self.assertEqual(evening["word"], "Καλησπέρα")
+
+    def test_it_never_greets_with_a_farewell(self):
+        """Καληνύχτα means goodbye in Greek, so an app must not open with it."""
+        for hour in range(24):
+            word = greek.greeting_word(hour)
+            self.assertIn(word, ("Καλημέρα", "Καλησπέρα"))
+            self.assertNotEqual(word, "Καληνύχτα")
+
+    def test_weather_picks_the_line(self):
+        cases = [
+            ({"code": 73}, "snow"),
+            ({"code": 95}, "storm"),
+            ({"code": 61}, "rain"),
+            ({"code": 45}, "fog"),
+            ({"code": 3, "apparent": -2.0}, "frost"),
+            ({"code": 3, "apparent": 4.0}, "cold"),
+            ({"code": 3, "temp": 36.0, "apparent": 36.0}, "heat"),
+            ({"code": 0, "is_day": 0, "apparent": 15.0}, "clear-night"),
+            ({"code": 0, "is_day": 1, "apparent": 15.0}, "clear-day"),
+            ({"code": 2, "apparent": 15.0}, "cloud"),
+        ]
+        for current, expected in cases:
+            self.assertEqual(self._greeting(**current)["key"], expected,
+                             "%s should read as %s" % (current, expected))
+
+    def test_severe_weather_beats_a_mild_temperature(self):
+        # 25 C but a thunderstorm: the storm is what matters.
+        self.assertEqual(
+            self._greeting(code=95, temp=25.0, apparent=25.0)["key"], "storm")
+
+    def test_every_key_has_a_line(self):
+        for key in greek.GREETING_LINES:
+            self.assertTrue(greek.GREETING_LINES[key].strip())
+
+
+class OutfitTests(unittest.TestCase):
+    """Τι να φορέσω, from the feels-like temperature."""
+
+    def test_layers_follow_apparent_temperature(self):
+        cases = [(-5.0, "severe"), (3.0, "cold"), (9.0, "cool"),
+                 (15.0, "mild"), (21.0, "warm"), (30.0, "light")]
+        for value, expected in cases:
+            self.assertEqual(greek.outfit_layer(value)[0], expected,
+                             "%s C should be %s" % (value, expected))
+
+    def test_a_wet_afternoon_earns_an_umbrella(self):
+        hours = [{"apparent": 12.0, "precip_prob": 70, "uv": 1, "gusts": 10}]
+        outfit = report.build_outfit(hours, NOW)
+        self.assertIn("umbrella", [i["key"] for i in outfit["items"]])
+
+    def test_distant_rain_does_not_earn_one(self):
+        # Rain eight hours out is not a decision anyone is making now.
+        hours = ([{"apparent": 12.0, "precip_prob": 5, "uv": 1, "gusts": 10}] * 6 +
+                 [{"apparent": 12.0, "precip_prob": 95, "uv": 1, "gusts": 10}] * 4)
+        outfit = report.build_outfit(hours, NOW)
+        self.assertNotIn("umbrella", [i["key"] for i in outfit["items"]])
+
+    def test_a_strong_sun_earns_sunscreen(self):
+        # UV alone earns the sunscreen; the hat needs real heat as well.
+        mild = report.build_outfit(
+            [{"apparent": 22.0, "precip_prob": 0, "uv": 8, "gusts": 10}], NOW)
+        self.assertIn("sunscreen", [i["key"] for i in mild["items"]])
+        self.assertNotIn("hat", [i["key"] for i in mild["items"]])
+
+        hot = report.build_outfit(
+            [{"apparent": 30.0, "precip_prob": 0, "uv": 8, "gusts": 10}], NOW)
+        self.assertIn("hat", [i["key"] for i in hot["items"]])
+
+    def test_a_freezing_wet_morning_warns_about_ice(self):
+        hours = [{"apparent": -1.0, "precip_prob": 60, "uv": 0, "gusts": 10}]
+        outfit = report.build_outfit(hours, NOW)
+        self.assertIn("ice", [i["key"] for i in outfit["items"]])
+
+    def test_no_hours_means_no_card(self):
+        self.assertIsNone(report.build_outfit([], NOW))
+
+
+class SkyTests(unittest.TestCase):
+    """The moon and whether tonight is worth looking up."""
+
+    def setUp(self):
+        self.data = report.build_report(snapshot(), sources.Config(), now=NOW)
+        self.sky = self.data["sky"]
+
+    def test_the_phase_is_named(self):
+        self.assertEqual(self.sky["phase"], "waning-crescent")
+        self.assertEqual(self.sky["name"], "Φθίνουσα Ημισέληνος")
+        self.assertEqual(self.sky["emoji"], "🌘")
+
+    def test_illumination_matches_the_phase(self):
+        # 0.887 of the way round the month is a thin crescent, about 12% lit.
+        self.assertAlmostEqual(self.sky["illumination"], 0.121, places=2)
+
+    def test_rise_and_set_are_formatted(self):
+        self.assertRegex(self.sky["rise"], r"^\d{2}:\d{2}$")
+        self.assertRegex(self.sky["set"], r"^\d{2}:\d{2}$")
+
+    def test_a_clear_moonless_night_is_ideal(self):
+        self.assertEqual(greek.stargazing_level(5, 20, 0.05)[0], "ideal")
+
+    def test_a_clear_full_moon_is_not_ideal(self):
+        level = greek.stargazing_level(5, 20, 0.99)[0]
+        self.assertEqual(level, "moonlit")
+
+    def test_overcast_reads_as_no_chance(self):
+        self.assertEqual(greek.stargazing_level(95, 20, 0.1)[0], "none")
+
+    def test_hazy_air_rules_out_ideal(self):
+        self.assertNotEqual(greek.stargazing_level(5, 80, 0.05)[0], "ideal")
+
+    def test_missing_phase_means_no_row(self):
+        forecast = fixtures.forecast()
+        forecast["daily"].pop("moon_phase")
+        data = report.build_report(snapshot(forecast=forecast),
+                                   sources.Config(), now=NOW)
+        self.assertIsNone(data["sky"])
 
 
 class DegradedTests(unittest.TestCase):
