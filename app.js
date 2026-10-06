@@ -10,7 +10,7 @@
   var API = "/api/weather";
   var REFRESH = Math.max(30, Number(document.body.dataset.refresh) || 180);
 
-  var state = { timer: null, inflight: false, lastGenerated: null, error: null };
+  var state = { timer: null, inflight: false, lastGenerated: null, error: null, signature: null };
 
   function $(id) { return document.getElementById(id); }
 
@@ -597,9 +597,18 @@
     safely("hero", function () { renderHero(data); });
     safely("stats", function () { renderStats(data.current || {}); });
     safely("sun", function () { renderSun(data); });
-    safely("chart", function () { renderChart(data.hourly || []); });
-    safely("hourly", function () { renderHourly(data.hourly || []); });
-    safely("daily", function () { renderDays(data.daily || []); });
+
+    /* Rebuilding the chart, 48 hour tiles and 7 day cards is the expensive
+       part of a refresh. On a 180s timer most refreshes come back with byte
+       -identical data, so skip the whole rebuild when nothing changed. */
+    var heavy = JSON.stringify(data.hourly) + "|" + JSON.stringify(data.daily);
+    if (heavy !== state.signature) {
+      state.signature = heavy;
+      safely("chart", function () { renderChart(data.hourly || []); });
+      safely("hourly", function () { renderHourly(data.hourly || []); });
+      safely("daily", function () { renderDays(data.daily || []); });
+    }
+
     safely("air", function () { renderAir(data.air); });
     safely("status", function () { renderStatus(data); });
     safely("title", function () { document.title = "Καιρός · " + data.place; });

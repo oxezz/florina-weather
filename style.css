@@ -8,11 +8,26 @@
      body.theme-*                       set by app.js from the current weather,
                                         decides the backdrop hue
 
-   The glass itself is a translucent, saturated blur with three light cues
-   borrowed from iOS: a specular rim on the top edge, a sheen sweeping out of
-   the top-left corner, and a soft highlight that follows the pointer. None of
-   it is load-bearing — with JavaScript or hover unavailable the surfaces still
-   read correctly.
+   PERFORMANCE NOTES — this file is deliberately frugal on phones.
+
+   Scroll jank on mobile, and on Firefox in particular, comes from work the
+   browser has to redo on *every scroll frame*. Four things caused that here
+   and have been removed:
+
+     1. `background-attachment: fixed` — forces a full-viewport repaint per
+        frame. Replaced by a single position:fixed layer (.backdrop), which the
+        compositor reuses and never repaints.
+     2. A backdrop-filter on all 13 panels and cards — 13 blur surfaces, each
+        re-blurring the moving backdrop every frame. Now applied only to
+        pointer devices with a hover, i.e. never on a phone.
+     3. `mask-image` on the hourly strip, re-evaluated as it scrolls. Desktop
+        only now.
+     4. `:hover` rules that touch devices still evaluate. All hover styling
+        lives inside one `@media (hover: hover)` block.
+
+   The glass look survives on touch without any blur: the backdrop here is a
+   smooth gradient, so blurring it was never visible anyway. What actually
+   reads as glass is the translucent fill, the specular rim and the sheen.
    ========================================================================== */
 
 @property --hl {
@@ -42,10 +57,10 @@
   --text-faint: rgba(242, 247, 255, .54);
   --accent: #9fd8ff;
   --temp-shadow: 0 6px 22px rgba(0, 0, 0, .35);
-  --icon-shadow: drop-shadow(0 8px 18px rgba(0, 0, 0, .45));
+  --icon-shadow: 0 6px 16px rgba(0, 0, 0, .45);
 
   /* glass */
-  --glass-bg: rgba(255, 255, 255, .075);
+  --glass-bg: rgba(255, 255, 255, .085);
   --glass-bg-hover: rgba(255, 255, 255, .14);
   --glass-inner: rgba(255, 255, 255, .06);
   --glass-inner-hover: rgba(255, 255, 255, .12);
@@ -55,9 +70,9 @@
   --rim-bottom: rgba(255, 255, 255, .05);
   --sheen: rgba(255, 255, 255, .17);
   --track: rgba(255, 255, 255, .12);
-  --shadow: 0 10px 34px rgba(0, 0, 0, .32);
-  --shadow-lift: 0 16px 44px rgba(0, 0, 0, .38);
-  --blur: blur(30px) saturate(190%) brightness(1.05);
+  --shadow: 0 8px 24px rgba(0, 0, 0, .30);
+  --shadow-lift: 0 14px 34px rgba(0, 0, 0, .36);
+  --blur: blur(16px) saturate(160%);
 
   /* status */
   --ok-bg: rgba(74, 222, 128, .10);
@@ -83,10 +98,10 @@ html.mode-light {
   --text-faint: rgba(10, 26, 43, .53);
   --accent: #0b6bb0;
   --temp-shadow: 0 2px 12px rgba(255, 255, 255, .9);
-  --icon-shadow: drop-shadow(0 6px 14px rgba(23, 58, 92, .20));
+  --icon-shadow: 0 4px 12px rgba(23, 58, 92, .20);
 
-  --glass-bg: rgba(255, 255, 255, .55);
-  --glass-bg-hover: rgba(255, 255, 255, .74);
+  --glass-bg: rgba(255, 255, 255, .58);
+  --glass-bg-hover: rgba(255, 255, 255, .76);
   --glass-inner: rgba(255, 255, 255, .48);
   --glass-inner-hover: rgba(255, 255, 255, .70);
   --glass-border: rgba(255, 255, 255, .85);
@@ -95,9 +110,8 @@ html.mode-light {
   --rim-bottom: rgba(255, 255, 255, .30);
   --sheen: rgba(255, 255, 255, .55);
   --track: rgba(10, 26, 43, .10);
-  --shadow: 0 10px 30px rgba(23, 58, 92, .15);
-  --shadow-lift: 0 16px 40px rgba(23, 58, 92, .20);
-  --blur: blur(26px) saturate(170%) brightness(1.02);
+  --shadow: 0 8px 22px rgba(23, 58, 92, .14);
+  --shadow-lift: 0 14px 32px rgba(23, 58, 92, .18);
 
   --ok-bg: rgba(22, 163, 74, .10);
   --ok-border: rgba(22, 163, 74, .30);
@@ -135,7 +149,12 @@ html.mode-light body.theme-fog         { --g1: #b6bfc6; --g2: #c4ccd2; --b1: #f3
 
 * { margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
-html { scrollbar-color: var(--track) transparent; }
+/* The mode class lives on <html>, so this picks up the right base colour for
+   the rubber-band area even though the weather theme is on <body>. */
+html {
+  background: var(--b3);
+  scrollbar-color: var(--track) transparent;
+}
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
@@ -143,17 +162,28 @@ body {
   color: var(--text);
   min-height: 100vh;
   padding: 32px 22px 64px;
-  background:
-    radial-gradient(1200px 820px at 12% 6%, var(--g1) 0%, transparent 55%),
-    radial-gradient(1000px 900px at 88% 16%, var(--g2) 0%, transparent 60%),
-    linear-gradient(158deg, var(--b1) 0%, var(--b2) 48%, var(--b3) 100%);
-  background-attachment: fixed;
-  transition: background 900ms var(--ease), color 400ms var(--ease);
+  background: none; /* the .backdrop layer paints it instead */
+  transition: color 400ms var(--ease);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
 body.wrap { max-width: 1180px; margin: 0 auto; }
+
+/* One fixed layer instead of background-attachment: fixed. */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--b1);
+  background-image:
+    radial-gradient(1200px 820px at 12% 6%, var(--g1) 0%, transparent 55%),
+    radial-gradient(1000px 900px at 88% 16%, var(--g2) 0%, transparent 60%),
+    linear-gradient(158deg, var(--b1) 0%, var(--b2) 48%, var(--b3) 100%);
+  /* Promote it once; it then never repaints while the page scrolls. */
+  transform: translateZ(0);
+}
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -165,27 +195,15 @@ a:hover { text-decoration: underline; }
 }
 
 /* --- glass -------------------------------------------------------------- */
+/* No backdrop-filter and no isolation here: see the performance note above. */
 .glass {
   position: relative;
-  isolation: isolate;
   border-radius: var(--radius-xl);
   border: 1px solid var(--glass-border);
   background-color: var(--glass-bg);
-  /* the pointer-tracked highlight rides in the background layer, so it can
-     never sit on top of the text */
-  background-image: radial-gradient(
-    260px circle at var(--mx, 50%) var(--my, 0%),
-    rgba(255, 255, 255, calc(var(--hl, 0) * .17)),
-    transparent 72%);
-  -webkit-backdrop-filter: var(--blur);
-  backdrop-filter: var(--blur);
-  box-shadow:
-    var(--shadow),
-    inset 0 1px 0 var(--rim-top),
-    inset 0 -1px 0 var(--rim-bottom);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--rim-top);
   overflow: hidden;
-  transition: --hl .45s var(--ease), background-color .3s var(--ease),
-              box-shadow .3s var(--ease), transform .3s var(--ease);
+  transition: background-color .35s var(--ease);
 }
 
 /* sheen sweeping out of the top-left corner, plus a faint bottom bounce */
@@ -199,12 +217,6 @@ a:hover { text-decoration: underline; }
     linear-gradient(152deg, var(--sheen) 0%, transparent 32%),
     radial-gradient(130% 70% at 100% 100%, var(--sheen), transparent 60%);
   opacity: .8;
-  transition: opacity .4s var(--ease);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .glass:hover { --hl: 1; }
-  .glass:hover::before { opacity: 1; }
 }
 
 .notice { padding: 18px 22px; margin-bottom: 18px; line-height: 1.5; }
@@ -220,11 +232,8 @@ a:hover { text-decoration: underline; }
   padding: 16px 18px 16px 22px;
   border-radius: var(--radius-lg);
   background-color: var(--glass-bg-hover);
-  -webkit-backdrop-filter: var(--blur);
-  backdrop-filter: var(--blur);
   border: 1px solid var(--glass-border);
   box-shadow: var(--shadow), inset 0 1px 0 var(--rim-top);
-  animation: rise .5s var(--ease) both;
 }
 .alert::before {
   content: "";
@@ -263,7 +272,7 @@ a:hover { text-decoration: underline; }
   padding: 26px 28px 28px;
   margin-bottom: 20px;
   text-align: center;
-  animation: rise .6s var(--ease) both;
+  animation: rise .5s var(--ease) both;
 }
 .hero-top {
   display: flex;
@@ -286,7 +295,6 @@ a:hover { text-decoration: underline; }
   border-radius: 999px;
   background: var(--glass-inner);
   border: 1px solid var(--glass-border-soft);
-  box-shadow: inset 0 1px 0 var(--rim-bottom);
 }
 .modes button {
   width: 32px; height: 28px;
@@ -296,14 +304,11 @@ a:hover { text-decoration: underline; }
   color: var(--text-faint);
   border-radius: 999px;
   cursor: pointer;
-  transition: color .2s var(--ease), background .25s var(--ease),
-              box-shadow .25s var(--ease);
 }
-.modes button:hover { color: var(--text-dim); }
 .modes button[aria-pressed="true"] {
   background: var(--glass-bg-hover);
   color: var(--text);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, .18), inset 0 1px 0 var(--rim-top);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .16);
 }
 
 .refresh {
@@ -315,11 +320,7 @@ a:hover { text-decoration: underline; }
   background: var(--glass-inner);
   color: var(--text);
   cursor: pointer;
-  box-shadow: inset 0 1px 0 var(--rim-top);
-  transition: background .2s var(--ease), transform .25s var(--ease);
 }
-.refresh:hover { background: var(--glass-inner-hover); }
-.refresh:active { transform: scale(.92); }
 .refresh[aria-busy="true"] svg { animation: spin 1s linear infinite; }
 
 .now {
@@ -329,7 +330,8 @@ a:hover { text-decoration: underline; }
   gap: 14px;
   margin: 8px 0 4px;
 }
-.sym { font-size: 5rem; line-height: 1; filter: var(--icon-shadow); }
+/* text-shadow, not filter: drop-shadow — a filter pass costs far more. */
+.sym { font-size: 5rem; line-height: 1; text-shadow: var(--icon-shadow); }
 .temp-block { display: flex; align-items: flex-start; }
 .temp {
   font-size: 6rem;
@@ -365,14 +367,13 @@ a:hover { text-decoration: underline; }
   .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 .card { padding: 16px 16px; text-align: center; }
-.grid .card:hover { transform: translateY(-3px); background-color: var(--glass-bg-hover); box-shadow: var(--shadow-lift), inset 0 1px 0 var(--rim-top); }
 .lbl { display: block; font-size: .8rem; color: var(--text-faint); margin-bottom: 9px; }
 .big { display: block; font-size: 1.75rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .big small { font-size: .85rem; font-weight: 400; color: var(--text-dim); }
 .sub { display: block; margin-top: 5px; font-size: .76rem; color: var(--text-faint); }
 
 /* --- panel -------------------------------------------------------------- */
-.panel { padding: 22px 24px 24px; margin-bottom: 20px; animation: rise .6s var(--ease) both; }
+.panel { padding: 22px 24px 24px; margin-bottom: 20px; }
 .panel-head {
   display: flex;
   align-items: center;
@@ -394,9 +395,8 @@ a:hover { text-decoration: underline; }
   background: var(--glass-inner);
   border: 1px solid var(--glass-border-soft);
   color: var(--text);
-  box-shadow: inset 0 1px 0 var(--rim-bottom);
 }
-.chip.muted { background: transparent; color: var(--text-faint); font-weight: 400; box-shadow: none; }
+.chip.muted { background: transparent; color: var(--text-faint); font-weight: 400; }
 
 /* --- sun ---------------------------------------------------------------- */
 .sun-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 18px; }
@@ -411,7 +411,6 @@ a:hover { text-decoration: underline; }
   width: 0;
   border-radius: 999px;
   background: linear-gradient(90deg, #fcd34d, #fb923c);
-  box-shadow: 0 0 12px rgba(251, 146, 60, .55);
   transition: width .6s var(--ease);
 }
 .sun-meta {
@@ -444,7 +443,6 @@ a:hover { text-decoration: underline; }
 #chart .temp-label { fill: var(--text); font-weight: 600; font-size: 11px; }
 #chart .night-band { fill: var(--chart-night); }
 #chart .precip-bar { fill: var(--chart-precip); }
-#chart .glow { opacity: .35; }
 
 /* --- hourly strip ------------------------------------------------------- */
 .hourly {
@@ -459,22 +457,6 @@ a:hover { text-decoration: underline; }
 .hourly::-webkit-scrollbar-thumb { background: var(--track); border-radius: 999px; }
 .hourly::-webkit-scrollbar-track { background: transparent; }
 
-/* Fade the edge that still has hours behind it (classes set by app.js). */
-.hourly.can-right {
-  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 60px), transparent);
-  mask-image: linear-gradient(90deg, #000 calc(100% - 60px), transparent);
-}
-.hourly.can-left {
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 60px);
-  mask-image: linear-gradient(90deg, transparent, #000 60px);
-}
-.hourly.can-left.can-right {
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 60px,
-                      #000 calc(100% - 60px), transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 60px,
-              #000 calc(100% - 60px), transparent);
-}
-
 .h {
   flex: 0 0 auto;
   width: 92px;
@@ -486,15 +468,11 @@ a:hover { text-decoration: underline; }
   border-radius: var(--radius-md);
   background: var(--glass-inner);
   border: 1px solid var(--glass-border-soft);
-  box-shadow: inset 0 1px 0 var(--rim-bottom);
   font-size: .82rem;
-  transition: background .2s var(--ease), transform .25s var(--ease);
 }
-.h:hover { background: var(--glass-inner-hover); transform: translateY(-2px); }
 .h.now {
   background: rgba(255, 209, 102, .16);
   border-color: rgba(255, 209, 102, .45);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35);
 }
 .h .t { font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .h .i { font-size: 1.55rem; line-height: 1.1; }
@@ -522,15 +500,11 @@ a:hover { text-decoration: underline; }
   border-radius: var(--radius-md);
   background: var(--glass-inner);
   border: 1px solid var(--glass-border-soft);
-  box-shadow: inset 0 1px 0 var(--rim-bottom);
   font-size: .84rem;
-  transition: background .2s var(--ease), transform .25s var(--ease);
 }
-.day:hover { background: var(--glass-inner-hover); transform: translateY(-2px); }
 .day.today {
   background: rgba(255, 209, 102, .13);
   border-color: rgba(255, 209, 102, .40);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35);
 }
 .day .dn { font-weight: 600; }
 .day .dd { font-size: .72rem; color: var(--text-faint); }
@@ -547,7 +521,6 @@ a:hover { text-decoration: underline; }
   top: 0; bottom: 0;
   border-radius: 999px;
   background: linear-gradient(90deg, #6cc4f0, #ffd166, #fb923c);
-  box-shadow: 0 0 8px rgba(255, 209, 102, .45);
 }
 
 /* --- air quality -------------------------------------------------------- */
@@ -562,7 +535,6 @@ a:hover { text-decoration: underline; }
   font-size: .8rem;
   background: var(--glass-inner);
   border: 1px solid var(--glass-border-soft);
-  box-shadow: inset 0 1px 0 var(--rim-bottom);
 }
 .pollen strong { font-variant-numeric: tabular-nums; }
 .dot {
@@ -571,7 +543,6 @@ a:hover { text-decoration: underline; }
   border-radius: 50%;
   background: var(--c, #94a3b8);
   margin-right: 6px;
-  box-shadow: 0 0 8px var(--c, #94a3b8);
 }
 
 /* --- footer ------------------------------------------------------------- */
@@ -582,7 +553,7 @@ footer { margin-top: 28px; font-size: .8rem; color: var(--text-faint); }
 
 /* --- motion ------------------------------------------------------------- */
 @keyframes rise {
-  from { opacity: 0; transform: translateY(14px); }
+  from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -591,6 +562,57 @@ footer { margin-top: 28px; font-size: .8rem; color: var(--text-faint); }
   100% { color: inherit; opacity: 1; }
 }
 .flash { animation: flash .9s var(--ease); }
+
+/* ==========================================================================
+   Pointer devices only.
+   Everything that costs per-frame work, or that only makes sense with a
+   mouse, lives here so phones never pay for it.
+   ========================================================================== */
+@media (hover: hover) and (pointer: fine) {
+  .glass {
+    /* 13 blur surfaces down to 13 only on desktops that can afford it, and
+       at half the radius the first version used. */
+    -webkit-backdrop-filter: var(--blur);
+    backdrop-filter: var(--blur);
+    /* the pointer-tracked highlight, which only exists with a pointer */
+    background-image: radial-gradient(
+      260px circle at var(--mx, 50%) var(--my, 0%),
+      rgba(255, 255, 255, calc(var(--hl, 0) * .17)),
+      transparent 72%);
+    transition: --hl .45s var(--ease), background-color .3s var(--ease),
+                box-shadow .3s var(--ease), transform .3s var(--ease);
+  }
+  .glass:hover { --hl: 1; box-shadow: var(--shadow-lift), inset 0 1px 0 var(--rim-top); }
+  .glass:hover::before { opacity: 1; }
+
+  .grid .card:hover { transform: translateY(-3px); background-color: var(--glass-bg-hover); }
+  .h:hover { background: var(--glass-inner-hover); transform: translateY(-2px); }
+  .day:hover { background: var(--glass-inner-hover); transform: translateY(-2px); }
+  .refresh:hover { background: var(--glass-inner-hover); }
+  .refresh:active { transform: scale(.92); }
+  .modes button:hover { color: var(--text-dim); }
+
+  /* The edge fade needs a mask, which is re-evaluated while scrolling. */
+  .hourly.can-right {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 60px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 60px), transparent);
+  }
+  .hourly.can-left {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 60px);
+    mask-image: linear-gradient(90deg, transparent, #000 60px);
+  }
+  .hourly.can-left.can-right {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 60px,
+                        #000 calc(100% - 60px), transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 60px,
+                #000 calc(100% - 60px), transparent);
+  }
+
+  .card, .h, .day, .refresh, .modes button {
+    transition: background-color .2s var(--ease), transform .25s var(--ease),
+                box-shadow .25s var(--ease);
+  }
+}
 
 /* --- responsive --------------------------------------------------------- */
 @media (max-width: 620px) {
@@ -602,10 +624,13 @@ footer { margin-top: 28px; font-size: .8rem; color: var(--text-faint); }
   .panel { padding: 18px 16px 20px; }
   .sun-row { grid-template-columns: auto 1fr auto; gap: 12px; }
   .summary { font-size: .86rem; }
-  .grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .grid { gap: 10px; }
   .big { font-size: 1.45rem; }
   .place { font-size: 1.1rem; }
   .modes button { width: 30px; height: 26px; }
+  /* Shadows are the next biggest per-frame paint cost after blur. */
+  .glass { box-shadow: 0 4px 14px rgba(0, 0, 0, .22), inset 0 1px 0 var(--rim-top); }
+  html.mode-light .glass { box-shadow: 0 4px 14px rgba(23, 58, 92, .10), inset 0 1px 0 var(--rim-top); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -614,5 +639,5 @@ footer { margin-top: 28px; font-size: .8rem; color: var(--text-faint); }
 
 @media print {
   body { background: #fff; color: #111; }
-  .hero-actions, .hourly { display: none; }
+  .backdrop, .hero-actions, .hourly { display: none; }
 }

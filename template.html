@@ -13,6 +13,10 @@
 </head>
 <body class="wrap" data-refresh="{{REFRESH}}" data-version="{{VERSION}}">
 
+<!-- One fixed layer instead of background-attachment: fixed, which forces a
+     full-viewport repaint on every scroll frame. -->
+<div class="backdrop" aria-hidden="true"></div>
+
 <noscript>
   <div class="card glass notice">
     <strong>Χρειάζεται JavaScript.</strong>

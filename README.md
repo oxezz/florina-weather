@@ -210,6 +210,21 @@ A few labels were deliberately chosen over the obvious alternative:
 * **Caching.** Upstream calls are cached server-side and served stale (up to six
   hours) if the network fails, so a brief outage shows slightly old data instead
   of an error page.
+* **Mobile performance.** Scroll jank on phones — Firefox especially — comes from
+  work the browser redoes on *every* frame. Two culprits were removed:
+
+  - `background-attachment: fixed` repaints the whole viewport per frame. The
+    backdrop is now a single `position: fixed` layer that the compositor reuses.
+  - A `backdrop-filter` on all thirteen panels and cards meant thirteen blur
+    surfaces re-blurring the moving backdrop every frame. Blur now lives inside
+    `@media (hover: hover) and (pointer: fine)`, so a phone never pays for it,
+    at half the radius it used before.
+
+  The glass still reads as glass on touch, because what sells it is the
+  translucent fill, the specular rim and the sheen — none of which cost
+  per-frame work. Since the backdrop is a smooth gradient, blurring it was never
+  visible anyway. A refresh also skips rebuilding the chart, the 48 hour tiles
+  and the 7 day cards when that data has not changed.
 * **The old EMY scraper is gone.** `oldportal.emy.gr` no longer responds, so the
   previous `extract_emy.py` / `emy_extract.py` scrapers were retired and now sit
   in [`archive/`](archive/) for reference. The HTML page dumps they produced were
