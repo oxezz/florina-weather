@@ -123,7 +123,7 @@ saving it, so a particular look is linkable.
 | `style.css` | Glass material, light/dark tokens, the seven weather backdrops, layout |
 | `Dockerfile` | Container image for Render / Fly / any container host |
 | `cacert.pem` | Mozilla CA bundle, used when the host has no trust store |
-| `tests/` | 142 tests, all offline |
+| `tests/` | 150 tests, all offline |
 
 ### API
 
@@ -185,7 +185,7 @@ warning is shown.
 python -m unittest discover -s tests -t .
 ```
 
-All 142 tests run offline: upstream responses are replaced by fixtures, and the
+All 150 tests run offline: upstream responses are replaced by fixtures, and the
 HTTP tests start a real server on an ephemeral port with an injected opener.
 
 ## Greek wording
