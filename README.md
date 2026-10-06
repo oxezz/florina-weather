@@ -1,8 +1,13 @@
 # Καιρός · Φλώρινα (Florina Weather)
 
+[![tests](https://github.com/oxezz/florina-weather/actions/workflows/tests.yml/badge.svg)](https://github.com/oxezz/florina-weather/actions/workflows/tests.yml)
+
 A small self-hosted weather page for **Φλώρινα, Δυτική Μακεδονία**, in Greek.
 Python standard library only — no `pip install`, no API key, no build step.
 Requires **Python 3.9 or newer**.
+
+**Live:** <https://florina-weather.wasmer.app/> — or run your own with the
+command below.
 
 ```bash
 cd florina-weather
@@ -205,9 +210,11 @@ A few labels were deliberately chosen over the obvious alternative:
 * **Caching.** Upstream calls are cached server-side and served stale (up to six
   hours) if the network fails, so a brief outage shows slightly old data instead
   of an error page.
-* **The old EMY scraper is gone.** `oldportal.emy.gr` no longer responds; the
-  previous `extract_emy.py` / `emy_extract.py` scrapers and their saved HTML
-  dumps are in [`archive/`](archive/) for reference.
+* **The old EMY scraper is gone.** `oldportal.emy.gr` no longer responds, so the
+  previous `extract_emy.py` / `emy_extract.py` scrapers were retired and now sit
+  in [`archive/`](archive/) for reference. The HTML page dumps they produced were
+  removed from the repository — that markup was EMY's, not this project's, so it
+  did not belong under its MIT licence.
 
 ## Data
 
