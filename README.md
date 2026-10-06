@@ -218,16 +218,28 @@ A few labels were deliberately chosen over the obvious alternative:
   climate of its own. Three readings of data we already fetch, each shown only
   when it means something:
 
-  - **Frost risk** — the coldest night in the 7-day window, banded at 2 / 0 /
-    −2 / −4 °C. −2 °C is roughly where flowering fruit trees start to suffer,
-    −4 °C is a crop-damaging freeze. Absent whenever no night gets near zero,
-    which is why it disappears from late spring to early autumn.
+  - **Frost risk** — two sensors, because they disagree. The 2 m air minimum
+    *and* the ground surface (`soil_temperature_0cm`); the colder of the two
+    sets the warning, and both are reported. On a clear calm night the surface
+    radiates heat away and runs 1–3 °C below the air, so it can freeze while the
+    air is still positive — the radiation frost that catches low crops such as
+    peppers. Bands at 2 / 0 / −2 / −4 °C; −2 °C is roughly where flowering fruit
+    trees start to suffer, −4 °C is a crop-damaging freeze. Absent whenever no
+    night comes near zero.
+
+    Only the **0 cm** layer is a frost sensor. At 6 cm the soil sits 5–8 °C
+    warmer than the surface, which is root-zone warmth rather than frost risk.
   - **Heating degree days** — `18 °C − daily mean`, totalled for the month to
     date. Uses a daily-only history call (~2 KB) so it costs one extra request.
   - **Wood smoke** — the peak PM2.5 between 18:00 and 02:00, with the wind that
     lets it pool, plus the cleanest hour of the next day. Thresholds are the
     WHO 2021 24-hour guideline (15 µg/m³) and the EU daily limit (25), so it
     only appears on a genuinely smoky evening.
+  - **Still to come: the inversion index.** Comparing the valley against a
+    mid-slope point (the 1073 m ground 4 km north) would show the basin locking
+    in cold air. It is deliberately last, because it needs verified comparison
+    points and a backtest before it can be trusted as a reading rather than a
+    guess.
 
   None of it is invented: every number is a straight reading of the forecast,
   the air-quality call or the history call, and a failing source drops its own
