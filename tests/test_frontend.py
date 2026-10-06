@@ -431,6 +431,39 @@ class ExplainerTests(unittest.TestCase):
             self.assertIn(prop, block)
 
 
+class HourlyStripTests(unittest.TestCase):
+    """The hourly cards: snapping, and the rain-probability gauge."""
+
+    def setUp(self):
+        self.css = read("style.css")
+        self.js = read("app.js")
+
+    def test_the_strip_snaps_card_by_card(self):
+        strip = self.css.split(".hourly {")[1].split("}")[0]
+        self.assertIn("scroll-snap-type: x mandatory", strip)
+        # Every snappable child must opt in, separators included.
+        self.assertGreaterEqual(self.css.count("scroll-snap-align: start"), 2)
+
+    def test_a_horizontal_fling_stays_inside_the_strip(self):
+        # Without this, scrolling past the end triggers the browser back gesture.
+        strip = self.css.split(".hourly {")[1].split("}")[0]
+        self.assertIn("overscroll-behavior-x: contain", strip)
+
+    def test_each_hour_carries_a_rain_gauge(self):
+        self.assertIn('el("div", "bar")', self.js)
+        # Wired to the precipitation probability, not just any number.
+        self.assertIn('setProperty("--rain", num(hour.precip_prob, 0))', self.js)
+
+    def test_a_dry_forecast_leaves_no_sliver(self):
+        block = self.css.split(".h .bar i {")[1].split("}")[0]
+        self.assertIn("calc(var(--rain, 0) * 1%)", block)
+        self.assertNotIn("min-height", block)
+
+    def test_the_gauge_is_hidden_from_screen_readers(self):
+        # The percentage is already announced as text next to it.
+        self.assertIn('gauge.setAttribute("aria-hidden", "true")', self.js)
+
+
 class StylesheetTests(unittest.TestCase):
 
     def setUp(self):
@@ -474,7 +507,7 @@ class StylesheetTests(unittest.TestCase):
         used = set(re.findall(r"var\((--[a-z0-9-]+)", self.css))
         # These are written by app.js in response to the pointer or to data,
         # so they have no stylesheet default (var() sites supply a fallback).
-        runtime = {"--c", "--level", "--mx", "--my", "--tone"}
+        runtime = {"--c", "--level", "--mx", "--my", "--tone", "--rain"}
         self.assertEqual(sorted(used - declared - runtime), [],
                          "style.css uses custom properties it never defines")
 

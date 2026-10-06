@@ -468,6 +468,16 @@
       card.appendChild(el("span", "t", index === 0 ? "τώρα" : hour.time));
       card.appendChild(el("span", "i", hour.emoji));
       card.appendChild(el("span", "d", num(hour.temp, 1) + "°"));
+
+      // A mini bar for the rain probability. Across 48 adjacent cards it reads
+      // as one continuous chart, which is far easier to scan than the numbers.
+      var gauge = el("div", "bar");
+      gauge.setAttribute("aria-hidden", "true");
+      var fill = el("i");
+      fill.style.setProperty("--rain", num(hour.precip_prob, 0));
+      gauge.appendChild(fill);
+      card.appendChild(gauge);
+
       card.appendChild(el("span", "r", num(hour.precip_prob) + "%"));
       card.appendChild(el("span", "w", num(hour.wind, 1) + " km/h"));
       host.appendChild(card);

@@ -118,7 +118,7 @@ saving it, so a particular look is linkable.
 | `manifest.webmanifest` | Web app manifest — name, icons, standalone display |
 | `Dockerfile` | Container image for Render / Fly / any container host |
 | `cacert.pem` | Mozilla CA bundle, used when the host has no trust store |
-| `tests/` | 216 tests, all offline |
+| `tests/` | 221 tests, all offline |
 
 ### API
 
@@ -181,7 +181,7 @@ warning is shown.
 python -m unittest discover -s tests -t .
 ```
 
-All 216 tests run offline: upstream responses are replaced by fixtures, and the
+All 221 tests run offline: upstream responses are replaced by fixtures, and the
 HTTP tests start a real server on an ephemeral port with an injected opener.
 
 ## Greek wording
@@ -272,6 +272,13 @@ A few labels were deliberately chosen over the obvious alternative:
   which is the structural uncertainty that matters in mountains. A single-model
   ensemble would understate it badly: ICON-EU's own 40 members spread about
   1 °C, while the models disagree by 4–6 °C.
+* **The hourly strip is a chart.** Each card carries a rain-probability gauge: a
+  22 px bar scaled from `--rain`, so across 48 adjacent cards the bars line up
+  into one continuous picture of the day. The percentage is still printed, and
+  the gauge is `aria-hidden` because it repeats what the text already says. The
+  strip uses `scroll-snap-type: x mandatory` with `overscroll-behavior-x:
+  contain`, so a fling settles card by card and never triggers the browser's
+  back gesture at the edges.
 * **Caching.** Upstream calls are cached server-side and served stale (up to six
   hours) if the network fails, so a brief outage shows slightly old data instead
   of an error page.
