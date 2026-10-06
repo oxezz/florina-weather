@@ -793,6 +793,23 @@
     window.addEventListener("online", function () { load(true); });
   }
 
+  /* ------------------------------------------------------- explanations */
+
+  /* "What does this mean?" toggles. Presented as buttons rather than
+     title tooltips so a thumb and a keyboard can both reach them. */
+  function initInfo() {
+    var buttons = document.querySelectorAll(".info[aria-controls]");
+    Array.prototype.forEach.call(buttons, function (button) {
+      button.addEventListener("click", function () {
+        var hint = $(button.getAttribute("aria-controls"));
+        if (!hint) return;
+        var open = button.getAttribute("aria-expanded") === "true";
+        button.setAttribute("aria-expanded", open ? "false" : "true");
+        hint.hidden = open;
+      });
+    });
+  }
+
   /* ------------------------------------------------------------------ boot */
 
   initModes();
@@ -800,6 +817,7 @@
   initHourlyFade();
   initServiceWorker();
   initOffline();
+  initInfo();
   syncThemeColor();
 
   var button = $("refresh");

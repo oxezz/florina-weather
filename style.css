@@ -157,6 +157,12 @@ html.mode-light.theme-fog         { --g1: #b6bfc6; --g2: #c4ccd2; --b1: #f3f5f6;
 
 * { margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
+/* The [hidden] attribute only works through the browser's own
+   `[hidden] { display: none }`, which ANY author rule setting `display` beats.
+   That bit us twice: .local-card and .chip sat visible with their contents
+   blank. This makes the attribute authoritative, as it is meant to be. */
+[hidden] { display: none !important; }
+
 /* The mode *and* weather class both live on <html>, so this is always the
    right base colour, and it is what the browser uses for the canvas and the
    overscroll area. */
@@ -554,7 +560,13 @@ a:hover { text-decoration: underline; }
   /* a coloured hairline on the left, like the alert cards */
   box-shadow: inset 3px 0 0 var(--tone, transparent);
 }
-.local-card .lbl { margin-bottom: 0; }
+.local-card .lbl {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 0;
+}
 .local-card .val {
   font-size: 1.55rem;
   font-weight: 600;
@@ -563,6 +575,39 @@ a:hover { text-decoration: underline; }
   font-variant-numeric: tabular-nums;
 }
 .local-card .sub { margin-top: 0; line-height: 1.4; }
+
+/* The "what does this mean?" affordance: a plain toggle, so it works with a
+   thumb and with a keyboard, and reads correctly to a screen reader. */
+.info {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: .64rem;
+  font-weight: 700;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.info[aria-expanded="true"] {
+  background: var(--glass-inner-hover);
+  color: var(--text);
+}
+.local-card .hint {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--glass-border-soft);
+  font-size: .74rem;
+  line-height: 1.5;
+  color: var(--text-faint);
+  text-align: left;
+}
 
 /* --- air quality -------------------------------------------------------- */
 .air-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 18px; align-items: start; }

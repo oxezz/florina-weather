@@ -154,19 +154,43 @@
   </div>
   <div class="local-grid">
     <div class="local-card" id="local-frost" hidden>
-      <span class="lbl">Κίνδυνος παγετού</span>
+      <span class="lbl">Κίνδυνος παγετού
+        <button class="info" type="button" aria-expanded="false"
+                aria-controls="hint-frost" aria-label="Τι σημαίνει;">?</button>
+      </span>
       <span class="val" id="frost-val"><span class="skel skel-value"></span></span>
       <span class="sub" id="frost-sub"></span>
+      <p class="hint" id="hint-frost" hidden>
+        Παγετός σημαίνει θερμοκρασία κάτω από 0&deg;C σε ύψος 2 μέτρων.
+        Κάτω από &minus;2&deg;C κινδυνεύουν τα ανθισμένα δέντρα, κάτω από
+        &minus;4&deg;C οι καλλιέργειες.
+      </p>
     </div>
     <div class="local-card" id="local-heating" hidden>
-      <span class="lbl">Βαθμοημέρες θέρμανσης</span>
+      <span class="lbl">Βαθμοημέρες θέρμανσης
+        <button class="info" type="button" aria-expanded="false"
+                aria-controls="hint-heating" aria-label="Τι σημαίνει;">?</button>
+      </span>
       <span class="val" id="heating-val"><span class="skel skel-value"></span></span>
       <span class="sub" id="heating-sub"></span>
+      <p class="hint" id="hint-heating" hidden>
+        Δείχνει πόση θέρμανση χρειάστηκε ο μήνας. Για κάθε ημέρα προσθέτουμε τη
+        διαφορά της μέσης θερμοκρασίας από τους 18&deg;C. Όσο μεγαλύτερος ο
+        αριθμός, τόσο πιο κρύος ο μήνας.
+      </p>
     </div>
     <div class="local-card" id="local-smog" hidden>
-      <span class="lbl">Αιθαλομίχλη</span>
+      <span class="lbl">Αιθαλομίχλη
+        <button class="info" type="button" aria-expanded="false"
+                aria-controls="hint-smog" aria-label="Τι σημαίνει;">?</button>
+      </span>
       <span class="val" id="smog-val"><span class="skel skel-value"></span></span>
       <span class="sub" id="smog-sub"></span>
+      <p class="hint" id="hint-smog" hidden>
+        Τις άπνοες βραδιές του χειμώνα ο καπνός από τα τζάκια παγιδεύεται στην
+        κοιλάδα. Ο αριθμός είναι τα αιωρούμενα σωματίδια PM2.5 σε
+        μικρογραμμάρια ανά κυβικό μέτρο.
+      </p>
     </div>
   </div>
 </section>

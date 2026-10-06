@@ -118,7 +118,7 @@ saving it, so a particular look is linkable.
 | `manifest.webmanifest` | Web app manifest — name, icons, standalone display |
 | `Dockerfile` | Container image for Render / Fly / any container host |
 | `cacert.pem` | Mozilla CA bundle, used when the host has no trust store |
-| `tests/` | 187 tests, all offline |
+| `tests/` | 195 tests, all offline |
 
 ### API
 
@@ -181,7 +181,7 @@ warning is shown.
 python -m unittest discover -s tests -t .
 ```
 
-All 187 tests run offline: upstream responses are replaced by fixtures, and the
+All 195 tests run offline: upstream responses are replaced by fixtures, and the
 HTTP tests start a real server on an ephemeral port with an injected opener.
 
 ## Greek wording
@@ -232,6 +232,12 @@ A few labels were deliberately chosen over the obvious alternative:
   None of it is invented: every number is a straight reading of the forecast,
   the air-quality call or the history call, and a failing source drops its own
   card rather than breaking the page.
+* **`[hidden]` needs its guard.** The stylesheet carries
+  `[hidden] { display: none !important; }`, because the attribute only works via
+  the browser's own `[hidden] { display: none }` — and *any* author rule that
+  sets `display` silently outranks it. Without the guard, `.local-card` and
+  `.chip` stayed on screen with blank contents while the attribute insisted they
+  were hidden.
 * **Caching.** Upstream calls are cached server-side and served stale (up to six
   hours) if the network fails, so a brief outage shows slightly old data instead
   of an error page.

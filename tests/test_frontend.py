@@ -355,6 +355,57 @@ class LocalPanelTests(unittest.TestCase):
         # --tone is set from data, so the CSS must survive its absence.
         self.assertIn("var(--tone, transparent)", self.css)
 
+    def test_hidden_is_not_defeated_by_an_author_display_rule(self):
+        """`.local-card { display: grid }` silently outranked the browser's
+        `[hidden] { display: none }`, leaving both empty cards on screen with
+        their loading skeletons still showing. The same bug hid inside .chip."""
+        self.assertIn("[hidden] { display: none !important; }", self.css)
+        self.assertIn("display: grid", self.css)  # the rule that caused it
+
+    def test_no_explainer_targets_a_missing_id(self):
+        targets = re.findall(r'aria-controls="([^"]+)"', self.template)
+        declared = set(re.findall(r'id="([^"]+)"', self.template))
+        self.assertTrue(targets)
+        self.assertEqual(sorted(set(targets) - declared), [])
+
+
+class ExplainerTests(unittest.TestCase):
+    """The «?» affordance that explains the jargon-bearing metrics."""
+
+    def setUp(self):
+        self.template = read("template.html")
+        self.css = read("style.css")
+        self.js = read("app.js")
+
+    def test_every_local_card_has_one(self):
+        self.assertEqual(self.template.count('class="info"'), 3)
+        for card in ("frost", "heating", "smog"):
+            self.assertIn('aria-controls="hint-%s"' % card, self.template)
+            self.assertIn('id="hint-%s" hidden' % card, self.template)
+
+    def test_they_start_collapsed_and_are_labelled(self):
+        self.assertNotIn('aria-expanded="true"', self.template)
+        self.assertEqual(self.template.count('aria-label="Τι σημαίνει;"'), 3)
+
+    def test_explanations_are_written_in_greek(self):
+        hints = re.findall(r'<p class="hint"[^>]*>(.*?)</p>', self.template, re.S)
+        self.assertEqual(len(hints), 3)
+        for hint in hints:
+            self.assertRegex(hint, "[\\u0370-\\u03ff]",
+                             "explanation is not in Greek")
+
+    def test_the_client_wires_them_up(self):
+        self.assertIn("function initInfo", self.js)
+        self.assertIn("initInfo();", self.js)
+        self.assertIn("aria-expanded", self.js)
+
+    def test_a_thumb_can_hit_the_button(self):
+        # 16px is small for a finger; the padding keeps the tap target usable
+        # while the visible circle stays discreet.
+        block = self.css.split(".info {")[1].split("}")[0]
+        for prop in ("width", "height", "border-radius", "cursor"):
+            self.assertIn(prop, block)
+
 
 class StylesheetTests(unittest.TestCase):
 
