@@ -585,6 +585,9 @@ a:hover { text-decoration: underline; }
   border-radius: 4px;
   background: linear-gradient(180deg, #7dd3fc, #38bdf8);
 }
+/* A whole dry strip: the tracks would read as eleven broken skeletons, so they
+   disappear while keeping their space, and nothing shifts when rain arrives. */
+.h .bar.idle { background: transparent; }
 
 .hour-sep { flex: 0 0 auto; display: grid; place-items: center; padding: 0 8px; scroll-snap-align: start; }
 .day-sep {

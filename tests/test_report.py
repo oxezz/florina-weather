@@ -59,16 +59,30 @@ class HourlyTests(unittest.TestCase):
         self.assertEqual(hours[3]["time"], "00:00")
         self.assertEqual(hours[3]["day"], "2026-10-07")
 
-    def test_night_hours_use_the_night_emoji(self):
-        hours = build()["hourly"]
+    def test_night_hours_use_the_real_moon(self):
+        """Not a stock crescent: the strip, the hero and the moon row all read
+        from the same phase, so they cannot contradict each other."""
+        data = build()
+        hours = data["hourly"]
         self.assertFalse(hours[0]["is_day"])
-        self.assertEqual(hours[0]["emoji"], "\U0001f319")  # moon, not sun
+        self.assertEqual(hours[0]["emoji"], data["sky"]["emoji"])
+        self.assertEqual(hours[0]["emoji"], "\U0001f318")   # waning crescent
+
+    def test_the_first_card_agrees_with_the_hero(self):
+        """Both are labelled «τώρα». `current` is interpolated every 15 minutes
+        while `hourly[0]` is the top of the hour, and the two genuinely differ,
+        so the card takes the hero's reading rather than its own."""
+        data = build()
+        first = data["hourly"][0]
+        for field in ("temp", "code", "text", "emoji", "apparent", "wind"):
+            self.assertEqual(first[field], data["current"][field],
+                             "«τώρα» disagrees with the hero on %s" % field)
 
     def test_daytime_hours_use_the_day_emoji(self):
         hours = build()["hourly"]
         noon = [h for h in hours if h["time"] == "12:00"][0]
         self.assertTrue(noon["is_day"])
-        self.assertNotEqual(noon["emoji"], "\U0001f319")
+        self.assertNotEqual(noon["emoji"], "\U0001f318")
 
     def test_wind_fields(self):
         hour = build()["hourly"][0]

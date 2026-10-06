@@ -501,6 +501,12 @@
     if (!hours || !hours.length) return;
     var previousDay = null;
 
+    // With no rain anywhere in the strip, eleven empty tracks in a row look
+    // exactly like unfilled skeletons. The space is kept so nothing shifts.
+    var anyRain = hours.some(function (hour) {
+      return Number(hour.precip_prob) > 0;
+    });
+
     hours.forEach(function (hour, index) {
       if (hour.day && hour.day !== previousDay) {
         previousDay = hour.day;
@@ -522,7 +528,7 @@
 
       // A mini bar for the rain probability. Across 48 adjacent cards it reads
       // as one continuous chart, which is far easier to scan than the numbers.
-      var gauge = el("div", "bar");
+      var gauge = el("div", anyRain ? "bar" : "bar idle");
       gauge.setAttribute("aria-hidden", "true");
       var fill = el("i");
       fill.style.setProperty("--rain", num(hour.precip_prob, 0));

@@ -641,7 +641,7 @@ def build_local_conditions(snapshot, days, forecast_hourly, now_local, config):
 # --------------------------------------------------------------------------
 
 
-def _hourly_points(hourly, start_index, count, tz):
+def _hourly_points(hourly, start_index, count, tz, moon=None):
     times = hourly.get("time") or []
     points = []
     for offset in range(count):
@@ -652,6 +652,11 @@ def _hourly_points(hourly, start_index, count, tz):
         parsed = _parse_local(stamp, tz)
         code = _at(hourly.get("weather_code"), index, 0)
         is_day = bool(_at(hourly.get("is_day"), index, 1))
+        # A clear night shows the real moon, matching the hero and the moon
+        # row, rather than a stock crescent that contradicts them.
+        emoji = greek.emoji(code, is_day)
+        if moon and not is_day and code in (0, 1):
+            emoji = moon["emoji"]
         direction = _at(hourly.get("wind_direction_10m"), index)
         points.append({
             "iso": str(stamp),
@@ -663,7 +668,7 @@ def _hourly_points(hourly, start_index, count, tz):
             "precip": _at(hourly.get("precipitation"), index, 0.0),
             "code": code,
             "text": greek.describe(code),
-            "emoji": greek.emoji(code, is_day),
+            "emoji": emoji,
             "is_day": is_day,
             "wind": _at(hourly.get("wind_speed_10m"), index),
             "gusts": _at(hourly.get("wind_gusts_10m"), index),
@@ -934,8 +939,9 @@ def build_report(snapshot, config, now=None):
     daily_raw = forecast["daily"]
     current_raw = forecast["current"]
 
+    moon = _moon_facts(snapshot, now_local)
     start = _start_index(hourly_raw, now_local)
-    hours = _hourly_points(hourly_raw, start, max(1, config.forecast_hours), tz)
+    hours = _hourly_points(hourly_raw, start, max(1, config.forecast_hours), tz, moon)
     agreement = build_agreement(snapshot.get("terrain"), config)
     days = _daily_points(daily_raw, tz, now_local.date(), config, agreement)
 
@@ -945,11 +951,10 @@ def build_report(snapshot, config, now=None):
     direction = current_raw.get("wind_direction_10m")
     speed = current_raw.get("wind_speed_10m")
     beaufort = greek.beaufort(speed)
-    moon = _moon_facts(snapshot, now_local)
 
-    # On a clear night the hero shows the real moon, not a stock crescent:
-    # a full moon drawn as a sliver, two panels above a card reading
-    # Πανσέληνος, is the page contradicting itself.
+    # On a clear night the hero shows the real moon, not a stock crescent: a
+    # full moon drawn as a sliver, two panels above a card reading Πανσέληνος,
+    # is the page contradicting itself.
     icon = greek.emoji(code, is_day)
     if moon and not is_day and code in (0, 1):
         icon = moon["emoji"]
@@ -984,6 +989,18 @@ def build_report(snapshot, config, now=None):
 
     today = days[0] if days else None
     alerts = parse_alerts(snapshot.get("alerts"), config, now_local)
+
+    # The strip's first card is labelled «τώρα», so it must agree with the hero.
+    # `current` is a 15-minute interpolated reading while `hourly[0]` is the top
+    # of the hour, and the two genuinely disagree: they were showing different
+    # weather codes for the same moment.
+    if hours and current:
+        for field in ("temp", "apparent", "humidity", "precip", "code", "text",
+                      "emoji", "is_day", "cloud", "wind", "gusts",
+                      "wind_dir", "wind_dir_text", "wind_arrow", "beaufort"):
+            if current.get(field) is not None:
+                hours[0][field] = current[field]
+
     local = build_local_conditions(snapshot, days, hourly_raw, now_local, config)
     greeting = build_greeting(now_local, current)
     outfit = build_outfit(hours, now_local)
