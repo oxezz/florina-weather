@@ -10,8 +10,9 @@ RUN pip install --no-cache-dir tzdata
 
 WORKDIR /app
 
-# Only the files the server actually serves.
-COPY app.py greek.py report.py sources.py ./
+# Only the files the server actually serves. cacert.pem is the fallback trust
+# store for hosts whose image ships no CA bundle.
+COPY app.py greek.py report.py sources.py cacert.pem ./
 COPY template.html style.css app.js theme.js favicon.svg ./
 
 ENV PYTHONUNBUFFERED=1 \

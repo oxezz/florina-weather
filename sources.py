@@ -13,6 +13,7 @@ import gzip
 import json
 import logging
 import os
+import ssl
 import threading
 import time
 import urllib.error
@@ -24,6 +25,67 @@ from datetime import datetime, timezone
 log = logging.getLogger("florina.sources")
 
 USER_AGENT = "florina-weather/2.0 (+local; python-urllib)"
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# --------------------------------------------------------------------------
+# TLS trust
+# --------------------------------------------------------------------------
+#
+# Minimal container images and WebAssembly runtimes often ship no CA bundle at
+# all, which makes every HTTPS call fail with CERTIFICATE_VERIFY_FAILED. That
+# is exactly what happened on Wasmer Edge, where the default context loaded
+# zero certificates. So we ship Mozilla's CA list with the app and fall back to
+# it whenever the host has nothing usable of its own.
+
+CA_ENV_VARS = ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE")
+BUNDLED_CA = os.path.join(BASE_DIR, "cacert.pem")
+
+_context = None
+_context_source = None
+
+
+def _remember(context, source):
+    global _context, _context_source
+    _context, _context_source = context, source
+    return context
+
+
+def ssl_context():
+    """A verifying TLS context that works even without a system CA store.
+
+    Precedence: an explicit environment override, then the host's own store if
+    it genuinely contains certificates, then the bundle shipped with the app.
+    """
+    if _context is not None:
+        return _context
+
+    for name in CA_ENV_VARS:
+        path = os.environ.get(name)
+        if path and os.path.isfile(path):
+            return _remember(ssl.create_default_context(cafile=path),
+                             "%s=%s" % (name, path))
+
+    try:
+        system = ssl.create_default_context()
+        if system.cert_store_stats().get("x509", 0) > 0:
+            return _remember(system, "system store")
+    except Exception as exc:  # noqa: BLE001 - a broken store is not fatal
+        log.debug("could not inspect the system CA store: %s", exc)
+
+    if os.path.isfile(BUNDLED_CA):
+        return _remember(ssl.create_default_context(cafile=BUNDLED_CA),
+                         "bundled cacert.pem")
+
+    log.warning("no CA bundle available; outbound HTTPS will probably fail")
+    return _remember(ssl.create_default_context(), "system default (empty)")
+
+
+def tls_source():
+    """Which trust store is in use, for ``/api/health``."""
+    ssl_context()
+    return _context_source
+
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 AIR_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
@@ -193,7 +255,8 @@ def _urlopen(url, timeout):
             "Accept-Encoding": "gzip",
         },
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with urllib.request.urlopen(request, timeout=timeout,
+                                context=ssl_context()) as response:
         body = response.read()
         if response.headers.get("Content-Encoding") == "gzip":
             body = gzip.decompress(body)
@@ -377,6 +440,7 @@ class WeatherService:
         """Small status object for ``/api/health``."""
         return {
             "ok": not self.last_error,
+            "tls": tls_source(),
             "last_success": {k: v.isoformat() for k, v in self.last_success.items()},
             "last_error": dict(self.last_error),
         }

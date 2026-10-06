@@ -9,6 +9,7 @@ import gzip
 import http.client
 import json
 import os
+import ssl
 import sys
 import threading
 import unittest
@@ -299,6 +300,89 @@ class ConfigTests(unittest.TestCase):
         finally:
             for key in ("PORT", "FLORINA_PORT"):
                 os.environ.pop(key, None)
+
+
+class TlsTests(unittest.TestCase):
+    """A host with no CA bundle must still be able to verify certificates.
+
+    Wasmer Edge's Python loads zero certificates by default, which made every
+    upstream call fail with CERTIFICATE_VERIFY_FAILED.
+    """
+
+    def setUp(self):
+        self._saved = (sources._context, sources._context_source)
+        sources._context = None
+        sources._context_source = None
+        self._env = {name: os.environ.pop(name, None) for name in sources.CA_ENV_VARS}
+
+    def tearDown(self):
+        sources._context, sources._context_source = self._saved
+        for name, value in self._env.items():
+            if value is not None:
+                os.environ[name] = value
+
+    def test_a_bundle_is_shipped_with_the_app(self):
+        self.assertTrue(os.path.isfile(sources.BUNDLED_CA),
+                        "cacert.pem must ship with the app")
+
+    def test_the_bundled_file_is_a_valid_ca_bundle(self):
+        context = ssl.create_default_context(cafile=sources.BUNDLED_CA)
+        self.assertGreater(context.cert_store_stats().get("x509", 0), 100,
+                           "the shipped bundle should hold the full Mozilla list")
+
+    def test_the_context_actually_loads_certificates(self):
+        context = sources.ssl_context()
+        self.assertGreater(context.cert_store_stats().get("x509", 0), 0)
+        self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
+
+    def test_the_bundle_is_used_when_the_system_store_is_empty(self):
+        """Model a host like Wasmer Edge, whose default context loads nothing."""
+        original = ssl.create_default_context
+
+        def create_default(*args, **kwargs):
+            if kwargs.get("cafile"):
+                return original(*args, **kwargs)
+            # A fresh client context with no CA certificates loaded at all.
+            empty = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            empty.verify_mode = ssl.CERT_REQUIRED
+            empty.check_hostname = True
+            return empty
+
+        sources.ssl.create_default_context = create_default
+        try:
+            self.assertEqual(create_default().cert_store_stats().get("x509", 0), 0,
+                             "the fake empty store must really be empty")
+            sources._context = None
+            context = sources.ssl_context()
+            self.assertGreater(context.cert_store_stats().get("x509", 0), 0)
+            self.assertEqual(sources.tls_source(), "bundled cacert.pem")
+        finally:
+            sources.ssl.create_default_context = original
+
+    def test_an_explicit_env_override_wins(self):
+        os.environ["SSL_CERT_FILE"] = sources.BUNDLED_CA
+        try:
+            sources._context = None
+            sources.ssl_context()
+            self.assertTrue(sources.tls_source().startswith("SSL_CERT_FILE="))
+        finally:
+            os.environ.pop("SSL_CERT_FILE", None)
+
+    def test_a_bogus_env_override_is_ignored(self):
+        os.environ["SSL_CERT_FILE"] = os.path.join("nowhere", "missing.pem")
+        try:
+            sources._context = None
+            context = sources.ssl_context()
+            self.assertGreater(context.cert_store_stats().get("x509", 0), 0)
+            self.assertNotIn("nowhere", sources.tls_source())
+        finally:
+            os.environ.pop("SSL_CERT_FILE", None)
+
+    def test_health_reports_the_trust_store(self):
+        with RunningServer(recording_opener({})) as server:
+            status, _headers, data = server.json("/api/health")
+            self.assertEqual(status, 200)
+            self.assertIn("tls", data)
 
     def test_cli_parser(self):
         args = app.parse_args(["--port", "9001", "--place", "X", "--verbose"])

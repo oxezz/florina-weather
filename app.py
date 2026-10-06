@@ -231,9 +231,6 @@ class Handler(BaseHTTPRequestHandler):
                 self._serve_weather(force="force" in query)
             elif path == "/api/health":
                 self._send_json(self.service.health())
-            elif path == "/api/diag":  # TEMPORARY - remove once TLS is sorted
-                import diag
-                self._send_json(diag.report())
             elif path in STATIC_FILES:
                 self._serve_static(path)
             elif path == "/favicon.ico":

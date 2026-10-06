@@ -23,16 +23,34 @@ it builds the [`Dockerfile`](Dockerfile) and runs. The image binds
 `0.0.0.0:8000` and honours the generic `PORT` variable those platforms inject,
 so there is nothing to configure.
 
-**Wasmer Edge** needs a small port first. It runs WebAssembly *per request*, so
-`app.py`'s socket loop has to become a request handler — `greek.py`,
-`report.py` and `sources.py` need no changes at all. Verify that outbound HTTPS
-works from Python-on-WASI before committing to it.
+**Wasmer Edge** works, and is verified in production: it runs the app
+unmodified, including the threaded HTTP server. It does need the CA bundle
+described below, which is why `cacert.pem` is committed.
 
 **Static hosts will not work** — GitHub Pages, Netlify and Cloudflare Pages
 serve files, and this is a running server that fetches and caches upstream data.
 
 CI runs the whole suite on every push across Python 3.9, 3.12 and 3.13
 ([`.github/workflows/tests.yml`](.github/workflows/tests.yml)).
+
+### TLS trust store
+
+Minimal hosts often ship no CA bundle at all. Wasmer Edge's Python runtime, for
+instance, loads **zero** certificates into its default context, so every HTTPS
+call fails with `CERTIFICATE_VERIFY_FAILED`.
+
+So [`cacert.pem`](cacert.pem) — Mozilla's CA list, via
+[curl.se](https://curl.se/ca/cacert.pem) — ships with the app. The precedence is:
+
+1. `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE` or `CURL_CA_BUNDLE`, if set and valid
+2. the host's own store, *if it genuinely contains certificates*
+3. the bundled `cacert.pem`
+
+`/api/health` reports which one is active under `"tls"`. Refresh the bundle
+occasionally by re-downloading it from curl.se.
+
+That file is Mozilla's data, distributed under the **MPL-2.0**, and is not
+covered by this project's MIT licence.
 
 ---
 
@@ -98,7 +116,8 @@ saving it, so a particular look is linkable.
 | `app.js` | Fetches `/api/weather` and renders it. Never injects upstream text as HTML |
 | `style.css` | Glass material, light/dark tokens, the seven weather backdrops, layout |
 | `Dockerfile` | Container image for Render / Fly / any container host |
-| `tests/` | 135 tests, all offline |
+| `cacert.pem` | Mozilla CA bundle, used when the host has no trust store |
+| `tests/` | 142 tests, all offline |
 
 ### API
 
@@ -160,7 +179,7 @@ warning is shown.
 python -m unittest discover -s tests -t .
 ```
 
-All 135 tests run offline: upstream responses are replaced by fixtures, and the
+All 142 tests run offline: upstream responses are replaced by fixtures, and the
 HTTP tests start a real server on an ephemeral port with an injected opener.
 
 ## Greek wording
