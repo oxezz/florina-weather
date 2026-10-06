@@ -190,6 +190,42 @@ class ThemeBootstrapTests(unittest.TestCase):
         self.assertEqual(self.js.count("("), self.js.count(")"))
 
 
+class SkeletonTests(unittest.TestCase):
+    """Placeholders shown while /api/weather is in flight."""
+
+    def setUp(self):
+        self.template = read("template.html")
+        self.css = read("style.css")
+        self.js = read("app.js")
+
+    def test_the_load_placeholders_are_skeletons_not_text(self):
+        self.assertNotIn("Φόρτωση", self.template)
+        self.assertIn('class="skel skel-temp"', self.template)
+        self.assertGreaterEqual(self.template.count('class="skel'), 10)
+
+    def test_every_async_region_is_covered(self):
+        for marker in ("skel-temp", "skel-code", "skel-value", "skel-chart",
+                       "h-skel", "day-skel"):
+            self.assertIn(marker, self.template, "no skeleton for " + marker)
+
+    def test_skeletons_wait_before_appearing(self):
+        """A skeleton that flashes for two frames is worse than none."""
+        self.assertIn("animation: pulse 1.6s ease-in-out .35s infinite", self.css)
+        self.assertIn("opacity: 0;", self.css)
+
+    def test_reduced_motion_still_shows_the_skeleton(self):
+        # Visibility comes from the animation, so it must be restored here.
+        block = self.css.split("@media (prefers-reduced-motion: reduce)")[1]
+        self.assertIn(".skel { opacity: .5 !important; }", block)
+
+    def test_skeleton_colour_is_defined_for_both_materials(self):
+        self.assertGreaterEqual(self.css.count("--skel-bg:"), 2)
+
+    def test_the_client_sweeps_leftover_skeletons(self):
+        self.assertIn("dropSkeletons", self.js)
+        self.assertIn("data-skeleton", self.js)
+
+
 class StylesheetTests(unittest.TestCase):
 
     def setUp(self):

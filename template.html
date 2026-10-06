@@ -65,24 +65,24 @@
   <div class="now">
     <span class="sym" id="sym" aria-hidden="true">&#9729;&#65039;</span>
     <div class="temp-block">
-      <span class="temp" id="temp">&ndash;</span><span class="deg">&deg;C</span>
+      <span class="temp" id="temp"><span class="skel skel-temp"></span></span><span class="deg">&deg;C</span>
     </div>
   </div>
 
-  <p class="code" id="code">Φόρτωση&hellip;</p>
-  <p class="summary" id="summary"></p>
-  <p class="stamp" id="stamp"></p>
+  <p class="code" id="code"><span class="skel skel-code"></span></p>
+  <p class="summary" id="summary"><span class="skel skel-line"></span></p>
+  <p class="stamp" id="stamp"><span class="skel skel-stamp"></span></p>
 </header>
 
 <section class="grid" id="stats" aria-label="Τρέχουσες συνθήκες">
-  <div class="card glass"><span class="lbl">Αίσθηση</span><span class="big" id="s-apparent">&ndash;</span></div>
-  <div class="card glass"><span class="lbl">Υγρασία</span><span class="big" id="s-humidity">&ndash;</span></div>
-  <div class="card glass"><span class="lbl">Άνεμος</span><span class="big"><span id="s-wind">&ndash;</span> <small>km/h</small></span><span class="sub" id="s-wind-sub"></span></div>
-  <div class="card glass"><span class="lbl">Ριπές ανέμου</span><span class="big"><span id="s-gusts">&ndash;</span> <small>km/h</small></span></div>
-  <div class="card glass"><span class="lbl">Υετός</span><span class="big"><span id="s-rain">&ndash;</span> <small>mm</small></span></div>
-  <div class="card glass"><span class="lbl">Νέφωση</span><span class="big" id="s-cloud">&ndash;</span></div>
-  <div class="card glass"><span class="lbl">Πίεση</span><span class="big"><span id="s-pressure">&ndash;</span> <small>hPa</small></span></div>
-  <div class="card glass"><span class="lbl">Ορατότητα</span><span class="big" id="s-visibility">&ndash;</span><span class="sub" id="s-visibility-sub"></span></div>
+  <div class="card glass"><span class="lbl">Αίσθηση</span><span class="big" id="s-apparent"><span class="skel skel-value"></span></span></div>
+  <div class="card glass"><span class="lbl">Υγρασία</span><span class="big" id="s-humidity"><span class="skel skel-value"></span></span></div>
+  <div class="card glass"><span class="lbl">Άνεμος</span><span class="big"><span id="s-wind"><span class="skel skel-value"></span></span> <small>km/h</small></span><span class="sub" id="s-wind-sub"></span></div>
+  <div class="card glass"><span class="lbl">Ριπές ανέμου</span><span class="big"><span id="s-gusts"><span class="skel skel-value"></span></span> <small>km/h</small></span></div>
+  <div class="card glass"><span class="lbl">Υετός</span><span class="big"><span id="s-rain"><span class="skel skel-value"></span></span> <small>mm</small></span></div>
+  <div class="card glass"><span class="lbl">Νέφωση</span><span class="big" id="s-cloud"><span class="skel skel-value"></span></span></div>
+  <div class="card glass"><span class="lbl">Πίεση</span><span class="big"><span id="s-pressure"><span class="skel skel-value"></span></span> <small>hPa</small></span></div>
+  <div class="card glass"><span class="lbl">Ορατότητα</span><span class="big" id="s-visibility"><span class="skel skel-value"></span></span><span class="sub" id="s-visibility-sub"></span></div>
 </section>
 
 <section class="card glass panel">
@@ -94,17 +94,17 @@
     <div class="sun-item">
       <span class="sun-ico">&#127749;</span>
       <span class="sun-lbl">Ανατολή</span>
-      <span class="sun-val" id="sun-rise">&ndash;</span>
+      <span class="sun-val" id="sun-rise"><span class="skel skel-sun"></span></span>
     </div>
     <div class="sun-track" aria-hidden="true"><span class="sun-track-fill" id="sun-fill"></span></div>
     <div class="sun-item">
       <span class="sun-ico">&#127751;</span>
       <span class="sun-lbl">Δύση</span>
-      <span class="sun-val" id="sun-set">&ndash;</span>
+      <span class="sun-val" id="sun-set"><span class="skel skel-sun"></span></span>
     </div>
     <div class="sun-meta">
-      <span>Διάρκεια ημέρας <strong id="sun-daylight">&ndash;</strong></span>
-      <span>Ηλιοφάνεια <strong id="sun-sunshine">&ndash;</strong></span>
+      <span>Διάρκεια ημέρας <strong id="sun-daylight"><span class="skel skel-sun"></span></strong></span>
+      <span>Ηλιοφάνεια <strong id="sun-sunshine"><span class="skel skel-sun"></span></strong></span>
     </div>
   </div>
 </section>
@@ -115,15 +115,30 @@
     <span class="chip muted" id="chart-note">θερμοκρασία &middot; πιθανότητα βροχής</span>
   </div>
   <div class="chart-wrap">
+    <div class="skel skel-chart" data-skeleton></div>
     <svg id="chart" viewBox="0 0 960 250" preserveAspectRatio="xMidYMid meet"
          role="img" aria-label="Γράφημα θερμοκρασίας και πιθανότητας βροχής"></svg>
   </div>
-  <div class="hourly" id="hourly" tabindex="0" aria-label="Ωριαία πρόβλεψη, οριζόντια κύλιση"></div>
+  <div class="hourly" id="hourly" tabindex="0" aria-label="Ωριαία πρόβλεψη, οριζόντια κύλιση">
+    <div class="h skel h-skel" data-skeleton></div>
+    <div class="h skel h-skel" data-skeleton></div>
+    <div class="h skel h-skel" data-skeleton></div>
+    <div class="h skel h-skel" data-skeleton></div>
+    <div class="h skel h-skel" data-skeleton></div>
+  </div>
 </section>
 
 <section class="card glass panel">
   <div class="panel-head"><h2>Πρόβλεψη 7 ημερών</h2></div>
-  <div class="days" id="days"></div>
+  <div class="days" id="days">
+    <div class="day skel day-skel" data-skeleton></div>
+    <div class="day skel day-skel" data-skeleton></div>
+    <div class="day skel day-skel" data-skeleton></div>
+    <div class="day skel day-skel" data-skeleton></div>
+    <div class="day skel day-skel" data-skeleton></div>
+    <div class="day skel day-skel" data-skeleton></div>
+    <div class="day skel day-skel" data-skeleton></div>
+  </div>
 </section>
 
 <section class="card glass panel" id="air-panel" hidden>
@@ -134,12 +149,12 @@
   <div class="air-grid">
     <div class="air-stat">
       <span class="lbl">Δείκτης (EAQI)</span>
-      <span class="big" id="air-aqi">&ndash;</span>
+      <span class="big" id="air-aqi"><span class="skel skel-value"></span></span>
       <span class="sub" id="air-aqi-label"></span>
     </div>
     <div class="air-stat">
       <span class="lbl">Αιωρούμενα σωματίδια</span>
-      <span class="big" id="air-pm">&ndash;</span>
+      <span class="big" id="air-pm"><span class="skel skel-value"></span></span>
       <span class="sub">PM2.5 / PM10 &micro;g/m&sup3;</span>
     </div>
     <div class="air-pollen">

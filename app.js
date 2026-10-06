@@ -10,7 +10,14 @@
   var API = "/api/weather";
   var REFRESH = Math.max(30, Number(document.body.dataset.refresh) || 180);
 
-  var state = { timer: null, inflight: false, lastGenerated: null, error: null, signature: null };
+  var state = {
+    timer: null,
+    inflight: false,
+    lastGenerated: null,
+    error: null,
+    signature: null,
+    skeletonsDropped: false
+  };
 
   function $(id) { return document.getElementById(id); }
 
@@ -593,6 +600,18 @@
     }
   }
 
+  /* The inline skeletons inside value slots are wiped by textContent, and the
+     tile skeletons by clear(). This sweeps up whatever is left — currently the
+     chart placeholder — once real data has arrived. */
+  function dropSkeletons() {
+    if (state.skeletonsDropped) return;
+    state.skeletonsDropped = true;
+    var nodes = document.querySelectorAll("[data-skeleton]");
+    for (var i = nodes.length - 1; i >= 0; i--) {
+      if (nodes[i].parentNode) nodes[i].parentNode.removeChild(nodes[i]);
+    }
+  }
+
   function render(data) {
     state.lastGenerated = data.generated_at;
     safely("theme", function () { applyWeatherTheme(data.current || {}); });
@@ -615,6 +634,7 @@
     safely("air", function () { renderAir(data.air); });
     safely("status", function () { renderStatus(data); });
     safely("title", function () { document.title = "Καιρός · " + data.place; });
+    safely("skeletons", dropSkeletons);
     syncThemeColor();
   }
 

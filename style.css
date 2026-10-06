@@ -76,6 +76,7 @@
   --rim-bottom: rgba(255, 255, 255, .05);
   --sheen: rgba(255, 255, 255, .17);
   --track: rgba(255, 255, 255, .12);
+  --skel-bg: rgba(255, 255, 255, .11);
   --shadow: 0 8px 24px rgba(0, 0, 0, .30);
   --shadow-lift: 0 14px 34px rgba(0, 0, 0, .36);
   --blur: blur(16px) saturate(160%);
@@ -116,6 +117,7 @@ html.mode-light {
   --rim-bottom: rgba(255, 255, 255, .30);
   --sheen: rgba(255, 255, 255, .55);
   --track: rgba(10, 26, 43, .10);
+  --skel-bg: rgba(10, 26, 43, .12);
   --shadow: 0 8px 22px rgba(23, 58, 92, .14);
   --shadow-lift: 0 14px 32px rgba(23, 58, 92, .18);
 
@@ -558,12 +560,43 @@ footer { margin-top: 28px; font-size: .8rem; color: var(--text-faint); }
 .foot-row.muted { margin-top: 8px; font-size: .74rem; opacity: .85; }
 .warn { color: var(--warn-text); }
 
+/* --- loading skeletons -------------------------------------------------- */
+/* Placeholders shaped like the real content, so the first paint already looks
+   finished and nothing jumps when the data lands.
+
+   They stay at opacity 0 for the first 350ms: on a fast connection the data
+   beats the animation, and a skeleton that flashes for two frames looks worse
+   than no skeleton at all. */
+.skel {
+  display: inline-block;
+  vertical-align: middle;
+  background: var(--skel-bg);
+  border-radius: 999px;
+  opacity: 0;
+  animation: pulse 1.6s ease-in-out .35s infinite;
+}
+.skel-value { display: block; width: 56%; height: 1.45rem; margin: 0 auto; }
+.skel-sun   { width: 54px; height: 1.05rem; }
+.skel-temp  { width: 148px; height: 4.3rem; border-radius: 18px; }
+.skel-code  { width: 186px; height: 1rem; }
+.skel-line  { width: 62%; height: .9rem; }
+.skel-stamp { width: 148px; height: .68rem; }
+.skel-chart { display: block; width: 100%; height: 208px; border-radius: var(--radius-md); }
+
+/* Reuse the real tile geometry so the grid does not reflow when it fills. */
+.h-skel   { min-height: 146px; border-radius: var(--radius-md); border-color: transparent; }
+.day-skel { min-height: 236px; border-radius: var(--radius-md); border-color: transparent; }
+
 /* --- motion ------------------------------------------------------------- */
 @keyframes rise {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse {
+  0%, 100% { opacity: .34; }
+  50%      { opacity: .72; }
+}
 @keyframes flash {
   0%   { color: #ffd166; opacity: .55; }
   100% { color: inherit; opacity: 1; }
@@ -642,6 +675,9 @@ footer { margin-top: 28px; font-size: .8rem; color: var(--text-faint); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+  /* The skeletons get their visibility from the pulse animation, so without
+     it they would sit at opacity 0 forever. */
+  .skel { opacity: .5 !important; }
 }
 
 @media print {

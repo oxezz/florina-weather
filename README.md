@@ -69,6 +69,7 @@ covered by this project's MIT licence.
 | **Official warnings** | live **Meteoalarm / EMY** alerts for West Macedonia, colour-coded, shown as a banner at the top |
 | **Air quality** | European AQI, PM2.5 / PM10 and pollen (grass, olive, ragweed, mugwort, birch, alder) |
 | **Live updates** | the page refreshes itself in place — no reload, no flicker — and pauses while the tab is hidden |
+| **Loading skeletons** | 31 placeholders shaped like the real content, so the first paint already looks finished and nothing jumps when the data lands. They stay invisible for the first 350 ms, because a skeleton that flashes for two frames looks worse than none |
 | **Light & dark** | an iOS-style segmented control (Αυτόματα / Φωτεινό / Σκοτεινό). The choice is remembered and can be linked with `?mode=dark` |
 | **Liquid-glass surfaces** | translucent saturated blur, a specular rim along the top edge, a sheen out of the top-left corner, and a highlight that follows the pointer. All of it degrades gracefully — with no hover or no JavaScript the panels still read correctly |
 | **Weather-aware backdrop** | shifts between clear-day, clear-night, cloud, rain, snow, storm and fog, in both light and dark |
