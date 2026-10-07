@@ -383,7 +383,9 @@
     var winter = mountain.season === "winter";
     setText($("mountain-ico"), mountain.emoji);
     setText($("mountain-name"), mountain.name);
-    setText($("mountain-season"), mountain.label);
+    // The label only: the chip also holds the explainer button, and setting
+    // the chip's text would wipe it.
+    setText($("mountain-season-label"), mountain.label);
     setText($("mountain-temp"),
       (mountain.temp === null ? "–" : num(mountain.temp, 1) + "°"));
     // The elevation, in both seasons. The temperature gap gets its own metric

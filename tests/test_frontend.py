@@ -484,6 +484,36 @@ class ExplainerTests(unittest.TestCase):
         for prop in ("width", "height", "border-radius", "cursor"):
             self.assertIn(prop, block)
 
+    def test_panel_hints_are_not_centred(self):
+        """`.card` centres its text, which is right for a stat tile and wrong
+        for a paragraph. Same trap as `.ocard-body` and `.moon-body`."""
+        block = self.css.split(".panel-hint {")[1].split("}")[0]
+        self.assertIn("text-align: left", block)
+
+    def test_panel_explainers_sit_inside_their_chip(self):
+        """The ? belongs inside the chip it explains. Left as a sibling it
+        drifts to the far edge of the panel head and reads as unrelated to
+        the note beside it."""
+        for hint in ("hint-agreement", "hint-snow", "hint-mountain"):
+            before = self.template.split('aria-controls="%s"' % hint)[0]
+            self.assertIn("panel-head", before[-1200:],
+                          "%s is not in a panel head" % hint)
+            head = before[before.rfind('<div class="panel-head">'):]
+            self.assertIn('<span class="chip', head,
+                          "%s: the ? sits outside its chip" % hint)
+
+    def test_the_mountain_chip_keeps_its_label_in_a_span(self):
+        """The chip holds the explainer button, so the label is set on an
+        inner span. Setting the chip's own text would wipe the button."""
+        self.assertIn('id="mountain-season-label"', self.template)
+        self.assertIn('setText($("mountain-season-label")', self.js)
+        self.assertNotIn('setText($("mountain-season")', self.js)
+
+    def test_no_stray_panel_chips(self):
+        """Two decorative chips were removed: they restated the heading."""
+        for gone in ("για σύγκριση", "μικροκλίμα κοιλάδας"):
+            self.assertNotIn(gone, self.template)
+
 
 class HourlyStripTests(unittest.TestCase):
     """The hourly cards: snapping, and the rain-probability gauge."""

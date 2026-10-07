@@ -895,7 +895,10 @@ a:hover { text-decoration: underline; }
   text-align: left;
 }
 
-/* The same explainer, when it belongs to a whole panel rather than a card. */
+/* The same explainer, when it belongs to a whole panel rather than a card.
+   text-align has to be stated: .card centres its text, and a paragraph is
+   exactly what should not be centred. This was missing, so every panel-level
+   explainer rendered centred — the same trap as .ocard-body and .moon-body. */
 .panel-hint {
   margin: -8px 0 18px;
   padding-top: 10px;
@@ -903,6 +906,7 @@ a:hover { text-decoration: underline; }
   font-size: .78rem;
   line-height: 1.55;
   color: var(--text-faint);
+  text-align: left;
 }
 .chip .info { margin-left: 2px; }
 
