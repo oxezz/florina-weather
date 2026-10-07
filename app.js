@@ -253,6 +253,38 @@
     return 1;
   }
 
+  function renderStation(station) {
+    var panel = $("station-panel");
+    if (!panel) return;
+    if (!station) { panel.hidden = true; return; }
+    panel.hidden = false;
+
+    setText($("station-name"), station.name);
+    setText($("station-text"),
+      num(station.temp, 1) + "° τώρα" +
+      (station.day_min !== null && station.day_max !== null
+        ? ", " + num(station.day_min, 1) + "° έως " + num(station.day_max, 1) +
+          "° σήμερα"
+        : ""));
+
+    // The observation time is the point: this is measured, not modelled, and
+    // it lags, so saying when keeps it honest rather than passing it off as
+    // the current conditions.
+    var parts = ["στις " + station.observed + ", πριν " + station.age_text];
+    if (station.humidity !== null && station.humidity !== undefined) {
+      parts.push("υγρασία " + num(station.humidity) + "%");
+    }
+    if (station.wind !== null && station.wind !== undefined) {
+      parts.push("άνεμος " + num(station.wind, 1) + " km/h" +
+                 (station.wind_dir_text ? " " + station.wind_dir_text : ""));
+    }
+    if (station.rain_today !== null && station.rain_today !== undefined) {
+      parts.push("βροχή " + num(station.rain_today, 1) + " mm");
+    }
+    parts.push(station.distance);
+    setText($("station-detail"), parts.join(" · "));
+  }
+
   function renderGreeting(greeting) {
     var node = $("greet");
     if (!node) return;
@@ -864,6 +896,7 @@
     safely("greeting", function () { renderGreeting(data.greeting); });
     safely("normal", function () { renderNormal(data.normal); });
     safely("outfit", function () { renderOutfit(data.outfit); });
+    safely("station", function () { renderStation(data.station); });
     safely("sky", function () { renderSky(data.sky); });
     safely("stats", function () { renderStats(data.current || {}); });
     safely("sun", function () { renderSun(data); });

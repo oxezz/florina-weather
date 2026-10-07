@@ -1150,6 +1150,125 @@ def build_snow(snapshot, config):
     }
 
 
+def _station_time(stamp):
+    """Parse an EMY station stamp, ``YYYYMMDDHHMM``, into a naive datetime.
+
+    It carries no separators and no timezone. Greek stations report their own
+    wall clock, so it is read as local and compared against a local now.
+    """
+    text = str(stamp or "").strip()
+    if len(text) != 12 or not text.isdigit():
+        return None
+    try:
+        return datetime.strptime(text, "%Y%m%d%H%M")
+    except ValueError:
+        return None
+
+
+def _reading(value):
+    """One EMY station value, or ``None``.
+
+    Everything arrives as a string and missing readings are a run of slashes
+    of varying length — ``/``, ``///``, ``/////`` are all "no sensor", not
+    numbers, and not zero.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or "/" in text or text.upper() in ("NAN", "NULL", "-"):
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def build_station(snapshot, config, now_local):
+    """The latest real observation from the EMY network.
+
+    This is the only number on the page that is measured rather than modelled,
+    which is exactly why it is shown next to the forecast. It is also not
+    Florina: there is no EMY station in the town, so the nearest one that is
+    kept fresh is used and labelled with its own name and distance.
+    """
+    if not getattr(config, "station_id", ""):
+        return None
+    records = (snapshot.get("station") or {}).get("records") or []
+    if not records:
+        return None
+
+    record = records[0]
+    observed = _station_time(record.get("yyyyMMddHHmm"))
+    if observed is None:
+        return None
+
+    age = (now_local.replace(tzinfo=None) - observed).total_seconds()
+    if age < -3600 or age > float(getattr(config, "station_max_age", 12 * 3600)):
+        return None                     # a month-old reading is not a reading
+
+    temperature = _reading(record.get("Temp_Dry_5min"))
+    if temperature is None:
+        return None
+
+    # Everything since midnight, from the same window of records, so the card
+    # can give the station's own day rather than only an instant.
+    today = observed.date()
+    same_day = []
+    rain_total = 0.0
+    rain_seen = False
+    for entry in records:
+        stamp = _station_time(entry.get("yyyyMMddHHmm"))
+        if stamp is None or stamp.date() != today:
+            continue
+        same_day.append(entry)
+        drop = _reading(entry.get("Prec_Sum_1_5min"))
+        if drop is not None:
+            rain_seen = True
+            rain_total += drop
+
+    day_temps = []
+    for entry in same_day:
+        for key in ("Temp_Dry_5min", "Temp_Dry_Min_5min", "Temp_Dry_Max_5min"):
+            value = _reading(entry.get(key))
+            if value is not None:
+                day_temps.append(value)
+
+    # A 5-minute extreme, not the instant: "the coldest it got in the last
+    # five minutes" is calmer than a single sample.
+    low = _reading(record.get("Temp_Dry_Min_5min"))
+    high = _reading(record.get("Temp_Dry_Max_5min"))
+    humidity = _reading(record.get("Rel_Hum_5min"))
+    wind = _reading(record.get("Wind_Speed_Avg_5min"))
+    gusts = _reading(record.get("Wind_Speed_Max_5min"))
+    direction = _reading(record.get("Wind_Dir_Avg_5min"))
+    rain = _reading(record.get("Prec_Sum_1_5min"))
+    pressure = _reading(record.get("Press_Barometer_5min"))
+    radiation = _reading(record.get("Rad_Global_5min"))
+
+    return {
+        "id": config.station_id,
+        "name": config.station_name,
+        "distance": config.station_distance,
+        "observed": observed.strftime("%H:%M"),
+        "age_minutes": int(round(age / 60.0)),
+        "age_text": greek.format_duration(max(0.0, age)),
+        "temp": round(temperature, 1),
+        "min": round(low, 1) if low is not None else None,
+        "max": round(high, 1) if high is not None else None,
+        "day_min": round(min(day_temps), 1) if day_temps else None,
+        "day_max": round(max(day_temps), 1) if day_temps else None,
+        "samples": len(same_day),
+        "humidity": round(humidity) if humidity is not None else None,
+        "wind": round(wind, 1) if wind is not None else None,
+        "gusts": round(gusts, 1) if gusts is not None else None,
+        "wind_dir_text": greek.compass(direction) if direction is not None else None,
+        "rain": round(rain, 1) if rain is not None else None,
+        "rain_today": round(rain_total, 1) if rain_seen else None,
+        "pressure": round(pressure, 1) if pressure is not None else None,
+        "radiation": round(radiation, 1) if radiation is not None else None,
+    }
+
+
 def build_report(snapshot, config, now=None):
     """Assemble the JSON document served at ``/api/weather``."""
     forecast = snapshot.get("forecast")
@@ -1240,6 +1359,7 @@ def build_report(snapshot, config, now=None):
     air = parse_air(snapshot.get("air"))
     sky = build_sky(moon, hours, air)
     normal = build_normal(snapshot.get("normals"), today)
+    station = build_station(snapshot, config, now_local)
 
     ages = snapshot.get("ages") or {}
     errors = snapshot.get("errors") or {}
@@ -1260,6 +1380,7 @@ def build_report(snapshot, config, now=None):
         "outfit": outfit,
         "sky": sky,
         "normal": normal,
+        "station": station,
         "air": air,
         "alerts": alerts,
         "status": {

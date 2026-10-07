@@ -26,6 +26,7 @@ def snapshot(**overrides):
         "terrain": fixtures.terrain(),
         "normals": fixtures.normals(),
         "snow": fixtures.snow(),
+        "station": fixtures.station(),
         "alerts": fixtures.alerts(),
         "ages": {"forecast": 4.0, "air": 60.0, "history": 120.0,
                  "terrain": 90.0, "alerts": 30.0},
@@ -901,6 +902,74 @@ class SnowTests(unittest.TestCase):
         data = report.build_report(snapshot(snow=None),
                                    sources.Config(), now=NOW)
         self.assertIsNone((data["local"] or {}).get("snow"))
+
+
+class StationTests(unittest.TestCase):
+    """The one measured number on the page, which is also the most fragile."""
+
+    NOW = datetime.datetime(2026, 10, 6, 13, 30)
+
+    def _station(self, rows=None, **config):
+        payload = fixtures.station(rows) if rows is not None else fixtures.station()
+        cfg = sources.Config(**config) if config else sources.Config()
+        return report.build_station({"station": payload}, cfg, self.NOW)
+
+    def test_the_slashes_mean_no_sensor_not_zero(self):
+        """EMY writes missing readings as a run of slashes of varying length.
+        Reading those as 0 would put a fabricated frost or a fabricated calm
+        on the page."""
+        for value in ("/", "///", "/////", "", "NaN", None, "  "):
+            self.assertIsNone(report._reading(value), repr(value))
+        self.assertEqual(report._reading("13.8"), 13.8)
+        self.assertEqual(report._reading("-1.6"), -1.6)
+        self.assertEqual(report._reading("0.0"), 0.0)
+
+    def test_a_reading_carries_its_own_time(self):
+        """It lags upstream, so the age travels with it rather than being
+        passed off as the current conditions."""
+        station = self._station()
+        self.assertEqual(station["observed"], "13:10")
+        self.assertEqual(station["age_minutes"], 20)
+        self.assertIn("20", station["age_text"])
+
+    def test_it_gives_the_stations_own_day(self):
+        station = self._station()
+        self.assertEqual(station["samples"], 3)
+        self.assertAlmostEqual(station["day_min"], 11.0, places=1)
+        self.assertAlmostEqual(station["day_max"], 13.8, places=1)
+
+    def test_a_stale_reading_is_dropped_rather_than_shown_as_current(self):
+        # One station in the network is a month behind.
+        old = [fixtures._row("202609080335", "14.4")]
+        self.assertIsNone(self._station(old))
+
+    def test_a_reading_slightly_in_the_future_is_tolerated(self):
+        # Clocks disagree; an hour of skew is not a reason to hide the card.
+        rows = [fixtures._row("202610061410", "13.8")]
+        self.assertIsNotNone(self._station(rows))
+
+    def test_a_reading_far_in_the_future_is_not(self):
+        rows = [fixtures._row("202610070900", "13.8")]
+        self.assertIsNone(self._station(rows))
+
+    def test_a_station_can_be_switched_off(self):
+        self.assertIsNone(self._station(station_id=""))
+
+    def test_missing_arguments_are_not_an_error(self):
+        cfg = sources.Config()
+        for snapshot in ({}, {"station": None}, {"station": {}},
+                         {"station": {"records": []}}):
+            self.assertIsNone(report.build_station(snapshot, cfg, self.NOW))
+
+    def test_a_broken_timestamp_is_skipped(self):
+        rows = [fixtures._row("not-a-stamp", "13.8")]
+        self.assertIsNone(self._station(rows))
+        rows = [fixtures._row("2026100613", "13.8")]
+        self.assertIsNone(self._station(rows))
+
+    def test_a_missing_temperature_hides_the_card(self):
+        rows = [fixtures._row("202610061310", "/////")]
+        self.assertIsNone(self._station(rows))
 
 
 class DegradedTests(unittest.TestCase):

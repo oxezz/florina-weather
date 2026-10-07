@@ -119,13 +119,34 @@ the reasoning and the traps, most of which were found the hard way.
   preference is explicitly emulated back to `no-preference`. It is a real
   supported feature, not an unknown one, so the fallback block genuinely
   engages — worth knowing before concluding the blur "doesn't work".
-* **The old EMY scraper is gone.** `oldportal.emy.gr` no longer responds, so the
+* **The old EMY scraper is gone, but `oldportal.emy.gr` is not dead.** The
   previous `extract_emy.py` / `emy_extract.py` scrapers were retired and then
-  deleted. They pulled `meteoalarmJson` out of the EMY warning page with a regex;
-  warnings now come straight from the official Meteoalarm CAP feed, which is the
-  same upstream data EMY was republishing and needs no HTML scraping at all. The
-  CAP shape they documented lives on in [`tests/fixtures.py`](../tests/fixtures.py).
+  deleted: they pulled `meteoalarmJson` out of the EMY warning page with a
+  regex, and warnings now come straight from the official Meteoalarm CAP feed,
+  which is the same upstream data EMY was republishing and needs no scraping at
+  all. The CAP shape they documented lives on in
+  [`tests/fixtures.py`](../tests/fixtures.py).
 
-  The HTML page dumps they produced were removed from the repository — that
-  markup was EMY's, not this project's, so it did not belong under its MIT
-  licence.
+  **Correction:** the note here used to say the host no longer responds. It
+  does — the meteogram and climatology pages both answer 200, checked directly.
+  The scraping was retired because the CAP feed is better, not because the site
+  died, and saying otherwise was wrong. The HTML page dumps those scripts
+  produced were removed from the repository all the same: that markup was EMY's,
+  not this project's, so it did not belong under its MIT licence.
+* **A real observation is available after all, via data.gov.gr.** The portal
+  publishes the EMY automatic station network — 93 stations — and it runs on
+  CKAN, whose datastore API answers **without a token**. That is what the
+  station card uses. Two things worth recording:
+
+  * **There is no station in Florina.** Station 230 is ΒΙΤΣΙ, the mountain
+    above the town, at ~1700 m. Its 823 hPa barometer gives it away, and the
+    package title says so outright. The nearest station that is actually kept
+    fresh is **007, Καστοριά**, 30 km west in the next basin, whose 947 hPa is
+    right for its 620 m.
+  * **Freshness varies wildly by station.** Kastoria and Ioannina run about
+    5½ hours behind; Vitsi and Grevena about 21; Chortiatis was a month stale.
+    So the card shows the observation time and the age rather than implying the
+    number is current, and hides itself entirely past `station_max_age`.
+  * Missing readings are a **run of slashes of varying length** — `/`, `///`,
+    `/////` all mean "no sensor". Parsing those as 0 would invent a frost or a
+    dead calm, which is why `_reading` rejects them explicitly.

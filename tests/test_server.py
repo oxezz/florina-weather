@@ -28,6 +28,13 @@ import sources  # noqa: E402
 def recording_opener(counter):
     """A stand-in for the network that answers from the fixtures."""
     def opener(url, timeout):
+        if "data.gov.gr" in url:
+            # One station fetch is two calls: the package, then its datastore.
+            # Only the second is counted, so the station reads as one source.
+            if "package_show" in url:
+                return fixtures.dumps(fixtures.station_package())
+            counter["station"] = counter.get("station", 0) + 1
+            return fixtures.dumps({"result": fixtures.station()})
         if "archive-api" in url:
             counter["normals"] = counter.get("normals", 0) + 1
             return fixtures.dumps(fixtures.normals())

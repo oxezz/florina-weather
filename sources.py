@@ -30,6 +30,23 @@ USER_AGENT = "florina-weather/2.0 (+local; python-urllib)"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
+# The Greek government's open data portal publishes the EMY automatic station
+# network. It runs on CKAN, and its datastore API answers without a token —
+# which is the only free real-observation source found for this region.
+# There is no station in Florina itself, so the nearest fresh one is used and
+# labelled as such rather than passed off as the town.
+DATAGOV_URL = "https://data.gov.gr/api/action"
+
+# Only the columns the card uses. A full station row is ~60 fields of strings,
+# so asking for these keeps 200 records to about 15 KB instead of 100.
+STATION_FIELDS = (
+    "yyyyMMddHHmm,Temp_Dry_5min,Temp_Dry_Min_5min,Temp_Dry_Max_5min,"
+    "Rel_Hum_5min,Prec_Sum_1_5min,Wind_Speed_Avg_5min,Wind_Speed_Max_5min,"
+    "Wind_Dir_Avg_5min,Press_Barometer_5min,Rad_Global_5min"
+)
+# About two days at the 15-minute cadence, which is enough for today's range.
+STATION_ROWS = 200
+
 # --------------------------------------------------------------------------
 # TLS trust
 # --------------------------------------------------------------------------
@@ -191,7 +208,7 @@ class Config:
     # usually under a second but occasionally takes twenty, and the forecast
     # is ready long before that. A source that misses the deadline is simply
     # absent this time — it keeps running and the cache picks it up next load.
-    snapshot_deadline: float = 8.0
+    snapshot_deadline: float = 15.0
     max_stale: float = 6 * 3600.0
     timeout: float = 20.0
     # How long a source that just failed is left alone. Without this, every
@@ -224,6 +241,17 @@ class Config:
         {"key": "pisoderi", "name": "Πισοδέρι", "lat": 40.7833, "lon": 21.2500},
     ])
     snow_cache_ttl: float = 1800.0
+
+    # A real observation, from the EMY automatic network via data.gov.gr.
+    # 007 is Kastoria: the nearest station that is actually kept fresh, in the
+    # next basin west. 230 (Vitsi) is closer but runs a day behind and sits at
+    # 1700 m, so it reads nothing like the town. Set station_id = "" to disable.
+    station_id: str = "007"
+    station_name: str = "Καστοριά"
+    station_distance: str = "30 χλμ. δυτικά"
+    station_cache_ttl: float = 900.0
+    # How stale a reading may be before the card says so rather than hiding it.
+    station_max_age: float = 6 * 3600.0
 
     # Outbound frost alerts. Nothing is ever sent unless a transport is both
     # chosen and given somewhere to send to, so the defaults are silent.
@@ -511,6 +539,35 @@ class WeatherService:
         return get_json(FORECAST_URL, self._snow_params(),
                         timeout=self.config.timeout, opener=self._opener)
 
+    def fetch_station(self):
+        """The latest observation from an EMY station, via data.gov.gr.
+
+        Two steps, because CKAN needs a resource id rather than a package name:
+        the package is read first and its datastore resource taken from that.
+        Everything comes back as strings, with missing readings written as a
+        run of slashes — see :func:`_reading`.
+        """
+        cfg = self.config
+        package = get_json(
+            "%s/package_show" % DATAGOV_URL,
+            {"id": "emy-station-%s" % cfg.station_id},
+            timeout=self.config.timeout, opener=self._opener)
+
+        resource = None
+        for entry in (package or {}).get("result", {}).get("resources", []):
+            if entry.get("datastore_active"):
+                resource = entry.get("id")
+                break
+        if not resource:
+            raise RuntimeError("station %s has no datastore" % cfg.station_id)
+
+        found = get_json(
+            "%s/datastore_search" % DATAGOV_URL,
+            {"resource_id": resource, "limit": STATION_ROWS,
+             "fields": STATION_FIELDS, "sort": "yyyyMMddHHmm desc"},
+            timeout=self.config.timeout, opener=self._opener)
+        return (found or {}).get("result") or {}
+
     def fetch_alerts(self):
         url = ALERTS_URL.format(country=self.config.alert_country)
         return get_json(url, None, timeout=self.config.timeout, opener=self._opener)
@@ -608,6 +665,7 @@ class WeatherService:
             ("alerts", cfg.alerts_cache_ttl, self.fetch_alerts, False),
             ("normals", cfg.normals_cache_ttl, self.fetch_normals, False),
             ("snow", cfg.snow_cache_ttl, self.fetch_snow, False),
+            ("station", cfg.station_cache_ttl, self.fetch_station, False),
         )
 
         # One thread per source. They are independent, and fetching them in
@@ -665,6 +723,7 @@ class WeatherService:
         alerts, alerts_age, alerts_error = taken("alerts")
         normals, normals_age, normals_error = taken("normals")
         snow, snow_age, snow_error = taken("snow")
+        station, station_age, station_error = taken("station")
         forecast_stale = results.get("forecast", (None, None, False, None))[2]
 
         errors = {}
@@ -674,7 +733,8 @@ class WeatherService:
                               ("terrain", terrain_error),
                               ("alerts", alerts_error),
                               ("normals", normals_error),
-                              ("snow", snow_error)):
+                              ("snow", snow_error),
+                              ("station", station_error)):
             if message:
                 errors[name] = message
 
@@ -686,6 +746,7 @@ class WeatherService:
             "alerts": alerts,
             "normals": normals,
             "snow": snow,
+            "station": station,
             "ages": {
                 "forecast": forecast_age,
                 "air": air_age,
@@ -694,6 +755,7 @@ class WeatherService:
                 "alerts": alerts_age,
                 "normals": normals_age,
                 "snow": snow_age,
+                "station": station_age,
             },
             "errors": errors,
             "stale": bool(forecast_stale),

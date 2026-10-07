@@ -227,6 +227,49 @@ def snow(fall=None, depth=None, points=SNOW_POINTS, days=7):
     return out
 
 
+def station(rows=None, station_id="007"):
+    """The shape data.gov.gr returns: strings, and slashes for no sensor."""
+    if rows is None:
+        rows = [
+            _row("202610061310", "13.8"),
+            _row("202610061255", "13.4"),
+            _row("202610061240", "11.0"),
+        ]
+    return {"records": rows, "fields": [], "total": len(rows)}
+
+
+def station_package(station_id="007"):
+    """The CKAN package response the resource id is read out of.
+
+    Two resources, only one of them a datastore, so a lookup that just takes
+    the first would pick the wrong one.
+    """
+    return {"result": {
+        "name": "emy-station-" + station_id,
+        "title": "Μετεωρολογικά Δεδομένα σταθμού ΔΟΚΙΜΗ",
+        "resources": [
+            {"id": "file-resource", "datastore_active": False},
+            {"id": "datastore-resource", "datastore_active": True},
+        ],
+    }}
+
+
+def _row(stamp, temp):
+    return {
+        "yyyyMMddHHmm": stamp,
+        "Temp_Dry_5min": temp,
+        "Temp_Dry_Min_5min": temp,
+        "Temp_Dry_Max_5min": temp,
+        "Rel_Hum_5min": "41.0",
+        "Prec_Sum_1_5min": "0.0",
+        "Wind_Speed_Avg_5min": "0.4",
+        "Wind_Speed_Max_5min": "1.1",
+        "Wind_Dir_Avg_5min": "300",
+        "Press_Barometer_5min": "947.1",
+        "Rad_Global_5min": "332.2",
+    }
+
+
 def daily_history(days=46, end=datetime.date(2026, 10, 6)):
     """The daily-only call that feeds heating degree days.
 

@@ -36,27 +36,28 @@ README's *Frost alerts* section. Nothing is sent until a transport is chosen
 and given somewhere to send to, which is the only remaining step and is a
 configuration change rather than code.
 
-**A real station reading next to the forecast.** Resolved: no free source
-exists, so this cannot be built without a paid token or a national-site scrape.
+**A real station reading next to the forecast.** Built. The Greek open data
+portal publishes the EMY automatic network on CKAN, and its datastore API needs
+no token, so `notify`-style scraping was never necessary.
 
-Checked directly, all against a ~60 km box around Florina:
+What the investigation settled, and what it did not:
 
 | Source | Result |
 |---|---|
-| aqicn | `feed/florina` → `Unknown station`; the demo token ignores the query and serves a fixed dataset (a Greece search returned Bangalore), so it proves nothing |
-| MesoWest legacy | `401 Missing token` |
-| Synoptic | `401 Invalid token` — `demo` is not accepted |
-| Meteostat | `401` |
-| Weather Underground | `401 Missing apiKey` |
-| meteoclimatic | serves an HTML map page for Greece, no JSON endpoint |
+| aqicn | `feed/florina` → `Unknown station`; the demo token ignores the query and serves a fixed dataset, so it proves nothing |
+| MesoWest, Synoptic, Meteostat, Wunderground | all `401` without a token |
 | NOA / meteo.gr | station search requires a login |
-| `www.emy.gr` | fails certificate validation from a stock trust store |
+| **data.gov.gr** | **93 EMY stations, token-free** — this is the one that works |
 
-So the honest position is **none reachable**, not "not looked for". Two routes
-remain if it is ever wanted: an aqicn token (one request would settle whether a
-station exists at all), or scraping EMY — which is exactly what this project
-retired in the 2.0 rewrite, because `oldportal.emy.gr` stopped answering.
+Two corrections worth keeping. **Station 230 is ΒΙΤΣΙ, not Florina** — the
+mountain above the town at ~1700 m, which its 823 hPa barometer makes obvious.
+And **there is no EMY station in Florina at all**, so the card shows Καστοριά
+(007), 30 km west in the next basin, labelled with its own name and distance
+rather than passed off as the town. Freshness varies by station — Kastoria runs
+about 5½ hours behind, Vitsi about 21, Chortiatis was a month stale — so the
+observation time travels with the number.
 
-A station in the basin would be worth more than it sounds: it is the only thing
-that would let the model stack be checked against reality rather than against
-itself, and the inversion index in particular is unverified without one.
+Still open, and worth more than it sounds: with a station at a known elevation,
+the inversion index could finally be checked against reality instead of against
+itself. That needs the station's coordinates, which data.gov.gr does not
+publish, so they would have to be supplied and trusted.
