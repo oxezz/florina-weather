@@ -1773,7 +1773,7 @@ def build_mountain(snow, road, current, config, now_local):
         hint = greek.summer_hint(gap, mountain_temp, mountain_wind)
 
     return {
-        "name": "Βίτσι / Πισοδέρι",
+        "name": "Βίτσι - Πισοδέρι",
         "season": season,
         "label": label,
         "emoji": emoji,

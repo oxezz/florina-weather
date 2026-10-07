@@ -606,12 +606,15 @@ a:hover { text-decoration: underline; }
 .ref-main { box-shadow: inset 3px 0 0 var(--accent); }
 .ref-name { font-weight: 650; min-width: 86px; }
 .ref-temp { font-size: 1.12rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-.ref-range, .ref-age, .ref-where {
+.ref-range, .ref-age {
   font-size: .78rem;
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
-.ref-where { margin-left: auto; }
+/* The observation time is the last thing on the row, where the distance used
+   to be: which is the more useful of the two to sit beside a reading that may
+   be a day old. */
+.ref-age { margin-left: auto; }
 .ref-note {
   margin: 14px 0 0;
   font-size: .78rem;
@@ -911,10 +914,22 @@ a:hover { text-decoration: underline; }
 .chip .info { margin-left: 2px; }
 
 /* --- air quality -------------------------------------------------------- */
-.air-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 18px; align-items: start; }
+
+/* Two columns, stated rather than auto-fit. auto-fit never collapses a track
+   here because the pollen row below spans them all, so no track is ever
+   empty — and the two stats were squeezed into the left third of the panel. */
+.air-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 560px) {
+  .air-grid { grid-template-columns: minmax(0, 1fr); }
+}
 .air-stat { text-align: center; }
 .air-pollen { grid-column: 1 / -1; }
-.air-pollen .lbl { text-align: left; }
+.air-pollen .chips { justify-content: center; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .pollen {
   padding: 5px 12px;

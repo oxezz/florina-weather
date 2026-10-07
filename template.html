@@ -167,8 +167,15 @@
 <section class="card glass panel">
   <div class="panel-head">
     <h2>Επόμενες 48 ώρες</h2>
-    <span class="chip muted" id="chart-note">θερμοκρασία &middot; πιθανότητα βροχής</span>
+    <button class="info" type="button" aria-expanded="false"
+            aria-controls="hint-chart" aria-label="Τι σημαίνει;">?</button>
   </div>
+  <p class="hint panel-hint" id="hint-chart" hidden>
+    Η γραμμή είναι η θερμοκρασία και οι κάθετες μπάρες κάτω από αυτήν η
+    πιθανότητα υετού, ώρα προς ώρα. Οι μπάρες εμφανίζονται μόνο όπου υπάρχει
+    κάποια πιθανότητα &mdash; οι άδειες θέσεις σημαίνουν ξηρή ώρα, όχι έλλειψη
+    δεδομένων. Η σκιασμένη ζώνη είναι το εύρος στο οποίο διαφωνούν τα μοντέλα.
+  </p>
   <div class="chart-wrap">
     <div class="skel skel-chart" data-skeleton></div>
     <svg id="chart" viewBox="0 0 960 250" preserveAspectRatio="xMidYMid meet"
@@ -186,10 +193,8 @@
 <section class="card glass panel">
   <div class="panel-head">
     <h2>Πρόβλεψη 7 ημερών</h2>
-    <span class="chip muted" id="agreement-note">συμφωνία μοντέλων
-      <button class="info" type="button" aria-expanded="false"
-              aria-controls="hint-agreement" aria-label="Τι σημαίνει;">?</button>
-    </span>
+    <button class="info" type="button" aria-expanded="false"
+            aria-controls="hint-agreement" aria-label="Τι σημαίνει;">?</button>
   </div>
   <p class="hint panel-hint" id="hint-agreement" hidden>
     Κάθε ημέρα προέρχεται από περισσότερα του ενός μοντέλα &mdash; το
@@ -287,11 +292,19 @@
 <section class="card glass panel" id="snow-panel" hidden>
   <div class="panel-head">
     <h2>Χιόνι στη Φλώρινα</h2>
-    <span class="chip muted">μετρήσεις 1932&ndash;2023
-      <button class="info" type="button" aria-expanded="false"
-              aria-controls="hint-snow" aria-label="Τι σημαίνει;">?</button>
-    </span>
+    <button class="info" type="button" aria-expanded="false"
+            aria-controls="hint-snow" aria-label="Τι σημαίνει;">?</button>
   </div>
+
+  <p class="hint panel-hint" id="hint-snow" hidden>
+    Πόσο συχνά χιονίζει, από μετρήσεις. Καμία υπηρεσία δεν καταγράφει ύψος
+    χιονιού εδώ, οπότε μία μέρα μετράει ως χιονόπτωση όταν καταγράφηκε υετός
+    και η ελάχιστη ήταν 1&deg;C ή χαμηλότερα. Τα βροχόμετρα υπομετρούν το
+    χιόνι, με την ίδια επιβάρυνση και στις δύο περιόδους &mdash; άρα η σύγκριση
+    στέκει. Τα δύο διαστήματα είναι <strong>1932&ndash;1981</strong> (σταθμός
+    ISD) και <strong>2010&ndash;2023</strong> (δίκτυο ΕΑΑ/meteo.gr): η γκρίζα
+    μπάρα είναι το παλιό ποσοστό, η χρωματισμένη το σημερινό.
+  </p>
 
   <div class="snow-head">
     <span class="snow-now"><strong id="snow-days-now"></strong>
@@ -305,25 +318,25 @@
   <div class="snow-axis"><span>1940</span><span>σήμερα</span></div>
 
   <p class="snow-note" id="snow-note"></p>
-  <p class="hint panel-hint" id="hint-snow" hidden>
-    Πόσο συχνά χιονίζει, από μετρήσεις. Καμία υπηρεσία δεν καταγράφει ύψος
-    χιονιού εδώ, οπότε μία μέρα μετράει ως χιονόπτωση όταν καταγράφηκε υετός
-    και η ελάχιστη ήταν 1&deg;C ή χαμηλότερα. Τα βροχόμετρα υπομετρούν το
-    χιόνι, με την ίδια επιβάρυνση και στις δύο περιόδους &mdash; άρα η σύγκριση
-    στέκει. Η γκρίζα μπάρα είναι το παλιό ποσοστό, η χρωματισμένη το σημερινό.
-  </p>
 </section>
 
 <section class="card glass panel" id="mountain-panel" hidden>
   <div class="panel-head">
-    <h2><span id="mountain-ico" aria-hidden="true">&#127935;</span>
-      Ορεινή εξόρμηση &middot; <span id="mountain-name"></span></h2>
-    <span class="chip" id="mountain-season">
-      <span id="mountain-season-label"></span>
-      <button class="info" type="button" aria-expanded="false"
-              aria-controls="hint-mountain" aria-label="Τι σημαίνει;">?</button>
-    </span>
+    <h2 id="mountain-name"></h2>
+    <button class="info" type="button" aria-expanded="false"
+            aria-controls="hint-mountain" aria-label="Τι σημαίνει;">?</button>
   </div>
+
+  <p class="hint panel-hint" id="hint-mountain" hidden>
+    Το ίδιο σημείο απαντά άλλο ερώτημα τον χειμώνα και άλλο το καλοκαίρι: χιόνι
+    και δρόμος από τον Νοέμβριο ως τον Μάρτιο, δροσιά και πεζοπορία τους
+    υπόλοιπους μήνες. Ο δρόμος κρίνεται από το ύψος στο οποίο παγώνει ο αέρας
+    και όχι από τη θερμοκρασία της πόλης &mdash; το διάσελο είναι πάνω από τα
+    1.700 μέτρα, οπότε βροχή εδώ μπορεί να είναι χιόνι εκεί. Οι συνθήκες είναι
+    από το μοντέλο· ο σταθμός της ΕΜΥ στη ράχη του Βιτσίου φτάνει σε παρτίδες
+    που μπορεί να είναι και μέρες πίσω.
+  </p>
+
   <div class="mountain-grid">
     <div class="m-item">
       <span class="lbl">Θερμοκρασία</span>
@@ -342,15 +355,6 @@
     </div>
   </div>
   <p class="mountain-hint" id="mountain-hint"></p>
-  <p class="hint panel-hint" id="hint-mountain" hidden>
-    Το ίδιο σημείο απαντά άλλο ερώτημα τον χειμώνα και άλλο το καλοκαίρι: χιόνι
-    και δρόμος από τον Νοέμβριο ως τον Μάρτιο, δροσιά και πεζοπορία τους
-    υπόλοιπους μήνες. Ο δρόμος κρίνεται από το ύψος στο οποίο παγώνει ο αέρας
-    και όχι από τη θερμοκρασία της πόλης &mdash; το διάσελο είναι πάνω από τα
-    1.700 μέτρα, οπότε βροχή εδώ μπορεί να είναι χιόνι εκεί. Οι συνθήκες είναι
-    από το μοντέλο· ο σταθμός της ΕΜΥ στη ράχη του Βιτσίου φτάνει σε παρτίδες
-    που μπορεί να είναι και μέρες πίσω.
-  </p>
 </section>
 
 <section class="card glass panel" id="air-panel" hidden>
@@ -370,7 +374,6 @@
       <span class="sub">PM2.5 / PM10 &micro;g/m&sup3;</span>
     </div>
     <div class="air-pollen">
-      <span class="lbl">Γύρη</span>
       <div class="chips" id="air-pollens"><span class="sub">Καμία αξιόλογη συγκέντρωση.</span></div>
     </div>
   </div>

@@ -316,10 +316,10 @@
         (item.day_min !== null && item.day_max !== null
           ? num(item.day_min, 1) + "° έως " + num(item.day_max, 1) + "°"
           : "")));
-      // The time is what keeps this honest: these lag, and by very different
-      // amounts depending on the station.
+      // The time and age sit at the right, where the distance used to be. The
+      // distance moved into the note below, and the age is the more useful
+      // thing to have beside a reading that may be a day old.
       row.appendChild(el("span", "ref-age", item.observed + " · " + item.age_text));
-      row.appendChild(el("span", "ref-where", item.distance));
       host.appendChild(row);
     });
   }
@@ -381,11 +381,10 @@
     panel.hidden = false;
 
     var winter = mountain.season === "winter";
-    setText($("mountain-ico"), mountain.emoji);
+    // The title is just the place. The season is carried by the metric labels
+    // below — snow depth and road in winter, the temperature gap in summer —
+    // and explained in full behind the ?.
     setText($("mountain-name"), mountain.name);
-    // The label only: the chip also holds the explainer button, and setting
-    // the chip's text would wipe it.
-    setText($("mountain-season-label"), mountain.label);
     setText($("mountain-temp"),
       (mountain.temp === null ? "–" : num(mountain.temp, 1) + "°"));
     // The elevation, in both seasons. The temperature gap gets its own metric

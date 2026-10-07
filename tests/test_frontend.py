@@ -7,6 +7,7 @@ one file and not the other, which no Python test would otherwise notice.
 
 import json
 import os
+import collections
 import re
 import sys
 import unittest
@@ -430,28 +431,37 @@ class ExplainerTests(unittest.TestCase):
         self.js = read("app.js")
 
     def test_every_local_card_has_one(self):
-        # Four local cards, the snow climatology, the mountain panel, and the
-        # model-agreement explainer on the 7-day panel. The road and snow cards
-        # were merged into the mountain one.
-        self.assertEqual(self.template.count('class="info"'), 7)
+        # Four local cards, plus an explainer on each of the 48-hour, 7-day,
+        # snow and mountain panels. The road and snow cards were merged into
+        # the mountain one.
+        self.assertEqual(self.template.count('class="info"'), 8)
         for card in ("inversion", "frost", "heating", "smog"):
             self.assertIn('aria-controls="hint-%s"' % card, self.template)
             self.assertIn('id="hint-%s" hidden' % card, self.template)
-        for merged in ("road",):
-            self.assertNotIn('aria-controls="hint-%s"' % merged, self.template)
-        self.assertIn('aria-controls="hint-mountain"', self.template)
-        self.assertIn('aria-controls="hint-agreement"', self.template)
+        for panel in ("chart", "agreement", "snow", "mountain"):
+            self.assertIn('aria-controls="hint-%s"' % panel, self.template)
+            self.assertIn('id="hint-%s" hidden' % panel, self.template)
+        self.assertNotIn('aria-controls="hint-road"', self.template)
 
     def test_they_start_collapsed_and_are_labelled(self):
         self.assertNotIn('aria-expanded="true"', self.template)
-        self.assertEqual(self.template.count('aria-label="Τι σημαίνει;"'), 7)
+        self.assertEqual(self.template.count('aria-label="Τι σημαίνει;"'), 8)
 
     def test_explanations_are_written_in_greek(self):
         hints = re.findall(r'<p class="hint[^"]*"[^>]*>(.*?)</p>', self.template, re.S)
-        self.assertEqual(len(hints), 7)   # six cards and the panel
+        self.assertEqual(len(hints), 8)
         for hint in hints:
             self.assertRegex(hint, "[\\u0370-\\u03ff]",
                              "explanation is not in Greek")
+
+    def test_no_duplicate_ids(self):
+        """Adding a hint next to a panel head while leaving the old one at the
+        bottom of the panel produced two elements with the same id, and the
+        browser silently used the first."""
+        ids = re.findall(r'id="([a-z0-9-]+)"', self.template)
+        duplicated = [key for key, count in collections.Counter(ids).items()
+                      if count > 1]
+        self.assertEqual(duplicated, [], "duplicate ids: %s" % duplicated)
 
     def test_the_client_wires_the_explainers(self):
         self.assertIn("function initInfo", self.js)
@@ -489,30 +499,6 @@ class ExplainerTests(unittest.TestCase):
         for a paragraph. Same trap as `.ocard-body` and `.moon-body`."""
         block = self.css.split(".panel-hint {")[1].split("}")[0]
         self.assertIn("text-align: left", block)
-
-    def test_panel_explainers_sit_inside_their_chip(self):
-        """The ? belongs inside the chip it explains. Left as a sibling it
-        drifts to the far edge of the panel head and reads as unrelated to
-        the note beside it."""
-        for hint in ("hint-agreement", "hint-snow", "hint-mountain"):
-            before = self.template.split('aria-controls="%s"' % hint)[0]
-            self.assertIn("panel-head", before[-1200:],
-                          "%s is not in a panel head" % hint)
-            head = before[before.rfind('<div class="panel-head">'):]
-            self.assertIn('<span class="chip', head,
-                          "%s: the ? sits outside its chip" % hint)
-
-    def test_the_mountain_chip_keeps_its_label_in_a_span(self):
-        """The chip holds the explainer button, so the label is set on an
-        inner span. Setting the chip's own text would wipe the button."""
-        self.assertIn('id="mountain-season-label"', self.template)
-        self.assertIn('setText($("mountain-season-label")', self.js)
-        self.assertNotIn('setText($("mountain-season")', self.js)
-
-    def test_no_stray_panel_chips(self):
-        """Two decorative chips were removed: they restated the heading."""
-        for gone in ("για σύγκριση", "μικροκλίμα κοιλάδας"):
-            self.assertNotIn(gone, self.template)
 
 
 class HourlyStripTests(unittest.TestCase):
