@@ -37,6 +37,14 @@ ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 # labelled as such rather than passed off as the town.
 DATAGOV_URL = "https://data.gov.gr/api/action"
 
+# EMY's own portal carries the station in the town, which the open-data portal
+# does not publish. It is server-rendered HTML, so the parse targets the AUTO
+# report inside each row's tooltip rather than the table cells: a fixed
+# METAR-like format that does not move when the markup does.
+EMY_URL = ("http://newportal.hnms.gr/emy/en/observation/"
+           "sa_teleytaies_paratiriseis_stathmou")
+EMY_PARAMS = {"perifereia": "West Macedonia", "poli": "Florina"}
+
 # Only the columns the card uses. A full station row is ~60 fields of strings,
 # so asking for these keeps 200 records to about 15 KB instead of 100.
 STATION_FIELDS = (
@@ -267,6 +275,15 @@ class Config:
     ])
     station_cache_ttl: float = 900.0
 
+    # EMY's portal, refreshed every half hour upstream, so a shorter TTL than
+    # the open-data stations costs nothing and keeps the card current.
+    florina_enabled: bool = True
+    florina_cache_ttl: float = 420.0
+    # A half-hourly feed, so an hour of lag means something is wrong upstream.
+    florina_max_age: float = 3600.0
+    florina_name: str = "Φλώρινα"
+    florina_site: str = "μέσα στην πόλη"
+
     # Outbound frost alerts. Nothing is ever sent unless a transport is both
     # chosen and given somewhere to send to, so the defaults are silent.
     alert_webhook: str = ""             # "ntfy" or "telegram"
@@ -362,6 +379,33 @@ def get_json(url, params=None, timeout=20.0, attempts=3, opener=None):
                 raise SourceError("HTTP %s from %s: %s" % (exc.code, url, detail)) from exc
             last_error = SourceError("HTTP %s from %s: %s" % (exc.code, url, detail))
         except Exception as exc:  # URLError, timeout, bad JSON, ...
+            last_error = SourceError("%s: %s" % (type(exc).__name__, exc))
+        if attempt < attempts:
+            time.sleep(0.6 * attempt)
+    raise last_error or SourceError("could not fetch %s" % url)
+
+
+def get_text(url, params=None, timeout=20.0, attempts=3, opener=None):
+    """GET a URL and decode the body as text.
+
+    The EMY portal is server-rendered HTML with no JSON endpoint, so this is
+    the one source that cannot use :func:`get_json`.
+    """
+    if params:
+        url = url + "?" + urllib.parse.urlencode(params)
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            if opener is not None:
+                raw = opener(url, timeout)
+            else:
+                raw = _urlopen(url, timeout)
+            return raw.decode("utf-8", "replace")
+        except urllib.error.HTTPError as exc:
+            if 400 <= exc.code < 500 and exc.code != 429:
+                raise SourceError("HTTP %s from %s" % (exc.code, url)) from exc
+            last_error = SourceError("HTTP %s from %s" % (exc.code, url))
+        except Exception as exc:  # URLError, timeout, ...
             last_error = SourceError("%s: %s" % (type(exc).__name__, exc))
         if attempt < attempts:
             time.sleep(0.6 * attempt)
@@ -565,6 +609,18 @@ class WeatherService:
         return get_json(FORECAST_URL, self._snow_params(),
                         timeout=self.config.timeout, opener=self._opener)
 
+    def fetch_florina(self):
+        """The live reading from EMY's station in Florina town.
+
+        Returns the raw page rather than a parsed value: turning it into a
+        reading is a pure function of the text, so it belongs in the report
+        layer where it can be tested without a network.
+        """
+        return {
+            "html": get_text(EMY_URL, EMY_PARAMS,
+                             timeout=self.config.timeout, opener=self._opener),
+        }
+
     def fetch_station(self):
         """The latest observation from each configured EMY station.
 
@@ -717,6 +773,7 @@ class WeatherService:
             ("normals", cfg.normals_cache_ttl, self.fetch_normals, False),
             ("snow", cfg.snow_cache_ttl, self.fetch_snow, False),
             ("station", cfg.station_cache_ttl, self.fetch_station, False),
+            ("florina", cfg.florina_cache_ttl, self.fetch_florina, False),
         )
 
         # One thread per source. They are independent, and fetching them in
@@ -775,6 +832,7 @@ class WeatherService:
         normals, normals_age, normals_error = taken("normals")
         snow, snow_age, snow_error = taken("snow")
         station, station_age, station_error = taken("station")
+        florina, florina_age, florina_error = taken("florina")
         forecast_stale = results.get("forecast", (None, None, False, None))[2]
 
         errors = {}
@@ -785,7 +843,8 @@ class WeatherService:
                               ("alerts", alerts_error),
                               ("normals", normals_error),
                               ("snow", snow_error),
-                              ("station", station_error)):
+                              ("station", station_error),
+                              ("florina", florina_error)):
             if message:
                 errors[name] = message
 
@@ -798,6 +857,7 @@ class WeatherService:
             "normals": normals,
             "snow": snow,
             "station": station,
+            "florina": florina,
             "ages": {
                 "forecast": forecast_age,
                 "air": air_age,
@@ -807,6 +867,7 @@ class WeatherService:
                 "normals": normals_age,
                 "snow": snow_age,
                 "station": station_age,
+                "florina": florina_age,
             },
             "errors": errors,
             "stale": bool(forecast_stale),

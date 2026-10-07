@@ -27,6 +27,11 @@ UTC = datetime.timezone.utc
 def opener_for(counter, failing=()):
     """An opener that counts calls per source and can fail a chosen few."""
     def opener(url, timeout):
+        if "newportal.hnms.gr" in url:
+            counter["florina"] = counter.get("florina", 0) + 1
+            if "florina" in failing:
+                raise urllib.error.HTTPError(url, 429, "slow down", {}, None)
+            return fixtures.emy_florina().encode("utf-8")
         if "data.gov.gr" in url:
             # A station fetch is two calls and only the second counts, so the
             # station reads as one source rather than two.
@@ -94,9 +99,9 @@ class FetchingTests(unittest.TestCase):
         counter = {}
         service = sources.WeatherService(sources.Config(), opener=opener_for(counter))
         service.snapshot()
-        self.assertEqual(sorted(counter), ["air", "alerts", "forecast", "history",
-                                           "normals", "snow", "station",
-                                           "terrain"])
+        self.assertEqual(sorted(counter), ["air", "alerts", "florina",
+                                           "forecast", "history", "normals",
+                                           "snow", "station", "terrain"])
 
     def test_a_second_snapshot_serves_from_cache(self):
         counter = {}

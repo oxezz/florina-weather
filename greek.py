@@ -431,7 +431,9 @@ OUTFIT_SUNSCREEN = ("sunscreen", "Αντηλιακό", "🧴")
 OUTFIT_HAT = ("hat", "Καπέλο", "🧢")
 OUTFIT_WIND = ("wind", "Δυνατός αέρας", "💨")
 OUTFIT_ICE = ("ice", "Προσοχή στον πάγο", "⚠️")
-OUTFIT_LAYERS = ("layers", "Στρώσεις", "🧅")
+# A coat, not an onion. The onion was a deliberate pun on "layers" and it read
+# as food next to clothing advice, which is not a trade worth making.
+OUTFIT_LAYERS = ("layers", "Στρώσεις", "🧥")
 
 # One line, only when two conditions combine into advice worth spelling out.
 OUTFIT_ADVICE = {

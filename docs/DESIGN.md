@@ -231,6 +231,30 @@ the reasoning and the traps, most of which were found the hard way.
   the same organisation publishes the same data on the national open-data
   portal. NOA does, under a licence that asks for nothing but credit.
 
+* **The scraping decision was reversed on purpose, for one source only.** The
+  2.0 rewrite retired EMY scrapers in favour of the Meteoalarm CAP feed, and
+  that reasoning still holds for warnings. It does not hold for a station
+  reading, because there is no substitute: the town's own observation exists
+  only as server-rendered HTML on EMY's portal.
+
+  Three things make it defensible where the old scrapers were not:
+
+  1. **The parse target is a machine format, not markup.** Each row carries a
+     raw AUTO report in a tooltip attribute —
+     `613 071200Z AUTO VRB01KT //// // ////// 24/01 Q1021 RE//=` — which is a
+     fixed METAR-like grammar. The table cells around it are what changes; the
+     report does not.
+  2. **Humidity is computed, not scraped.** It comes from the dew point by the
+     Magnus formula, so one fewer column has to survive a redesign.
+  3. **It degrades to nothing.** If the page changes shape the parse returns
+     `None`, the card hides, and the open-data references take over as primary.
+     A broken scrape cannot break the page.
+
+  It is also the only station that is *in Florina*, which matters more than the
+  maintenance cost: a proxy 30 km away with a five-hour lag is a worse answer
+  to "what is it doing outside" than the town itself. Attribution sits in the
+  footer.
+
 * **Headless Chrome reports `prefers-reduced-transparency: reduce` by default.**
   Any screenshot taken through CDP is therefore the *no-blur* variant unless the
   preference is explicitly emulated back to `no-preference`. It is a real

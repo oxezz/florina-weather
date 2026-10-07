@@ -9,6 +9,8 @@ payloads and check the output exactly.
 from __future__ import annotations
 
 import html
+import math
+import re
 import unicodedata
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -1340,24 +1342,221 @@ def _station_reading(entry, now_local):
     }
 
 
-def build_stations(snapshot, config, now_local):
-    """Every configured station that reported recently enough to trust."""
-    entries = snapshot.get("station")
-    if not isinstance(entries, list):
+_EMY_AUTO = re.compile(
+    r"\b(?P<station>\d{3})\s+"
+    r"(?P<day>\d{2})(?P<hour>\d{2})(?P<minute>\d{2})Z\s+"
+    r"(?:AUTO|COR|NIL)?\s*"
+    r"(?P<wind>\S+?)\s+"
+    r".*?"
+    r"(?P<temp>M?\d{2})/(?P<dew>M?\d{2})\s+"
+    r"Q(?P<pressure>\d{4})"
+)
+
+
+def _auto_value(text):
+    """An AUTO temperature: ``M03`` is minus three, not a string."""
+    if not text:
         return None
+    negative = text.startswith("M")
+    try:
+        value = float(text[1:] if negative else text)
+    except ValueError:
+        return None
+    return -value if negative else value
+
+
+def _auto_wind(token):
+    """``VRB02KT`` or ``24005KT`` -> (degrees or None, km/h).
+
+    The direction is three digits and the speed everything after them, so
+    slicing fixed offsets breaks on any speed that is not two digits.
+    """
+    if not token:
+        return None, None
+    text = str(token).strip().upper()
+
+    factor = 1.852                       # knots -> km/h
+    if text.endswith("MPS"):
+        text, factor = text[:-3], 3.6    # metres per second -> km/h
+    elif text.endswith("KT"):
+        text = text[:-2]
+    elif text.endswith("KMH"):
+        text, factor = text[:-3], 1.0
+
+    direction = None
+    if text.startswith("VRB"):
+        digits = text[3:]
+    elif len(text) > 3:
+        try:
+            direction = float(text[:3])
+        except ValueError:
+            direction = None
+        digits = text[3:]
+    else:
+        digits = text
+
+    try:
+        speed = float(digits)
+    except ValueError:
+        return direction, None
+    if direction is not None and not 0 <= direction <= 360:
+        direction = None                 # a bogus bearing is worse than none
+    return direction, round(speed * factor, 1)
+
+
+def _humidity_from_dew(temp, dew):
+    """Relative humidity from the dew point, Magnus form.
+
+    Computed rather than scraped: it is physics, and the humidity column is
+    exactly the sort of markup that changes.
+    """
+    if temp is None or dew is None:
+        return None
+    try:
+        def saturation(value):
+            return math.exp((17.625 * value) / (243.04 + value))
+        return max(1.0, min(100.0, 100.0 * saturation(dew) / saturation(temp)))
+    except (ValueError, ZeroDivisionError, OverflowError):
+        return None
+
+
+def parse_florina(payload, now_local, config, tz=None):
+    """The live reading from EMY's station in the town.
+
+    The page carries roughly a day of half-hourly AUTO reports. They are UTC
+    and name no month, so the stamp is resolved against the local clock: the
+    candidate nearest now wins, which handles both a month boundary and the
+    few hours of lag.
+
+    This is the one source that is HTML, and it is deliberately the only one
+    parsed from a machine-formatted string rather than from markup.
+    """
+    html = (payload or {}).get("html")
+    if not html or not getattr(config, "florina_enabled", True):
+        return None
+
+    # The zone comes in resolved: a stock Windows Python has no tzdata, so
+    # `_zone` returns None there and only the caller knows the fallback.
+    tz = tz or _zone(getattr(config, "timezone", "Europe/Athens")) or timezone.utc
+    base = now_local.replace(tzinfo=None)
+
     readings = []
-    for entry in entries:
-        if not isinstance(entry, dict):
+    for match in _EMY_AUTO.finditer(html):
+        fields = match.groupdict()
+        temp = _auto_value(fields.get("temp"))
+        dew = _auto_value(fields.get("dew"))
+        if temp is None:
             continue
-        reading = _station_reading(entry, now_local)
-        if reading:
-            readings.append(reading)
+        try:
+            day = int(fields["day"])
+            hour = int(fields["hour"])
+            minute = int(fields["minute"])
+            pressure = int(fields["pressure"])
+        except (KeyError, TypeError, ValueError):
+            continue
+
+        # No month in the report, so try the neighbours and keep the closest.
+        best = None
+        for offset in (-1, 0, 1):
+            year, month = _shift_month(base.year, base.month, offset)
+            try:
+                stamp = datetime(year, month, day, hour, minute,
+                                 tzinfo=timezone.utc)
+            except ValueError:
+                continue
+            local = stamp.astimezone(tz).replace(tzinfo=None)
+            gap = abs((local - base).total_seconds())
+            if best is None or gap < best[0]:
+                best = (gap, local, stamp)
+        if best is None:
+            continue
+
+        direction, speed = _auto_wind(fields.get("wind"))
+        readings.append({
+            "when": best[1],
+            "age": (base - best[1]).total_seconds(),
+            "temp": temp,
+            "dew": dew,
+            "humidity": _humidity_from_dew(temp, dew),
+            "pressure": float(pressure),
+            "wind": speed,
+            "wind_dir": direction,
+        })
+
     if not readings:
         return None
-    primaries = [r for r in readings if r["primary"]]
+    readings.sort(key=lambda r: r["when"])
+    latest = readings[-1]
+
+    limit = float(getattr(config, "florina_max_age", 3 * 3600) or 3 * 3600)
+    if latest["age"] < -1800 or latest["age"] > limit:
+        return None
+
     return {
-        "primary": primaries[0] if primaries else readings[0],
-        "all": readings,
+        "id": "16613",
+        "name": getattr(config, "florina_name", "Φλώρινα"),
+        "distance": getattr(config, "florina_site", "μέσα στην πόλη"),
+        "primary": True,
+        "observed": latest["when"].strftime("%H:%M"),
+        "age_minutes": int(round(max(0.0, latest["age"]) / 60.0)),
+        "age_text": greek.format_duration(max(0.0, latest["age"])),
+        "temp": round(latest["temp"], 1),
+        "min": None,                  # the page carries hours, not a full day
+        "max": None,
+        "day_min": None,
+        "day_max": None,
+        "samples": len(readings),
+        "humidity": (round(latest["humidity"])
+                     if latest["humidity"] is not None else None),
+        "wind": latest["wind"],
+        "gusts": None,
+        "wind_dir_text": (greek.compass(latest["wind_dir"])
+                          if latest["wind_dir"] is not None else None),
+        "rain": None,
+        "rain_today": None,
+        "pressure": round(latest["pressure"], 1),
+        "radiation": None,
+    }
+
+
+def _shift_month(year, month, offset):
+    index = (year * 12 + (month - 1)) + offset
+    return index // 12, index % 12 + 1
+
+
+def build_stations(snapshot, config, now_local, tz=None):
+    """The town station if EMY is answering, plus the open-data references.
+
+    The card shows one station and the strip at the bottom shows the rest. The
+    town's own reading leads when it is available, because a proxy 30 km away
+    is a worse answer to "what is it doing outside" than the town itself.
+    """
+    entries = snapshot.get("station")
+    references = []
+    if isinstance(entries, list):
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            reading = _station_reading(entry, now_local)
+            if reading:
+                references.append(reading)
+
+    florina = parse_florina(snapshot.get("florina"), now_local, config,
+                             tz=tz)
+    if florina:
+        # The town leads; anything else becomes a reference beside it.
+        for reading in references:
+            reading["primary"] = False
+        return {"primary": florina, "all": [florina] + references,
+                "town": True}
+
+    if not references:
+        return None
+    primaries = [r for r in references if r["primary"]]
+    return {
+        "primary": primaries[0] if primaries else references[0],
+        "all": references,
+        "town": False,
     }
 
 
@@ -1590,7 +1789,7 @@ def build_report(snapshot, config, now=None):
     air = parse_air(snapshot.get("air"))
     sky = build_sky(moon, hours, air)
     normal = build_normal(snapshot.get("normals"), today)
-    station = build_stations(snapshot, config, now_local)
+    station = build_stations(snapshot, config, now_local, tz=tz)
     comfort = build_comfort(hours)
     solar = build_solar(today, snapshot.get("normals"))
     road = build_road(snow, config, now_local)

@@ -978,6 +978,98 @@ class StationTests(unittest.TestCase):
         self.assertIsNone(self._station(rows))
 
 
+class FlorinaStationTests(unittest.TestCase):
+    """The one HTML source, and the only station actually in the town."""
+
+    # Production resolves this from the forecast payload; a stock Windows
+    # Python has no tzdata, so the tests supply it directly.
+    TZ = datetime.timezone(datetime.timedelta(hours=3))
+    NOW = datetime.datetime(2026, 10, 7, 15, 10)
+
+    def _parse(self, html=None, now=None, **config):
+        payload = {"html": fixtures.emy_florina() if html is None else html}
+        cfg = sources.Config(**config) if config else sources.Config()
+        return report.parse_florina(payload, now or self.NOW, cfg, tz=self.TZ)
+
+    def test_the_auto_report_is_parsed(self):
+        reading = self._parse()
+        self.assertIsNotNone(reading)
+        self.assertEqual(reading["name"], "Φλώρινα")
+        self.assertEqual(reading["temp"], 24.0)
+        self.assertEqual(reading["pressure"], 1021.0)
+        self.assertEqual(reading["samples"], 4)
+
+    def test_the_stamp_is_utc_and_is_shown_in_local_time(self):
+        """The report says 12:00Z, which is 15:00 in Florina in summer. Reading
+        it as local would make every reading look three hours old."""
+        reading = self._parse()
+        self.assertEqual(reading["observed"], "15:00")
+        self.assertEqual(reading["age_minutes"], 10)
+
+    def test_humidity_is_computed_from_the_dew_point(self):
+        """24 C with a 1 C dew point is dry; the physics is not scraped."""
+        reading = self._parse()
+        self.assertGreater(reading["humidity"], 15)
+        self.assertLess(reading["humidity"], 30)
+
+    def test_below_zero_temperatures_keep_their_sign(self):
+        """`M00` is minus zero in a SYNOP report, and Florina has real frost."""
+        reports = [("071200Z", "00000KT", "M03", "M05", "1023")]
+        reading = self._parse(fixtures.emy_florina(reports))
+        self.assertEqual(reading["temp"], -3.0)
+
+    def test_a_variable_wind_has_no_direction(self):
+        reading = self._parse()
+        self.assertIsNone(reading["wind_dir_text"])
+        self.assertIsNotNone(reading["wind"])
+
+    def test_a_numeric_wind_gets_a_direction(self):
+        reports = [("071200Z", "24005KT", "23", "02", "1022"),
+                   ("071130Z", "24025KT", "23", "02", "1022"),
+                   ("071100Z", "VRB03MPS", "23", "02", "1022")]
+        reading = self._parse(fixtures.emy_florina(reports))
+        self.assertIsNotNone(reading["wind_dir_text"])
+        # 5 knots is about 9 km/h.
+        self.assertAlmostEqual(reading["wind"], 9.3, places=1)
+
+    def test_the_latest_report_wins(self):
+        reading = self._parse()
+        self.assertEqual(reading["temp"], 24.0)      # the 12:00 one
+
+    def test_a_stale_page_is_dropped(self):
+        late = datetime.datetime(2026, 10, 9, 15, 10)
+        self.assertIsNone(self._parse(now=late))
+
+    def test_a_page_with_no_reports_yields_nothing(self):
+        self.assertIsNone(self._parse("<html><body>maintenance</body></html>"))
+
+    def test_the_source_can_be_switched_off(self):
+        self.assertIsNone(self._parse(florina_enabled=False))
+
+    @staticmethod
+    def _references():
+        rows = [fixtures._row("202610071300", "13.8"),
+                fixtures._row("202610071245", "13.4"),
+                fixtures._row("202610071230", "13.0")]
+        return fixtures.station(rows)
+
+    def test_the_town_leads_and_the_rest_become_references(self):
+        snapshot = {"station": self._references(), "florina": {
+            "html": fixtures.emy_florina()}}
+        built = report.build_stations(snapshot, sources.Config(), self.NOW,
+                                      tz=self.TZ)
+        self.assertTrue(built["town"])
+        self.assertEqual(built["primary"]["name"], "Φλώρινα")
+        self.assertEqual(len(built["all"]), 2)
+        self.assertFalse(built["all"][1]["primary"])
+
+    def test_without_the_town_it_falls_back_to_the_references(self):
+        built = report.build_stations({"station": self._references()},
+                                      sources.Config(), self.NOW, tz=self.TZ)
+        self.assertFalse(built["town"])
+        self.assertEqual(built["primary"]["name"], "Καστοριά")
+
+
 class NormalBiasTests(unittest.TestCase):
     """The 'normal' baseline is ERA5, which runs warm at Florina, so it is
     calibrated against fourteen years of measured days from a station in the

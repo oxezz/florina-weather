@@ -256,32 +256,37 @@
   function renderStation(station) {
     var panel = $("station-panel");
     if (!panel) return;
-    if (!station) { panel.hidden = true; return; }
+    // The payload is {primary, all}: the card shows one station and the strip
+    // at the bottom shows the rest. Reading it as flat left every field
+    // undefined, which is what put "-° τώρα" and "στις undefined" on screen.
+    var reading = station && station.primary;
+    if (!reading) { panel.hidden = true; return; }
     panel.hidden = false;
 
-    setText($("station-name"), station.name);
+    setText($("station-name"), reading.name);
     setText($("station-text"),
-      num(station.temp, 1) + "° τώρα" +
-      (station.day_min !== null && station.day_max !== null
-        ? ", " + num(station.day_min, 1) + "° έως " + num(station.day_max, 1) +
+      num(reading.temp, 1) + "° τώρα" +
+      (reading.day_min !== null && reading.day_min !== undefined &&
+       reading.day_max !== null && reading.day_max !== undefined
+        ? ", " + num(reading.day_min, 1) + "° έως " + num(reading.day_max, 1) +
           "° σήμερα"
         : ""));
 
     // The observation time is the point: this is measured, not modelled, and
     // it lags, so saying when keeps it honest rather than passing it off as
     // the current conditions.
-    var parts = ["στις " + station.observed + ", πριν " + station.age_text];
-    if (station.humidity !== null && station.humidity !== undefined) {
-      parts.push("υγρασία " + num(station.humidity) + "%");
+    var parts = ["στις " + reading.observed + ", πριν " + reading.age_text];
+    if (reading.humidity !== null && reading.humidity !== undefined) {
+      parts.push("υγρασία " + num(reading.humidity) + "%");
     }
-    if (station.wind !== null && station.wind !== undefined) {
-      parts.push("άνεμος " + num(station.wind, 1) + " km/h" +
-                 (station.wind_dir_text ? " " + station.wind_dir_text : ""));
+    if (reading.wind !== null && reading.wind !== undefined) {
+      parts.push("άνεμος " + num(reading.wind, 1) + " km/h" +
+                 (reading.wind_dir_text ? " " + reading.wind_dir_text : ""));
     }
-    if (station.rain_today !== null && station.rain_today !== undefined) {
-      parts.push("βροχή " + num(station.rain_today, 1) + " mm");
+    if (reading.rain_today !== null && reading.rain_today !== undefined) {
+      parts.push("βροχή " + num(reading.rain_today, 1) + " mm");
     }
-    parts.push(station.distance);
+    if (reading.distance) parts.push(reading.distance);
     setText($("station-detail"), parts.join(" · "));
   }
 
@@ -311,13 +316,17 @@
     var panel = $("station-strip");
     var host = $("station-refs");
     if (!panel || !host) return;
-    var all = (station && station.all) || [];
-    if (all.length < 1) { panel.hidden = true; return; }
+    // The card above already leads with the primary station, so the strip is
+    // the comparison: the others, and only the others.
+    var all = ((station && station.all) || []).filter(function (item) {
+      return !item.primary;
+    });
+    if (!all.length) { panel.hidden = true; return; }
     panel.hidden = false;
     clear(host);
 
     all.forEach(function (item) {
-      var row = el("div", "ref" + (item.primary ? " ref-main" : ""));
+      var row = el("div", "ref");
       row.appendChild(el("span", "ref-name", item.name));
       row.appendChild(el("span", "ref-temp", num(item.temp, 1) + "°"));
       row.appendChild(el("span", "ref-range",

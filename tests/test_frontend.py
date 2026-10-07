@@ -560,6 +560,17 @@ class ExtrasTests(unittest.TestCase):
         # Built through setText, never innerHTML.
         self.assertIn("setText(chip, item.emoji", self.js)
 
+    def test_the_station_card_reads_the_primary_reading(self):
+        """The payload is {primary, all} — one station for the card, the rest
+        for the strip at the bottom. Reading it as flat left every field
+        undefined, which put "-° τώρα" and "στις undefined" on screen."""
+        block = self.js.split("function renderStation(station)")[1]
+        block = block.split("\n  function ")[0]
+        self.assertIn("station.primary", block)
+        # And it must not reach for the flat fields the old shape had.
+        self.assertNotIn("station.temp", block)
+        self.assertNotIn("station.observed", block)
+
     def test_the_outfit_card_is_not_centred(self):
         """`.card` sets text-align: center, which is right for a stat tile and
         wrong for a sentence. It cannot be fixed on `.ocard` itself: `.ocard`

@@ -311,6 +311,47 @@ def _row(stamp, temp):
     }
 
 
+def emy_florina(reports=None, station="613", alt="619m"):
+    """The EMY portal page as it actually arrives.
+
+    Each row carries the raw AUTO report inside a tooltip attribute, which is
+    what the parser targets — the table cells around it are not stable.
+    """
+    if reports is None:
+        reports = [
+            ("071200Z", "VRB01KT", "24", "01", "1021"),
+            ("071130Z", "VRB02KT", "24", "01", "1021"),
+            ("071100Z", "24005KT", "23", "02", "1022"),
+            ("070500Z", "00000KT", "M00", "M01", "1023"),
+        ]
+    rows = []
+    for stamp, wind, temp, dew, qnh in reports:
+        rows.append(
+            '<tr>'
+            '<td class="col-md-2"><b>07/10/2026 %s:%s</b></td>'
+            '<td class="col-md-2 kairos-paron">'
+            '<img data-toggle="tooltip" title="%s %s AUTO %s //// // ////// '
+            '%s/%s Q%s RE//=" class="eikona-kairou-paron" width="36" '
+            'src="/emy/images/eikones_kairou/00.png"></td>'
+            '<td class="col-md-2"><b><span class="text-danger">%s<sup>o</sup>C'
+            '</span></b></td>'
+            '<td class="col-md-2 text-success"><b>21%%</b></td>'
+            '<td class="col-md-2">VARIABLE</td>'
+            '<td class="col-md-2"><b>1b</b> (1kt)</td>'
+            '<td class="col-md-2"><b>20.1<sup>o</sup>C</b></td>'
+            '</tr>'
+            % (stamp[:2], stamp[2:4], station, stamp, wind, temp, dew, qnh, temp)
+        )
+    return (
+        '<div role="tabpanel" class="tab-pane active" id="observ_table">'
+        '<p class="text text-primary"><small><b>Florina (Florina)</b> '
+        '<b>Longitute (Lon):</b> 21.43 <b>Latitute (Lat): </b>40.8 '
+        '<b>Altitute (Alt):</b> %s, <b>Area:</b>West Macedonia</small></p>'
+        '<table class="table table-condensed"><tr><th>Time</th></tr>%s</table>'
+        '</div>' % (alt, "".join(rows))
+    )
+
+
 def daily_history(days=46, end=datetime.date(2026, 10, 6)):
     """The daily-only call that feeds heating degree days.
 

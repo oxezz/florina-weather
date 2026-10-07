@@ -28,6 +28,9 @@ import sources  # noqa: E402
 def recording_opener(counter):
     """A stand-in for the network that answers from the fixtures."""
     def opener(url, timeout):
+        if "newportal.hnms.gr" in url:
+            counter["florina"] = counter.get("florina", 0) + 1
+            return fixtures.emy_florina().encode("utf-8")
         if "data.gov.gr" in url:
             # One station fetch is two calls: the package, then its datastore.
             # Only the second is counted, so the station reads as one source.
