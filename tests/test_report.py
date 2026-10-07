@@ -906,14 +906,19 @@ class SnowTests(unittest.TestCase):
 class StationTests(unittest.TestCase):
     """The one measured number on the page, which is also the most fragile."""
 
-    NOW = datetime.datetime(2026, 10, 6, 13, 30)
+    # The fixture's stamps are UTC; production resolves the zone from the
+    # forecast payload, and a stock Windows Python has no tzdata of its own.
+    TZ = datetime.timezone(datetime.timedelta(hours=3))
+    # 13:10 UTC is 16:10 in Florina in summer, so now sits just after it.
+    NOW = datetime.datetime(2026, 10, 6, 16, 30)
 
     def _station(self, rows=None, **config):
         payload = fixtures.station(rows) if rows is not None else fixtures.station()
         if config.pop("empty", False):
             payload = []
         cfg = sources.Config(**config) if config else sources.Config()
-        found = report.build_stations({"station": payload}, cfg, self.NOW)
+        found = report.build_stations({"station": payload}, cfg, self.NOW,
+                                      tz=self.TZ)
         if not found:
             return None
         return found["all"][0]
@@ -932,9 +937,21 @@ class StationTests(unittest.TestCase):
         """It lags upstream, so the age travels with it rather than being
         passed off as the current conditions."""
         station = self._station()
-        self.assertEqual(station["observed"], "13:10")
+        self.assertEqual(station["observed"], "16:10")
         self.assertEqual(station["age_minutes"], 20)
         self.assertIn("20", station["age_text"])
+
+    def test_the_stamp_is_utc_not_local(self):
+        """The field carries no zone and is UTC. Reading it as local made
+        every station look three hours older than it was and printed the
+        wrong time — checked against EMY's own portal, whose AUTO reports
+        end in Z, and against the diurnal cycle, which only lines up with a
+        local-time model after a three-hour shift."""
+        converted = report._station_time("202610061310", self.TZ)
+        self.assertEqual(converted.strftime("%H:%M"), "16:10")
+        # Without a zone it stays UTC, which is what the arithmetic needs.
+        self.assertEqual(report._station_time("202610061310").strftime("%H:%M"),
+                         "13:10")
 
     def test_it_gives_the_stations_own_day(self):
         station = self._station()
@@ -1047,9 +1064,11 @@ class FlorinaStationTests(unittest.TestCase):
 
     @staticmethod
     def _references():
-        rows = [fixtures._row("202610071300", "13.8"),
-                fixtures._row("202610071245", "13.4"),
-                fixtures._row("202610071230", "13.0")]
+        # UTC, so these land at 14:30, 14:15 and 14:00 local — comfortably
+        # before the test's 15:10 now, which the staleness guard requires.
+        rows = [fixtures._row("202610071130", "13.8"),
+                fixtures._row("202610071115", "13.4"),
+                fixtures._row("202610071100", "13.0")]
         return fixtures.station(rows)
 
     def test_the_town_leads_and_the_rest_become_references(self):

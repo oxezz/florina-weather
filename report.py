@@ -1238,19 +1238,29 @@ def build_snow(snapshot, config, now_local=None):
     }
 
 
-def _station_time(stamp):
-    """Parse an EMY station stamp, ``YYYYMMDDHHMM``, into a naive datetime.
+def _station_time(stamp, tz=None):
+    """Parse an EMY station stamp, ``YYYYMMDDHHMM``, as **UTC**.
 
-    It carries no separators and no timezone. Greek stations report their own
-    wall clock, so it is read as local and compared against a local now.
+    It carries no separators and no zone, and it is UTC rather than the wall
+    clock. Two things establish that. EMY's own portal prints the same
+    timestamps and its tooltips carry the raw AUTO report ending in ``Z``; and
+    putting the station's diurnal cycle against a local-time model cycle lines
+    them up only after a three-hour shift, at r = 0.99 against 0.96 unshifted.
+
+    Reading them as local made every station look three hours older than it
+    was, and printed the wrong observation time.
     """
     text = str(stamp or "").strip()
     if len(text) != 12 or not text.isdigit():
         return None
     try:
-        return datetime.strptime(text, "%Y%m%d%H%M")
+        parsed = datetime.strptime(text, "%Y%m%d%H%M")
     except ValueError:
         return None
+    parsed = parsed.replace(tzinfo=timezone.utc)
+    if tz is not None:
+        return parsed.astimezone(tz).replace(tzinfo=None)
+    return parsed.replace(tzinfo=None)
 
 
 def _reading(value):
@@ -1271,7 +1281,7 @@ def _reading(value):
         return None
 
 
-def _station_reading(entry, now_local):
+def _station_reading(entry, now_local, tz=None):
     """One station's latest observation, or ``None`` if it is too stale.
 
     This is the only number on the page that is measured rather than modelled,
@@ -1286,7 +1296,7 @@ def _station_reading(entry, now_local):
     if not records:
         return None
     record = records[0]
-    observed = _station_time(record.get("yyyyMMddHHmm"))
+    observed = _station_time(record.get("yyyyMMddHHmm"), tz)
     if observed is None:
         return None
 
@@ -1307,7 +1317,7 @@ def _station_reading(entry, now_local):
     rain_total = 0.0
     rain_seen = False
     for item in records:
-        stamp = _station_time(item.get("yyyyMMddHHmm"))
+        stamp = _station_time(item.get("yyyyMMddHHmm"), tz)
         if stamp is None or stamp.date() != today:
             continue
         same_day.append(item)
@@ -1555,7 +1565,7 @@ def build_stations(snapshot, config, now_local, tz=None):
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
-            reading = _station_reading(entry, now_local)
+            reading = _station_reading(entry, now_local, tz)
             if reading:
                 references.append(reading)
 

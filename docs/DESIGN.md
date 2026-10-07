@@ -284,6 +284,57 @@ the reasoning and the traps, most of which were found the hard way.
   towards tonight's risk. A clearing day read like a blizzard and a clearing
   evening read calm with snow still coming.
 
+* **EMY's station timestamps are UTC, and reading them as local was a bug.**
+  The field is `yyyyMMddHHmm` with no separators and no zone, and it is UTC.
+  Every station on the page was therefore shown with the wrong observation
+  time *and* an age three hours too large — which also meant the staleness
+  guard could hide a reading three hours before it was actually stale.
+
+  Two independent lines established it, which is why it is worth trusting:
+
+  1. EMY's own portal prints those same timestamps, and each row's tooltip
+     carries the raw AUTO report ending in `Z` — `613 071200Z AUTO …`. When
+     NOA's town station read 14:00, that page read 11:00.
+  2. Putting the station's diurnal cycle against a local-time model cycle
+     lines the two up **only after a three-hour shift, at r = 0.99 against
+     0.96 unshifted**. Before the correction the model-versus-station error
+     swung from +3.5 °C to −6.2 °C across the day, which is the shape of a
+     clock disagreement rather than of physics; after it, the mean absolute
+     error fell from **3.11 °C to 2.14 °C** and the curve flattened.
+
+  The row-of-slashes lesson repeats here in a second form: a timestamp with no
+  zone is not a timestamp until you know which zone it is in.
+
+* **The slope leg of the inversion is biased too, in the same direction.**
+  The valley leg was checked against Florina's station. The other leg is
+  EMY's station on the Vitsi ridge, which publishes no coordinates, so a model
+  point was chosen by elevation instead — its own barometer implies ~1800 m,
+  and the point used is 1759 m. Comparing 751 paired hours of archived
+  forecast against the measured record:
+
+  | | value |
+  |---|---|
+  | mean error (observed − modelled) | **−1.78 °C** |
+  | mean absolute | 2.14 °C |
+  | p10 / p90 | −3.93 / +0.54 |
+  | within 2 °C | 49 % |
+
+  The model runs about **1.8 °C too warm at 1760 m**, and the error is
+  one-sided — it is almost never too cold. Worst in the evening (−4.0 °C at
+  19:00), best around dawn.
+
+  **This is better news for the index than the valley result alone suggested.**
+  The valley is modelled too warm at night by ~1.6 °C and the ridge by ~1.0 °C
+  at the same hours. The inversion index is a *difference* between the two, so
+  biases that move together largely cancel: the index is far less biased than
+  either input. Reading the two findings together is what makes them useful —
+  either alone would have pointed the wrong way.
+
+  Caveats, stated because they matter: the two legs are 15 km and different
+  years apart (the valley check used 2024, the ridge 2026); the ridge point is
+  a grid cell against a point station on complex terrain; and the coordinates
+  are inferred, not published.
+
 * **Headless Chrome reports `prefers-reduced-transparency: reduce` by default.**
   Any screenshot taken through CDP is therefore the *no-blur* variant unless the
   preference is explicitly emulated back to `no-preference`. It is a real
