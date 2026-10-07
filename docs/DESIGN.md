@@ -179,6 +179,58 @@ the reasoning and the traps, most of which were found the hard way.
   above Kastoria — which rules out the ski-centre base at 1547 m. EMY's own
   open-data register lists station coordinates as available on request.
 
+* **The "normal" baseline is calibrated, not raw.** The ten-year baseline comes
+  from ERA5, and ERA5 runs warm at Florina. NOA publishes fourteen years of
+  daily records from a station **in the town** under **CC BY 4.0**
+  (`stations_data/florina.csv`, 5097 days, 2010–2023), so the gap is measurable
+  rather than a matter of opinion:
+
+  | Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep | Oct | Nov | Dec | year |
+  |---|---|---|---|---|---|---|---|---|---|---|---|---|
+  | −0.97 | +0.33 | +0.35 | +0.06 | −0.40 | −1.03 | −1.31 | **−1.39** | −1.04 | −0.98 | −0.63 | −0.92 | **−0.66** |
+
+  Measured minus ERA5, °C. Nine months are too warm, worst in August. Without
+  this the card said almost every day was cooler for its date than it really
+  was, by up to a degree and a half. `ERA5_BIAS_MONTHLY` in
+  [`report.py`](../report.py) applies it; `build_normal` returns the `bias` it
+  used so the number is inspectable rather than hidden.
+
+  This is calibration with evidence, not a fudge, and it is the one case where
+  the network bias against a model is *favourable* to remove rather than
+  report: the correction makes the page agree with the town.
+
+* **The archive is offline only, deliberately.** The CC BY 4.0 bundle is 5.3 MB
+  and ends at 2023, so it is not a live source and never enters the runtime
+  path — the whole point of this project is that it stays light. It was
+  downloaded once to derive the twelve numbers above, and those twelve numbers
+  are all that ships. The measured record also settles questions that were
+  guesswork before:
+
+  * **The basin signature, measured.** Mean daily swing **12.3 °C**, median
+    12.9, p90 18.3, p99 21.1, and 158 days over 20 °C. A real cold pool.
+  * **Frost is not an edge case.** 1139 of 5097 days (22.3 %) have a sub-zero
+    minimum: January 317, December 276, February 224, March 153, November 114,
+    April 31, October 23, May 1.
+  * **The trend is small.** +0.23 °C between 2010–2014 and 2019–2023, which
+    agrees with the published finding of no significant trend at Florina over
+    1960–2004 while the rest of Macedonia warmed.
+  * **The data has spikes.** One day in the CSV shows an 87.9 °C swing — a
+    sensor glitch, not a climate. Anything consuming this must sanity-check
+    rather than trust.
+
+* **Licensing, and why scraping was the wrong instinct.** Three sources, three
+  different positions:
+
+  | Source | Terms |
+  |---|---|
+  | NOA archive on data.gov.gr | **CC BY 4.0** — attribute, nothing else |
+  | EMY `newportal.hnms.gr` | CC BY-NC-ND 4.0 — attribution required; NC satisfied by a free, unmonetised page; ND concerns redistributing modified copies, not displaying a measurement |
+  | `penteli.meteo.gr` pages | the site's terms require **consent and a logo**, so they are not usable as a scrape target — and the CC BY 4.0 dataset makes scraping them pointless anyway |
+
+  The lesson worth keeping: when a site's terms look restrictive, check whether
+  the same organisation publishes the same data on the national open-data
+  portal. NOA does, under a licence that asks for nothing but credit.
+
 * **Headless Chrome reports `prefers-reduced-transparency: reduce` by default.**
   Any screenshot taken through CDP is therefore the *no-blur* variant unless the
   preference is explicitly emulated back to `no-preference`. It is a real

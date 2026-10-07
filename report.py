@@ -1068,6 +1068,36 @@ def build_sky(moon, hours, air):
     }
 
 
+# The ten-year baseline the "normal" card compares against is ERA5, and ERA5
+# runs warm at Florina. This is by how much, month by month, measured against
+# fourteen years of daily records from a station in the town itself: 5097 days,
+# 2010-2023, every month except February, March and April too warm, up to
+# 1.39 °C in August and 0.66 °C across the year.
+#
+# Applying it is calibration with evidence rather than a fudge — leaving it off
+# made almost every day read colder relative to normal than it really was.
+# Regenerate with the source below if the baseline period ever changes.
+#
+# Source: Εθνικό Αστεροσκοπείο Αθηνών / meteo.gr, "Ημερήσιες μετεωρολογικές
+# παράμετροι για την περίοδο 2010-2023", data.gov.gr, CC BY 4.0.
+ERA5_BIAS_MONTHLY = (
+    0.0,                                    # index 0 is unused
+    -0.97, 0.33, 0.35, 0.06, -0.40, -1.03,
+    -1.31, -1.39, -1.04, -0.98, -0.63, -0.92,
+)
+
+
+def era5_bias(month):
+    """Measured minus ERA5 for a month, or 0.0 outside 1-12."""
+    try:
+        month = int(month)
+    except (TypeError, ValueError):
+        return 0.0
+    if 1 <= month <= 12:
+        return ERA5_BIAS_MONTHLY[month]
+    return 0.0
+
+
 def build_normal(normals, today):
     """How today compares with the same date over the past decade.
 
@@ -1090,7 +1120,13 @@ def build_normal(normals, today):
     if len(seen) < 3:                            # too few years to call it normal
         return None
 
-    mean = sum(seen) / len(seen)
+    try:
+        month = int(target[:2])
+    except ValueError:
+        month = 0
+    bias = era5_bias(month)
+    mean = sum(seen) / len(seen) + bias
+
     today_mean = today.get("mean")
     if today_mean is None:
         low, high = today.get("min"), today.get("max")
@@ -1103,8 +1139,9 @@ def build_normal(normals, today):
         "value": round(mean, 1),
         "today": round(today_mean, 1),
         "delta": round(delta, 1),
+        "bias": round(bias, 2),
         "years": len(seen),
-        "range": [round(min(seen), 1), round(max(seen), 1)],
+        "range": [round(min(seen) + bias, 1), round(max(seen) + bias, 1)],
         "warmer": delta >= 0,
         "text": greek.normal_text(delta),
     }

@@ -978,6 +978,59 @@ class StationTests(unittest.TestCase):
         self.assertIsNone(self._station(rows))
 
 
+class NormalBiasTests(unittest.TestCase):
+    """The 'normal' baseline is ERA5, which runs warm at Florina, so it is
+    calibrated against fourteen years of measured days from a station in the
+    town. Without the correction almost every day read colder than it was."""
+
+    def test_the_table_covers_every_month(self):
+        self.assertEqual(len(report.ERA5_BIAS_MONTHLY), 13)
+        for month in range(1, 13):
+            self.assertLess(abs(report.ERA5_BIAS_MONTHLY[month]), 2.0)
+
+    def test_known_months_match_the_measurement(self):
+        # Measured minus ERA5, from 5097 days at Florina, 2010-2023.
+        self.assertAlmostEqual(report.era5_bias(8), -1.39, places=2)
+        self.assertAlmostEqual(report.era5_bias(1), -0.97, places=2)
+        self.assertAlmostEqual(report.era5_bias(2), 0.33, places=2)
+
+    def test_most_months_are_too_warm_in_era5(self):
+        """The direction matters: a warm baseline makes ordinary days look
+        cool for their date."""
+        too_warm = [m for m in range(1, 13) if report.era5_bias(m) < 0]
+        self.assertEqual(len(too_warm), 9)
+        for month in (2, 3, 4):
+            self.assertNotIn(month, too_warm)
+
+    def test_out_of_range_months_are_not_an_error(self):
+        for bad in (0, 13, -1, None, "", "August"):
+            self.assertEqual(report.era5_bias(bad), 0.0)
+
+    def test_the_normal_is_the_raw_mean_plus_the_correction(self):
+        normals = fixtures.normals()
+        raw = [v for s, v in zip(normals["daily"]["time"],
+                                 normals["daily"]["temperature_2m_mean"])
+               if s[5:] == "08-15" and v is not None]
+        expected = sum(raw) / len(raw) - 1.39
+        result = report.build_normal(
+            normals, {"iso": "2026-08-15", "mean": 24.0})
+        self.assertAlmostEqual(result["value"], expected, places=1)
+        self.assertAlmostEqual(result["bias"], -1.39, places=2)
+
+    def test_the_delta_still_reconciles(self):
+        result = report.build_normal(
+            fixtures.normals(), {"iso": "2026-01-20", "mean": 5.0})
+        self.assertAlmostEqual(result["value"],
+                               result["today"] - result["delta"], places=1)
+
+    def test_the_quoted_range_still_brackets_the_value(self):
+        result = report.build_normal(
+            fixtures.normals(), {"iso": "2026-08-15", "mean": 24.0})
+        low, high = result["range"]
+        self.assertLessEqual(low, result["value"])
+        self.assertLessEqual(result["value"], high)
+
+
 class DegradedTests(unittest.TestCase):
 
     def test_status_reports_errors_and_age(self):
