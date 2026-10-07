@@ -869,39 +869,38 @@ class NormalTests(unittest.TestCase):
 
 
 class SnowTests(unittest.TestCase):
-    """Snow on the mountains, shown only when there is any."""
+    """Snow on the mountains. It was its own card once and hid itself out of
+    season; it now feeds the mountain card, which needs it in July too."""
 
     def _snow(self, local_only=True, **kwargs):
         data = report.build_report(snapshot(snow=fixtures.snow(**kwargs)),
                                    sources.Config(), now=NOW)
-        return (data["local"] or {}).get("snow")
+        return (data.get("mountain") or {}).get("depth"), data
 
-    def test_a_green_winter_hides_the_card(self):
-        self.assertIsNone(self._snow())
+    def test_a_green_winter_still_reports_zero_depth(self):
+        """The old card hid itself; the mountain card cannot, because the
+        summer half needs the same forecast."""
+        depth, data = self._snow()
+        self.assertEqual(depth, 0.0)
+        self.assertIsNotNone(data["mountain"])
 
-    def test_a_fall_shows_it(self):
-        snow = self._snow(fall=[3.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-        self.assertIsNotNone(snow)
-        self.assertEqual(len(snow["points"]), 2)
-        self.assertAlmostEqual(snow["fall"], 16.0, places=1)
-        # Highest ground first, so the card reads top-down.
-        self.assertGreater(snow["points"][0]["elevation"],
-                           snow["points"][1]["elevation"])
+    def test_a_fall_reaches_the_card(self):
+        depth, data = self._snow(fall=[3.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        self.assertIsNotNone(data["mountain"])
+        # The pass's own total, not the sum across both points: the card names
+        # one place, and adding a second location would inflate it.
+        self.assertAlmostEqual(data["mountain"]["fall"], 8.0, places=1)
+        self.assertEqual(data["mountain"]["season"], "winter")
 
-    def test_a_shallow_cover_hides_it(self):
-        # Half a centimetre is not worth a card.
-        self.assertIsNone(self._snow(fall=[0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]))
-
-    def test_depth_alone_is_enough(self):
+    def test_depth_is_converted_to_centimetres(self):
         # snow_depth is metres of water equivalent; 0.10 m becomes 10 cm.
-        snow = self._snow(depth=[0.10, 0.10, 0.0, 0.0, 0.0, 0.0, 0.0])
-        self.assertIsNotNone(snow)
-        self.assertAlmostEqual(snow["deepest"], 10.0, places=1)
+        depth, _ = self._snow(depth=[0.10, 0.10, 0.0, 0.0, 0.0, 0.0, 0.0])
+        self.assertAlmostEqual(depth, 10.0, places=1)
 
     def test_missing_snow_data_is_not_an_error(self):
         data = report.build_report(snapshot(snow=None),
                                    sources.Config(), now=NOW)
-        self.assertIsNone((data["local"] or {}).get("snow"))
+        self.assertIsNone(data["mountain"])
 
 
 class StationTests(unittest.TestCase):
@@ -1068,6 +1067,91 @@ class FlorinaStationTests(unittest.TestCase):
                                       sources.Config(), self.NOW, tz=self.TZ)
         self.assertFalse(built["town"])
         self.assertEqual(built["primary"]["name"], "Καστοριά")
+
+
+class MountainCardTests(unittest.TestCase):
+    """One card, two seasons, one forecast. The station on the ridge is real
+    but its feed batches a day or more behind, so conditions come from the
+    model and the station is used for validation instead."""
+
+    OCT = datetime.datetime(2026, 10, 6, 21, 59)
+    JAN = datetime.datetime(2027, 1, 15, 9, 0)
+
+    def _card(self, now, snow=None, **over):
+        payload = {'forecast': fixtures.forecast(), 'air': fixtures.air(),
+                   'history': fixtures.daily_history(),
+                   'terrain': fixtures.terrain(), 'normals': fixtures.normals(),
+                   'snow': snow if snow is not None else fixtures.snow(),
+                   'station': fixtures.station(), 'alerts': fixtures.alerts(),
+                   'ages': {}, 'errors': {}, 'stale': False}
+        payload.update(over)
+        return report.build_report(payload, sources.Config(), now=now)
+
+    @staticmethod
+    def _winter():
+        return fixtures.snow(fall=[8.0, 4.0, 2.0, 0, 0, 0, 0],
+                             depth=[0.45, 0.50, 0.52, 0, 0, 0, 0],
+                             hourly_temp=-3.0, hourly_precip=0.8,
+                             freezing=1200, start=datetime.datetime(2027, 1, 15))
+
+    def test_summer_mode_out_of_season(self):
+        card = self._card(self.OCT)["mountain"]
+        self.assertEqual(card["season"], "summer")
+        self.assertEqual(card["emoji"], "🥾")
+        self.assertEqual(card["label"], "Καλοκαιρινή απόδραση")
+
+    def test_winter_mode_in_january(self):
+        card = self._card(self.JAN, self._winter())["mountain"]
+        self.assertEqual(card["season"], "winter")
+        self.assertEqual(card["emoji"], "🎿")
+
+    def test_snow_overrides_the_month(self):
+        """An unseasonal fall in October should still switch the card over."""
+        early = fixtures.snow(depth=[0.10] * 7, hourly_temp=-1.0,
+                              start=datetime.datetime(2026, 10, 6))
+        card = self._card(self.OCT, early)["mountain"]
+        self.assertEqual(card["season"], "winter")
+
+    def test_the_gap_is_the_city_minus_the_mountain(self):
+        card = self._card(self.OCT)["mountain"]
+        self.assertAlmostEqual(card["gap"],
+                               card["city_temp"] - card["temp"], places=1)
+        self.assertIn("πιο δροσερά", card["gap_text"])
+
+    def test_a_missing_city_reading_does_not_break_the_hint(self):
+        four = fixtures.snow(hourly_temp=14.0,
+                             start=datetime.datetime(2026, 10, 6))
+        card = self._card(self.OCT, four)["mountain"]
+        self.assertIsNotNone(card)
+        self.assertIsNotNone(card["temp"])
+        self.assertTrue(card["hint"])
+
+    def test_winter_mode_carries_the_road(self):
+        card = self._card(self.JAN, self._winter())["mountain"]
+        self.assertEqual(card["road_key"], "closed")
+        self.assertIn("αλυσίδες", card["hint"])
+        self.assertEqual(card["depth"], 52.0)
+
+    def test_the_road_and_snow_cards_are_gone(self):
+        """They were merged into this one, so the local block must not still
+        carry them or the page shows the same thing twice."""
+        data = self._card(self.JAN, self._winter())
+        local = data.get("local") or {}
+        self.assertNotIn("road", local)
+        self.assertNotIn("snow", local)
+
+    def test_no_mountain_data_is_not_an_error(self):
+        data = self._card(self.OCT, snow=[])
+        self.assertIsNone(data["mountain"])
+
+    def test_the_hours_start_now_not_midnight(self):
+        """Risk counted from midnight made a clearing day look like a blizzard
+        and a clearing evening look calm when snow was still coming."""
+        snow = fixtures.snow(start=datetime.datetime(2026, 10, 6))
+        built = report.build_snow({"snow": snow}, sources.Config(), self.OCT)
+        first = built["hours"][0]
+        self.assertTrue(first["now"])
+        self.assertTrue(first["iso"].startswith("2026-10-06T21"))
 
 
 class NormalBiasTests(unittest.TestCase):

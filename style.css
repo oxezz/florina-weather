@@ -475,6 +475,33 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--glass-border-soft);
 }
 
+/* --------------------------------------------------- mountain card ------ */
+
+/* Three metrics that change meaning with the season: the labels and values are
+   swapped by the season, the layout never is. */
+.mountain-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+.m-item {
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border-soft);
+  text-align: left;
+}
+.m-item .big { font-size: 1.22rem; }
+.mountain-hint {
+  margin: 14px 0 0;
+  font-size: .84rem;
+  line-height: 1.5;
+  color: var(--accent);
+  text-align: left;
+}
+
 /* ------------------------------------------------------- station refs ---- */
 
 /* Two nearby real stations, side by side at the bottom. The point of them is

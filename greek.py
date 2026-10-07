@@ -552,6 +552,77 @@ def road_text(key, risk_hours):
     return "Λίγο χιόνι ψηλά, ο δρόμος συνήθως ανοιχτός."
 
 
+# The mountain card answers a different question in winter than in summer:
+# "can I get up there and is there snow" versus "is it worth driving up to
+# escape the heat". Two vocabularies rather than one.
+_MOUNTAIN_LABELS = {
+    "winter": ("Χειμερινή σεζόν", "🎿"),
+    "summer": ("Καλοκαιρινή απόδραση", "🥾"),
+}
+
+
+def mountain_season(month, depth=0.0, fall=0.0):
+    """Winter from November to March, or any time it snows.
+
+    The snow test comes first so an unseasonal fall in October or April still
+    switches the card over — the month is the rule, the snow is the override.
+    Fresh snow counts as well as lying snow: a dump in October is a ski day
+    even before there is anything settled on the ground.
+    """
+    try:
+        if float(depth or 0) >= 2.0 or float(fall or 0) >= 2.0:
+            return "winter"
+    except (TypeError, ValueError):
+        pass
+    try:
+        month = int(month)
+    except (TypeError, ValueError):
+        return "summer"
+    return "winter" if month >= 11 or month <= 3 else "summer"
+
+
+def mountain_label(season):
+    """(Greek label, emoji) for a season key."""
+    return _MOUNTAIN_LABELS.get(season, _MOUNTAIN_LABELS["summer"])
+
+
+def winter_hint(road_key, temp, wind, depth):
+    """One line for a winter visit, worst thing first."""
+    if road_key in ("warn", "severe", "closed"):
+        return "Απαραίτητες αλυσίδες ή χιονολάστιχα για το διάσελο."
+    if isinstance(temp, (int, float)) and temp <= -6:
+        return "Δυνατό κρύο στο ύψωμα — πολλά στρώματα και γάντια."
+    if isinstance(wind, (int, float)) and wind >= 45:
+        return "Δυνατός αέρας στο ύψωμα — προσοχή στους αναβατήρες."
+    if not depth or depth < 2.0:
+        return "Δεν έχει χιόνι ακόμα — ο δρόμος είναι συνήθως ανοιχτός."
+    return "Καλές συνθήκες για σκι στο Πισοδέρι."
+
+
+def summer_hint(gap, temp, wind):
+    """One line for a summer visit. The temperature gap is the whole point."""
+    if isinstance(gap, (int, float)) and gap >= 8:
+        return "Πάνω από 8° πιο δροσερά από την πόλη — αξίζει η ανάβαση."
+    if isinstance(wind, (int, float)) and wind >= 40:
+        return "Δυνατός αέρας στο ύψωμα — πάρε κάτι ζεστό μαζί."
+    if isinstance(temp, (int, float)) and temp >= 24:
+        return "Ζέστη ακόμα και ψηλά — ξεκίνα νωρίς το πρωί."
+    if isinstance(temp, (int, float)) and temp <= 8:
+        return "Δροσερό ακόμα και το καλοκαίρι — πάρε ζακέτα."
+    return "Ιδανική θερμοκρασία για πεζοπορία στο δάσος της οξιάς."
+
+
+def mountain_gap_text(gap):
+    """How much cooler the mountain is, phrased for a headline."""
+    try:
+        value = float(gap)
+    except (TypeError, ValueError):
+        return ""
+    if value <= 0:
+        return "ίδια περίπου με την πόλη"
+    return "%.1f° πιο δροσερά από την πόλη" % value
+
+
 def normal_text(delta):
     """How today compares with the decade's average for the same date."""
     try:

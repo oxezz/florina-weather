@@ -600,7 +600,8 @@ class WeatherService:
             "longitude": ",".join(str(p["lon"]) for p in cfg.snow_points),
             "daily": ("snowfall_sum,snow_depth_max,"
                       "temperature_2m_min,temperature_2m_max"),
-            "hourly": "temperature_2m,precipitation,freezing_level_height",
+            "hourly": ("temperature_2m,precipitation,freezing_level_height,"
+                       "wind_speed_10m"),
             "forecast_days": min(cfg.forecast_days, 5),
             "timezone": cfg.timezone,
         }

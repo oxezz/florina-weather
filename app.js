@@ -235,23 +235,6 @@
     node.hidden = false;
   }
 
-  function renderSnow(snow) {
-    var card = $("local-snow");
-    if (!card) return 0;
-    if (!snow || !snow.points || !snow.points.length) {
-      card.hidden = true;
-      return 0;
-    }
-    card.hidden = false;
-    toneFor(card, "#bae6fd");
-
-    setBig("snow-val", num(snow.deepest, 0) + " εκ.");
-    setText($("snow-sub"), snow.points.map(function (point) {
-      return point.name + " " + num(point.elevation) + " μ. · " +
-             num(point.fall, 1) + " εκ.";
-    }).join(" · "));
-    return 1;
-  }
 
   function renderStation(station) {
     var panel = $("station-panel");
@@ -341,20 +324,59 @@
     });
   }
 
-  function renderRoad(road) {
-    var card = $("local-road");
-    if (!card) return 0;
-    if (!road) { card.hidden = true; return 0; }
-    card.hidden = false;
-    toneFor(card, road.color);
-    setBig("road-val", num(road.elevation) + " μ.");
-    var parts = [road.label];
-    if (road.depth) parts.push("χιόνι " + num(road.depth, 1) + " εκ.");
-    if (road.fall) parts.push("νέα χιόνι " + num(road.fall, 1) + " εκ.");
-    if (road.freezing) parts.push("παγώνει στα " + num(road.freezing) + " μ.");
-    setText($("road-sub"), parts.join(" · "));
-    card.title = road.text || "";
-    return 1;
+
+  function renderMountain(mountain) {
+    var panel = $("mountain-panel");
+    if (!panel) return;
+    if (!mountain) { panel.hidden = true; return; }
+    panel.hidden = false;
+
+    var winter = mountain.season === "winter";
+    setText($("mountain-ico"), mountain.emoji);
+    setText($("mountain-name"), mountain.name);
+    setText($("mountain-season"), mountain.label);
+    setText($("mountain-temp"),
+      (mountain.temp === null ? "–" : num(mountain.temp, 1) + "°"));
+    // The elevation, in both seasons. The temperature gap gets its own metric
+    // below, and repeating it here printed the same number twice.
+    setText($("mountain-gap"),
+      mountain.elevation ? num(mountain.elevation) + " μ." : "");
+
+    if (winter) {
+      setText($("mountain-second-lbl"), "Χιόνι στο διάσελο");
+      setText($("mountain-second"), num(mountain.depth, 0) + " εκ.");
+      setText($("mountain-second-sub"),
+        mountain.fall >= 1 ? "νέα χιόνι " + num(mountain.fall, 1) + " εκ." : "χωρίς νέα χιόνι");
+
+      var road = mountain.road;
+      setText($("mountain-third-lbl"), "Πρόσβαση");
+      setText($("mountain-third"), road ? road.label : "Ανοιχτός");
+      setText($("mountain-third-sub"),
+        road && road.freezing ? "παγώνει στα " + num(road.freezing) + " μ." : "");
+      var third = $("mountain-third");
+      if (third && third.parentNode) {
+        toneFor(third.parentNode, road ? road.color : null);
+      }
+    } else {
+      setText($("mountain-second-lbl"), "Πιο δροσερά από την πόλη");
+      setText($("mountain-second"),
+        mountain.gap === null ? "–" : num(mountain.gap, 1) + "°");
+      setText($("mountain-second-sub"),
+        mountain.city_temp === null ? "" : "πόλη " + num(mountain.city_temp, 1) + "°");
+
+      setText($("mountain-third-lbl"), "Άνεμος");
+      setText($("mountain-third"),
+        mountain.wind === null ? "–" : num(mountain.wind, 1) + " km/h");
+      setText($("mountain-third-sub"),
+        mountain.wind === null ? "" :
+        (mountain.wind >= 40 ? "δυνατός στο ύψωμα" : "ήπιος στο ύψωμα"));
+      var thirdSummer = $("mountain-third");
+      if (thirdSummer && thirdSummer.parentNode) {
+        toneFor(thirdSummer.parentNode, null);
+      }
+    }
+
+    setText($("mountain-hint"), mountain.hint || "");
   }
 
   function renderGreeting(greeting) {
@@ -786,8 +808,7 @@
 
     var shown = 0;
     shown += renderInversion(local.inversion);
-    shown += renderRoad(local.road);
-    shown += renderSnow(local.snow);
+
     shown += renderFrost(local.frost);
     shown += renderHeating(local.heating);
     shown += renderSmog(local.smog);
@@ -971,6 +992,7 @@
     safely("outfit", function () { renderOutfit(data.outfit); });
     safely("station", function () { renderStation(data.station); });
     safely("refs", function () { renderStationRefs(data.station); });
+    safely("mountain", function () { renderMountain(data.mountain); });
     safely("comfort", function () { renderComfort(data.comfort); });
     safely("solar", function () { renderSolar(data.solar); });
     safely("sky", function () { renderSky(data.sky); });

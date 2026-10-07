@@ -633,14 +633,12 @@ def build_local_conditions(snapshot, days, forecast_hourly, now_local, config,
                            snow=None):
     """Assemble the hyper-local block, dropping anything with nothing to say.
 
-    ``snow`` is passed in because the road status needs it too, and fetching a
-    forecast twice for the same two points would be wasteful.
+    The mountain road and the snow depth used to be two cards here. They are
+    now one seasonal card of their own, because they answer the same question
+    on the same day and read the same forecast — see :func:`build_mountain`.
     """
     blocks = {
         "inversion": build_inversion(snapshot.get("terrain"), config, now_local),
-        "road": build_road(snow if snow is not None else build_snow(snapshot, config),
-                           config, now_local),
-        "snow": snow if snow is not None else build_snow(snapshot, config),
         "frost": build_frost(days, forecast_hourly),
         "heating": build_heating(snapshot.get("history"), now_local),
         "smog": build_smog(_air_hourly(snapshot.get("air")),
@@ -1149,7 +1147,7 @@ def build_normal(normals, today):
     }
 
 
-def build_snow(snapshot, config):
+def build_snow(snapshot, config, now_local=None):
     """Snow at the ski area, when there is any worth reporting.
 
     Returns ``None`` out of season: a row of zeros all summer is noise.
@@ -1178,8 +1176,10 @@ def build_snow(snapshot, config):
         deepest = max(depths) if depths else 0.0
         # snow_depth is metres of water equivalent, snowfall is centimetres.
         depth_cm = deepest * 100.0
-        if total_fall < 1.0 and depth_cm < 2.0:
-            continue                              # nothing to say
+        # No "nothing to say" gate here any more. Snow used to be its own card
+        # and hid itself out of season; the mountain card needs the same
+        # forecast in July, when the temperature gap is the point and the snow
+        # depth is legitimately zero.
 
         points.append({
             "key": place.get("key") or str(index),
@@ -1203,13 +1203,31 @@ def build_snow(snapshot, config):
     temps = top_hourly.get("temperature_2m") or []
     precip = top_hourly.get("precipitation") or []
     levels = top_hourly.get("freezing_level_height") or []
-    for index, stamp in enumerate(stamps[:36]):          # 36 hours is plenty
+    winds = top_hourly.get("wind_speed_10m") or []
+    gusts = top_hourly.get("wind_gusts_10m") or []
+
+    # Sliced from the current hour forward, not from midnight. The road status
+    # is about what is coming, and counting the morning's snow towards this
+    # evening's risk made a clearing day look like a blizzard.
+    start = 0
+    if now_local is not None:
+        key = now_local.strftime("%Y-%m-%dT%H")
+        for index, stamp in enumerate(stamps):
+            if str(stamp)[:13] >= key:
+                start = index
+                break
+        else:
+            start = max(0, len(stamps) - 36)
+
+    for index in range(start, min(start + 36, len(stamps))):
         hours.append({
-            "iso": str(stamp),
-            "time": str(stamp)[11:16],
+            "iso": str(stamps[index]),
+            "time": str(stamps[index])[11:16],
+            "now": index == start,
             "temp": _at(temps, index),
             "precip": _at(precip, index, 0.0),
             "freezing": _at(levels, index),
+            "wind": _at(winds, index),
         })
 
     return {
@@ -1694,6 +1712,75 @@ def build_road(snow, config, now_local):
     }
 
 
+def build_mountain(snow, road, current, config, now_local):
+    """One card for Vitsi / Pisoderi, which changes with the season.
+
+    Winter asks whether the road is passable and whether there is snow; summer
+    asks whether it is worth driving up to escape the heat. Both read the same
+    forecast at the same point, so they share a card and cost nothing extra.
+
+    The forecast is the only option for current conditions here. EMY's station
+    on the ridge is real and sits at roughly the right height, but its feed
+    arrives in batches running from hours to more than a day behind, so it is
+    an archive rather than a live reading — see DESIGN.md.
+    """
+    if not snow or not snow.get("points"):
+        return None
+    points = snow["points"]
+    top = points[0] if points else None
+    if not top:
+        return None
+
+    month = getattr(now_local, "month", None)
+    depth = top.get("depth") or 0.0
+    fall = top.get("fall") or 0.0
+    season = greek.mountain_season(month, depth, fall)
+    label, emoji = greek.mountain_label(season)
+
+    hours = snow.get("hours") or []
+    now_hour = None
+    for hour in hours:
+        if hour.get("now"):
+            now_hour = hour
+            break
+    if now_hour is None and hours:
+        now_hour = hours[0]
+
+    mountain_temp = now_hour.get("temp") if now_hour else None
+    mountain_wind = None
+    if now_hour is not None and _is_number(now_hour.get("wind")):
+        mountain_wind = now_hour["wind"]
+
+    city_temp = (current or {}).get("temp")
+    gap = None
+    if _is_number(city_temp) and _is_number(mountain_temp):
+        gap = round(city_temp - mountain_temp, 1)
+
+    road_key = (road or {}).get("level") or "none"
+    if season == "winter":
+        hint = greek.winter_hint(road_key, mountain_temp, mountain_wind, depth)
+    else:
+        hint = greek.summer_hint(gap, mountain_temp, mountain_wind)
+
+    return {
+        "name": "Βίτσι / Πισοδέρι",
+        "season": season,
+        "label": label,
+        "emoji": emoji,
+        "elevation": top.get("elevation"),
+        "temp": (round(mountain_temp, 1) if _is_number(mountain_temp) else None),
+        "city_temp": (round(city_temp, 1) if _is_number(city_temp) else None),
+        "wind": mountain_wind,
+        "gap": gap,
+        "gap_text": greek.mountain_gap_text(gap) if gap is not None else "",
+        "depth": round(depth, 1),
+        "fall": round(float(fall), 1),
+        "road": road,
+        "road_key": road_key,
+        "hint": hint,
+    }
+
+
 def build_report(snapshot, config, now=None):
     """Assemble the JSON document served at ``/api/weather``."""
     forecast = snapshot.get("forecast")
@@ -1780,7 +1867,7 @@ def build_report(snapshot, config, now=None):
 
     # Built once and shared: the road status needs the same forecast the snow
     # card reads, and fetching those two points twice would be wasteful.
-    snow = build_snow(snapshot, config)
+    snow = build_snow(snapshot, config, now_local)
 
     local = build_local_conditions(snapshot, days, hourly_raw, now_local, config,
                                    snow)
@@ -1793,6 +1880,7 @@ def build_report(snapshot, config, now=None):
     comfort = build_comfort(hours)
     solar = build_solar(today, snapshot.get("normals"))
     road = build_road(snow, config, now_local)
+    mountain = build_mountain(snow, road, current, config, now_local)
 
     ages = snapshot.get("ages") or {}
     errors = snapshot.get("errors") or {}
@@ -1816,6 +1904,7 @@ def build_report(snapshot, config, now=None):
         "station": station,
         "comfort": comfort,
         "solar": solar,
+        "mountain": mountain,
         "air": air,
         "alerts": alerts,
         "status": {

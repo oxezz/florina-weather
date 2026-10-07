@@ -226,15 +226,22 @@ SNOW_POINTS = ((40.7722, 21.2682, 1535.0), (40.7833, 21.2500, 1426.0))
 
 
 def snow(fall=None, depth=None, points=SNOW_POINTS, days=7,
-         hours=None, hourly_temp=4.0, hourly_precip=0.0, freezing=None):
-    """The two-location call. Defaults to no snow, as in summer."""
+         hours=None, hourly_temp=4.0, hourly_precip=0.0, freezing=None,
+         hourly_wind=12.0, start=None):
+    """The two-location call. Defaults to no snow, as in summer.
+
+    ``start`` moves the window, which the seasonal tests need: the mountain
+    card decides winter from the month, so a January case has to be built on a
+    January forecast rather than an October one.
+    """
     fall = list(fall or [0.0] * days)
     depth = list(depth or [0.0] * days)
+    anchor = start or START
     out = []
     for lat, lon, elevation in points:
-        times = [(START + datetime.timedelta(days=d)).strftime("%Y-%m-%d")
+        times = [(anchor + datetime.timedelta(days=d)).strftime("%Y-%m-%d")
                  for d in range(days)]
-        hourly_times = [(START + datetime.timedelta(hours=h)).strftime(
+        hourly_times = [(anchor + datetime.timedelta(hours=h)).strftime(
             "%Y-%m-%dT%H:%M") for h in range(days * 24)]
         out.append({
             "latitude": lat, "longitude": lon, "elevation": elevation,
@@ -252,6 +259,7 @@ def snow(fall=None, depth=None, points=SNOW_POINTS, days=7,
                 "freezing_level_height": [
                     freezing if freezing is not None else elevation + 400
                 ] * len(hourly_times),
+                "wind_speed_10m": [hourly_wind] * len(hourly_times),
             },
         })
     return out

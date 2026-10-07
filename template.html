@@ -241,33 +241,6 @@
         πιθανότητα είναι τουλάχιστον τόση.
       </p>
     </div>
-    <div class="local-card" id="local-road" hidden>
-      <span class="lbl">Διάσελο Βίγλας
-        <button class="info" type="button" aria-expanded="false"
-                aria-controls="hint-road" aria-label="Τι σημαίνει;">?</button>
-      </span>
-      <span class="val" id="road-val"></span>
-      <span class="sub" id="road-sub"></span>
-      <p class="hint" id="hint-road" hidden>
-        Ο δρόμος για το χιονοδρομικό περνάει από διάσελο στα 1.773 μέτρα, πολύ
-        ψηλότερα από την πόλη. Βροχή εδώ μπορεί να είναι χιόνι εκεί πάνω, γι'
-        αυτό κοιτάμε το ύψος στο οποίο παγώνει ο αέρας και όχι τη θερμοκρασία
-        της Φλώρινας. Η κάρτα εμφανίζεται μόνο όταν υπάρχει λόγος.
-      </p>
-    </div>
-    <div class="local-card" id="local-snow" hidden>
-      <span class="lbl">Χιόνι στα βουνά
-        <button class="info" type="button" aria-expanded="false"
-                aria-controls="hint-snow" aria-label="Τι σημαίνει;">?</button>
-      </span>
-      <span class="val" id="snow-val"></span>
-      <span class="sub" id="snow-sub"></span>
-      <p class="hint" id="hint-snow" hidden>
-        Χιόνι στα κοντινά υψώματα, από τα ίδια δεδομένα με την πρόβλεψη.
-        Ο αριθμός είναι το βαθύτερο στρώμα χιονιού τις επόμενες ημέρες, σε
-        εκατοστά. Η κάρτα εμφανίζεται μόνο όταν υπάρχει χιόνι να αναφερθεί.
-      </p>
-    </div>
     <div class="local-card" id="local-frost" hidden>
       <span class="lbl">Κίνδυνος παγετού
         <button class="info" type="button" aria-expanded="false"
@@ -310,6 +283,47 @@
       </p>
     </div>
   </div>
+</section>
+
+<section class="card glass panel" id="mountain-panel" hidden>
+  <div class="panel-head">
+    <h2><span id="mountain-ico" aria-hidden="true">&#127935;</span>
+      Ορεινή εξόρμηση &middot; <span id="mountain-name"></span></h2>
+    <span class="chip" id="mountain-season"></span>
+    <button class="info" type="button" aria-expanded="false"
+            aria-controls="hint-mountain" aria-label="Τι σημαίνει;">?</button>
+  </div>
+  <div class="mountain-grid">
+    <div class="m-item">
+      <span class="lbl">Θερμοκρασία</span>
+      <span class="big" id="mountain-temp"></span>
+      <span class="sub" id="mountain-gap"></span>
+    </div>
+    <div class="m-item">
+      <span class="lbl" id="mountain-second-lbl"></span>
+      <span class="big" id="mountain-second"></span>
+      <span class="sub" id="mountain-second-sub"></span>
+    </div>
+    <div class="m-item">
+      <span class="lbl" id="mountain-third-lbl"></span>
+      <span class="big" id="mountain-third"></span>
+      <span class="sub" id="mountain-third-sub"></span>
+    </div>
+  </div>
+  <p class="mountain-hint" id="mountain-hint"></p>
+  <p class="hint" id="hint-mountain" hidden>
+    Το ίδιο σημείο απαντά άλλο ερώτημα τον χειμώνα και άλλο το καλοκαίρι, γι'
+    αυτό η κάρτα αλλάζει μόνη της: χιόνι και δρόμος από τον Νοέμβριο ως τον
+    Μάρτιο, δροσιά και πεζοπορία τους υπόλοιπους μήνες.
+    <br><br>
+    Ο δρόμος κρίνεται από το <strong>ύψος στο οποίο παγώνει ο αέρας</strong>
+    και όχι από τη θερμοκρασία της Φλώρινας: το διάσελο είναι πάνω από τα
+    1.700 μέτρα, οπότε βροχή στην πόλη μπορεί να είναι χιόνι εκεί.
+    <br><br>
+    Οι συνθήκες είναι από το μοντέλο. Ο σταθμός της ΕΜΥ στη ράχη του Βιτσίου
+    είναι πραγματικός, αλλά τα δεδομένα του φτάνουν σε παρτίδες που μπορεί να
+    είναι και μέρες πίσω, οπότε δεν κάνει για «τώρα».
+  </p>
 </section>
 
 <section class="card glass panel" id="air-panel" hidden>

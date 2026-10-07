@@ -255,6 +255,35 @@ the reasoning and the traps, most of which were found the hard way.
   to "what is it doing outside" than the town itself. Attribution sits in the
   footer.
 
+* **The mountain is one card with two seasons, not two cards with one.** The
+  road status and the snow depth were separate local cards that both hid
+  themselves out of season. They answer the same question on the same day and
+  read the same forecast at the same point, so they are now one card that
+  switches: snow and road from November to March, cool air and hiking the rest
+  of the year. Fresh snow switches it too, not just lying snow — a dump in
+  October is a ski day before anything settles.
+
+  The summer half is the one that did not exist. Its headline is the
+  **temperature gap against the town**, which is the actual reason to drive up:
+  ~1180 m of relief at 0.65 °C/100 m is about 7.7 °C, and the model currently
+  reads 6.9 °C on a mild October afternoon.
+
+  **The station on the ridge is not usable for this**, and that is the finding
+  that shaped the card. EMY's Vitsi feed arrives in batches that run from hours
+  to **more than a day** behind, so "the latest reading" can be yesterday
+  lunchtime. Conditions come from the model; the station is an archive.
+
+* **Snow had to stop hiding itself.** `build_snow` used to return `None` when
+  there was nothing to report, which was right when it was its own card and
+  wrong the moment the mountain card needed the same forecast in July — when
+  the depth is legitimately zero and the temperature gap is the whole point.
+  The gate moved from the data to the caller.
+
+* **Road risk is counted from now, not from midnight.** The hourly window
+  started at 00:00, so this evening's card was counting the morning's snowfall
+  towards tonight's risk. A clearing day read like a blizzard and a clearing
+  evening read calm with snow still coming.
+
 * **Headless Chrome reports `prefers-reduced-transparency: reduce` by default.**
   Any screenshot taken through CDP is therefore the *no-blur* variant unless the
   preference is explicitly emulated back to `no-preference`. It is a real
