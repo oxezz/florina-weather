@@ -129,6 +129,56 @@ the reasoning and the traps, most of which were found the hard way.
   none the wiser. reezing_level_height at or below the pass elevation, with
   precipitation forecast, is the signal — the frost card's logic one altitude up.
 
+* **The inversion index understates inversions, and here is by how much.** The
+  index compares two *modelled* temperatures, so if the model's valley value is
+  wrong the index is wrong however neat the arithmetic. Florina's real
+  observations settle it: EMY station **WMO 16613** sits **in the town** at
+  40.783 N, 21.400 E, 662 m — NOAA ISD, Meteostat, EMY's own climatological
+  atlas and a Greek NTUA thesis table all agree — and NOAA's ISD-Lite archive
+  carries its hourly records.
+
+  Comparing the archived forecast against 472 paired hours in January and July
+  2024:
+
+  | | mean (obs − fc) | mean abs | within 2 °C |
+  |---|---|---|---|
+  | night (00/03/06 UTC) | **−1.61 °C** | 2.63 | 47 % |
+  | day (12/15/18 UTC) | **+1.11 °C** | 2.21 | 47 % |
+  | all | −0.07 °C | 2.42 | 46 % |
+
+  A forecast running **1.6 °C too warm at night in the valley** makes the
+  valley-to-slope difference too small, so the inversion reads **weaker than it
+  is**. That is the signature of a model under-resolving a basin's nocturnal
+  cold pool — the very thing the index exists to detect.
+
+  It is reported rather than corrected. A correction would be a fudge on a
+  one-year, two-month sample, and the archive grid is 728 m against the
+  station's 662 m, which once adjusted for makes the night bias nearer 2 °C
+  rather than smaller. A correction worth applying needs several years and a
+  slope station to check the other leg against; it is recorded in
+  [`ROADMAP.md`](ROADMAP.md) rather than guessed at.
+
+* **There is a Florina station, and the open-data portal does not carry it.**
+  EMY operates WMO 16613 in the town, but data.gov.gr publishes only station
+  **007 (Kastoria)** and **230 (Vitsi)** for this region. So the page shows
+  those two as references while the station that would actually validate the
+  model lives elsewhere — ISD-Lite for the archive, and nothing conveniently
+  live.
+
+* **Coordinates that look right and are not.** data.gov.gr's spatial bboxes are
+  GeoNames *place* extents, not instrument sites: the "ΜΑΚΕΔΟΝΙΑ" dataset
+  carries the Thessaloniki city box, which excludes the airport where its
+  station actually sits. `emy.gr`'s own embedded registry lists "ΒΙΤΣΙ" at a
+  point that reverse-geocodes to a village at 914 m, nowhere near the station,
+  and its "FLORINA" entry is likewise a hamlet. Both are forecast localities,
+  neither usable as a station position.
+
+* **Vitsi has no published coordinates at all.** It is absent from NOAA ISD,
+  Meteostat, EMY's public GeoServer layers, OSM and EMY's synoptic list, and
+  carries no WMO number. Its barometer implies roughly 1800 m — about 1160 m
+  above Kastoria — which rules out the ski-centre base at 1547 m. EMY's own
+  open-data register lists station coordinates as available on request.
+
 * **Headless Chrome reports `prefers-reduced-transparency: reduce` by default.**
   Any screenshot taken through CDP is therefore the *no-blur* variant unless the
   preference is explicitly emulated back to `no-preference`. It is a real

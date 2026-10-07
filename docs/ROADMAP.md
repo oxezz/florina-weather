@@ -36,28 +36,27 @@ README's *Frost alerts* section. Nothing is sent until a transport is chosen
 and given somewhere to send to, which is the only remaining step and is a
 configuration change rather than code.
 
-**A real station reading next to the forecast.** Built. The Greek open data
-portal publishes the EMY automatic network on CKAN, and its datastore API needs
-no token, so `notify`-style scraping was never necessary.
+**Correct the inversion index for its night bias.** Measured, not suspected: the
+archived forecast runs **1.6 °C too warm at night** in the valley against
+Florina's own observations (WMO 16613, 472 paired hours, January and July 2024),
+which makes the index **understate** inversions. See
+[`DESIGN.md`](DESIGN.md) for the table.
 
-What the investigation settled, and what it did not:
+Not applied, deliberately. A correction on a one-year, two-month sample would be
+a fudge dressed as calibration, and the archive grid is 728 m against the
+station's 662 m, so the honest bias is nearer 2 °C, not smaller. What it needs
+before anyone should trust a number:
 
-| Source | Result |
-|---|---|
-| aqicn | `feed/florina` → `Unknown station`; the demo token ignores the query and serves a fixed dataset, so it proves nothing |
-| MesoWest, Synoptic, Meteostat, Wunderground | all `401` without a token |
-| NOA / meteo.gr | station search requires a login |
-| **data.gov.gr** | **93 EMY stations, token-free** — this is the one that works |
+1. **Several years**, not two months, from ISD-Lite — the files are there for
+   2024 and 2025 but 2026 is not yet published.
+2. **Both legs of the comparison.** Only the valley leg is checkable today.
+   Vitsi is the obvious slope station and its barometer puts it near 1800 m, but
+   it publishes no coordinates and no WMO number, so its position is inference.
+   EMY's own open-data register lists station coordinates as available on
+   request — that document would settle it.
 
-Two corrections worth keeping. **Station 230 is ΒΙΤΣΙ, not Florina** — the
-mountain above the town at ~1700 m, which its 823 hPa barometer makes obvious.
-And **there is no EMY station in Florina at all**, so the card shows Καστοριά
-(007), 30 km west in the next basin, labelled with its own name and distance
-rather than passed off as the town. Freshness varies by station — Kastoria runs
-about 5½ hours behind, Vitsi about 21, Chortiatis was a month stale — so the
-observation time travels with the number.
-
-Still open, and worth more than it sounds: with a station at a known elevation,
-the inversion index could finally be checked against reality instead of against
-itself. That needs the station's coordinates, which data.gov.gr does not
-publish, so they would have to be supplied and trusted.
+**A real station reading next to the forecast.** Built, with a correction. There
+is no EMY station **in the open-data portal** for Florina, but there is one in
+the town: **WMO 16613**, 40.783 N, 21.400 E, 662 m. The card shows Καστοριά
+(007) and Βίτσι (230) as references because those are what data.gov.gr
+publishes, and it says so on the page rather than implying they are the town's.
