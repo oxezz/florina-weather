@@ -475,6 +475,40 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--glass-border-soft);
 }
 
+/* ------------------------------------------------------- station refs ---- */
+
+/* Two nearby real stations, side by side at the bottom. The point of them is
+   the comparison, so they are laid out as rows rather than cards. */
+.refs { display: grid; gap: 10px; }
+.ref {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding: 11px 14px;
+  border-radius: var(--radius-md);
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border-soft);
+  text-align: left;
+}
+/* The one the page leans on gets the accent hairline, as elsewhere. */
+.ref-main { box-shadow: inset 3px 0 0 var(--accent); }
+.ref-name { font-weight: 650; min-width: 86px; }
+.ref-temp { font-size: 1.12rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ref-range, .ref-age, .ref-where {
+  font-size: .78rem;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.ref-where { margin-left: auto; }
+.ref-note {
+  margin: 14px 0 0;
+  font-size: .78rem;
+  line-height: 1.55;
+  color: var(--text-faint);
+  text-align: left;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

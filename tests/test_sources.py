@@ -103,8 +103,13 @@ class FetchingTests(unittest.TestCase):
         service = sources.WeatherService(sources.Config(), opener=opener_for(counter))
         service.snapshot()
         service.snapshot()
+        # The station source makes one call per configured station, so the
+        # expectation is per-source rather than a flat 1.
+        stations = len([s for s in sources.Config().stations if s.get("id")])
         for name, calls in counter.items():
-            self.assertEqual(calls, 1, "%s was fetched %d times" % (name, calls))
+            expected = stations if name == "station" else 1
+            self.assertEqual(calls, expected,
+                             "%s was fetched %d times" % (name, calls))
 
     def test_concurrent_readers_collapse_into_one_fetch(self):
         """At expiry, a burst of visitors must not all call upstream."""

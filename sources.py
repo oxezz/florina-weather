@@ -120,7 +120,10 @@ FORECAST_HOURLY = (
     "temperature_2m,apparent_temperature,relative_humidity_2m,"
     "precipitation_probability,precipitation,weather_code,is_day,"
     "wind_speed_10m,wind_gusts_10m,wind_direction_10m,uv_index,cloud_cover,"
-    "visibility,soil_temperature_0cm"
+    "visibility,soil_temperature_0cm,"
+    # The dew point comes ready-made, so the Magnus formula is not needed.
+    # The freezing level is what decides whether the pass gets rain or snow.
+    "dew_point_2m,freezing_level_height,shortwave_radiation"
 )
 
 FORECAST_DAILY = (
@@ -129,6 +132,9 @@ FORECAST_DAILY = (
     "precipitation_probability_max,sunrise,sunset,daylight_duration,"
     "sunshine_duration,uv_index_max,wind_speed_10m_max,wind_gusts_10m_max,"
     "wind_direction_10m_dominant,"
+    # The day's total solar energy, which is what the solar card compares with
+    # the normal. Summing the remaining hours would read as zero every night.
+    "shortwave_radiation_sum,"
     # Lunar data is daily-only. `moon_phase` is a fraction of the synodic
     # month: 0 new, 0.25 first quarter, 0.5 full, 0.75 last quarter.
     "moon_phase,moonrise,moonset"
@@ -144,8 +150,10 @@ AIR_CURRENT = (
 AIR_HOURLY = "pm2_5,pm10,european_aqi"
 
 # Heating degree days need daily means going back far enough to cover a full
-# month. Daily-only, so the payload stays under 2 KB.
-HISTORY_DAILY = "temperature_2m_mean,temperature_2m_min,temperature_2m_max"
+# month. Daily-only, so the payload stays under 2 KB. The radiation sum rides
+# along in the same request, giving the solar card a normal to compare against.
+HISTORY_DAILY = ("temperature_2m_mean,temperature_2m_min,temperature_2m_max,"
+                 "shortwave_radiation_sum")
 
 # Models used both to score their disagreement and to put an error bar on the
 # inversion index. `best_match` is included deliberately: it is what the
@@ -242,16 +250,22 @@ class Config:
     ])
     snow_cache_ttl: float = 1800.0
 
-    # A real observation, from the EMY automatic network via data.gov.gr.
-    # 007 is Kastoria: the nearest station that is actually kept fresh, in the
-    # next basin west. 230 (Vitsi) is closer but runs a day behind and sits at
-    # 1700 m, so it reads nothing like the town. Set station_id = "" to disable.
-    station_id: str = "007"
-    station_name: str = "Καστοριά"
-    station_distance: str = "30 χλμ. δυτικά"
+    # The Greek government's open data portal publishes the EMY automatic
+    # station network. It runs on CKAN, and its datastore API answers without a
+    # token — the only free real-observation source found for this region.
+    #
+    # There is no station in Florina, so the card uses the nearest one that is
+    # kept fresh and labels it with its own name. Vitsi is the mountain above
+    # the town and closer, but it runs about a day behind and sits at 1700 m,
+    # so it reads nothing like the valley and is shown as a reference instead.
+    stations: list = field(default_factory=lambda: [
+        {"key": "kastoria", "id": "007", "name": "Καστοριά",
+         "distance": "30 χλμ. δυτικά", "max_age_hours": 12, "primary": True},
+        {"key": "vitsi", "id": "230", "name": "Βίτσι",
+         "distance": "το βουνό πάνω από την πόλη", "max_age_hours": 36,
+         "primary": False},
+    ])
     station_cache_ttl: float = 900.0
-    # How stale a reading may be before the card says so rather than hiding it.
-    station_max_age: float = 6 * 3600.0
 
     # Outbound frost alerts. Nothing is ever sent unless a transport is both
     # chosen and given somewhere to send to, so the defaults are silent.
@@ -508,7 +522,12 @@ class WeatherService:
                         timeout=self.config.timeout, opener=self._opener)
 
     def _normals_params(self):
-        """Ten years ending last year, so the normal is a closed set."""
+        """Ten years ending last year, so the normal is a closed set.
+
+        The radiation sum rides along in the same request: the solar card needs
+        a normal to compare against, and asking twice for the same days would
+        be waste.
+        """
         cfg = self.config
         last = datetime.now(timezone.utc).year - 1
         return {
@@ -516,7 +535,7 @@ class WeatherService:
             "longitude": cfg.lon,
             "start_date": "%d-01-01" % (last - cfg.normals_years + 1),
             "end_date": "%d-12-31" % last,
-            "daily": "temperature_2m_mean",
+            "daily": "temperature_2m_mean,shortwave_radiation_sum",
             "timezone": cfg.timezone,
         }
 
@@ -525,13 +544,20 @@ class WeatherService:
                         timeout=max(self.config.timeout, 45.0), opener=self._opener)
 
     def _snow_params(self):
+        """The ski area, plus the freezing level that decides rain or snow.
+
+        Two locations and hourly freezing level: the daily block answers "is
+        there snow on the ground" and the hourly answers "will the pass get
+        more", which is the question the road status actually turns on.
+        """
         cfg = self.config
         return {
             "latitude": ",".join(str(p["lat"]) for p in cfg.snow_points),
             "longitude": ",".join(str(p["lon"]) for p in cfg.snow_points),
             "daily": ("snowfall_sum,snow_depth_max,"
                       "temperature_2m_min,temperature_2m_max"),
-            "forecast_days": min(cfg.forecast_days, 7),
+            "hourly": "temperature_2m,precipitation,freezing_level_height",
+            "forecast_days": min(cfg.forecast_days, 5),
             "timezone": cfg.timezone,
         }
 
@@ -540,33 +566,58 @@ class WeatherService:
                         timeout=self.config.timeout, opener=self._opener)
 
     def fetch_station(self):
-        """The latest observation from an EMY station, via data.gov.gr.
+        """The latest observation from each configured EMY station.
 
-        Two steps, because CKAN needs a resource id rather than a package name:
-        the package is read first and its datastore resource taken from that.
-        Everything comes back as strings, with missing readings written as a
-        run of slashes — see :func:`_reading`.
+        Three calls per station, because CKAN needs a resource id rather than a
+        package name: the package is read first, then its datastore. Everything
+        comes back as strings with missing readings written as a run of
+        slashes — see :func:`report._reading`.
         """
         cfg = self.config
-        package = get_json(
-            "%s/package_show" % DATAGOV_URL,
-            {"id": "emy-station-%s" % cfg.station_id},
-            timeout=self.config.timeout, opener=self._opener)
+        out = []
+        for entry in cfg.stations:
+            station_id = str(entry.get("id") or "").strip()
+            if not station_id:
+                continue
+            try:
+                package = get_json(
+                    "%s/package_show" % DATAGOV_URL,
+                    {"id": "emy-station-%s" % station_id},
+                    timeout=self.config.timeout, opener=self._opener)
+                resource = None
+                for item in (package or {}).get("result", {}).get("resources", []):
+                    if item.get("datastore_active"):
+                        resource = item.get("id")
+                        break
+                if not resource:
+                    raise RuntimeError("station %s has no datastore" % station_id)
 
-        resource = None
-        for entry in (package or {}).get("result", {}).get("resources", []):
-            if entry.get("datastore_active"):
-                resource = entry.get("id")
-                break
-        if not resource:
-            raise RuntimeError("station %s has no datastore" % cfg.station_id)
-
-        found = get_json(
-            "%s/datastore_search" % DATAGOV_URL,
-            {"resource_id": resource, "limit": STATION_ROWS,
-             "fields": STATION_FIELDS, "sort": "yyyyMMddHHmm desc"},
-            timeout=self.config.timeout, opener=self._opener)
-        return (found or {}).get("result") or {}
+                found = get_json(
+                    "%s/datastore_search" % DATAGOV_URL,
+                    {"resource_id": resource, "limit": STATION_ROWS,
+                     "fields": STATION_FIELDS, "sort": "yyyyMMddHHmm desc"},
+                    timeout=self.config.timeout, opener=self._opener)
+                result = (found or {}).get("result") or {}
+                out.append({
+                    "id": station_id,
+                    "name": entry.get("name") or station_id,
+                    "distance": entry.get("distance") or "",
+                    "max_age_hours": entry.get("max_age_hours"),
+                    "primary": bool(entry.get("primary")),
+                    "records": result.get("records") or [],
+                })
+            except Exception as exc:  # noqa: BLE001 - one station, not the page
+                log.warning("station %s unavailable: %s", station_id, exc)
+                out.append({
+                    "id": station_id,
+                    "name": entry.get("name") or station_id,
+                    "distance": entry.get("distance") or "",
+                    "max_age_hours": entry.get("max_age_hours"),
+                    "primary": bool(entry.get("primary")),
+                    "records": [],
+                    "error": str(exc),
+                })
+        return out
 
     def fetch_alerts(self):
         url = ALERTS_URL.format(country=self.config.alert_country)

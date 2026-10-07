@@ -443,6 +443,113 @@ OUTFIT_ADVICE = {
 }
 
 
+# The dew point is what "muggy" actually means. Relative humidity alone
+# misleads: 60% at 5 C is a dry day and 60% at 25 C is sticky, while the dew
+# point is the same number in both.
+_COMFORT_BANDS = (
+    (0.0, "crisp", "Ξηρός και δροσερός αέρας", "#7dd3fc"),
+    (10.0, "dry", "Στεγνός αέρας", "#a5d8f3"),
+    (16.0, "comfortable", "Άνετη ατμόσφαιρα", "#4ade80"),
+    (20.0, "humid", "Αίσθηση υγρασίας", "#facc15"),
+)
+_COMFORT_MUGGY = ("muggy", "Αποπνικτική υγρασία", "#fb923c")
+
+
+def comfort_level(dew_point):
+    """(key, Greek label, hex colour) for a dew point in °C."""
+    try:
+        value = float(dew_point)
+    except (TypeError, ValueError):
+        return None
+    if value != value:  # NaN
+        return None
+    for limit, key, label, colour in _COMFORT_BANDS:
+        if value < limit:
+            return (key, label, colour)
+    return _COMFORT_MUGGY
+
+
+# How today's solar energy compares with the same date's ten-year average.
+_SOLAR_BANDS = (
+    (40.0, "poor", "Συννεφιά, χαμηλή απόδοση", "#94a3b8"),
+    (70.0, "fair", "Μέτρια ηλιοφάνεια", "#facc15"),
+    (100.0, "good", "Καλή ηλιοφάνεια", "#4ade80"),
+)
+_SOLAR_EXCELLENT = ("excellent", "Εξαιρετική ηλιοφάνεια", "#38bdf8")
+
+
+def solar_level(share):
+    """(key, Greek label, hex colour) for a percentage of the normal yield."""
+    try:
+        value = float(share)
+    except (TypeError, ValueError):
+        return None
+    if value != value:  # NaN
+        return None
+    for limit, key, label, colour in _SOLAR_BANDS:
+        if value < limit:
+            return (key, label, colour)
+    return _SOLAR_EXCELLENT
+
+
+def solar_text(share):
+    try:
+        value = float(share)
+    except (TypeError, ValueError):
+        return ""
+    if value < 40:
+        return "χαμηλή για την εποχή"
+    if value < 70:
+        return "κοντά στα κανονικά"
+    if value < 100:
+        return "καλή για την εποχή"
+    return "πάνω από τα κανονικά"
+
+
+# The Vigla pass sits at about 1773 m, so rain in town can be snow up there
+# with nobody the wiser. The freezing level is the honest signal, not the
+# valley temperature.
+_ROAD_LEVELS = (
+    (20.0, "closed", "Πολύ χιόνι στο διάσελο", "#f472b6"),
+    (8.0, "severe", "Έντονη χιονόπτωση στο διάσελο", "#fb923c"),
+    (1.0, "warn", "Πιθανή χιονόπτωση στη Βίγλα", "#facc15"),
+)
+_ROAD_NOTE = ("note", "Χιόνι στο διάσελο", "#bae6fd")
+
+
+def road_level(risk_hours, fall, depth):
+    """(key, Greek label, hex colour) for the mountain road.
+
+    Depth on the ground leads, because it is what is actually lying there;
+    falling snow only becomes serious once enough of it is forecast.
+    """
+    try:
+        depth = float(depth or 0)
+        fall = float(fall or 0)
+        risk = int(risk_hours or 0)
+    except (TypeError, ValueError):
+        return _ROAD_NOTE
+    if depth >= 20 or fall >= 15:
+        return _ROAD_LEVELS[0][1:]
+    if depth >= 5 or fall >= 8:
+        return _ROAD_LEVELS[1][1:]
+    if risk > 0:
+        return _ROAD_LEVELS[2][1:]
+    return _ROAD_NOTE
+
+
+def road_text(key, risk_hours):
+    """The one line a driver needs, keyed to how bad it looks."""
+    if key == "closed":
+        return "Αλυσίδες ή χιονολάστιχα απαραίτητα, ίσως χρειαστεί κλείσιμο."
+    if key == "severe":
+        return "Απαραίτητες αλυσίδες ή χιονολάστιχα."
+    if key == "warn":
+        hours = "ώρα" if risk_hours == 1 else "ώρες"
+        return "Προσοχή στο πέρασμα — %d %s με πιθανό χιόνι." % (risk_hours, hours)
+    return "Λίγο χιόνι ψηλά, ο δρόμος συνήθως ανοιχτός."
+
+
 def normal_text(delta):
     """How today compares with the decade's average for the same date."""
     try:

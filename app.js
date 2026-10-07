@@ -285,6 +285,69 @@
     setText($("station-detail"), parts.join(" · "));
   }
 
+  function renderComfort(comfort) {
+    var card = $("dew-card");
+    if (!card) return;
+    if (!comfort) { card.hidden = true; return; }
+    card.hidden = false;
+    setBig("s-dew", num(comfort.dew_point, 1));
+    setText($("s-dew-sub"), comfort.label +
+      (comfort.spread >= 3
+        ? " · " + num(comfort.low, 1) + "° έως " + num(comfort.high, 1) + "°"
+        : ""));
+  }
+
+  function renderSolar(solar) {
+    var card = $("solar-card");
+    if (!card) return;
+    if (!solar) { card.hidden = true; return; }
+    card.hidden = false;
+    setBig("s-solar", num(solar.energy, 1));
+    setText($("s-solar-sub"),
+      num(solar.share) + "% του κανονικού · " + solar.text);
+  }
+
+  function renderStationRefs(station) {
+    var panel = $("station-strip");
+    var host = $("station-refs");
+    if (!panel || !host) return;
+    var all = (station && station.all) || [];
+    if (all.length < 1) { panel.hidden = true; return; }
+    panel.hidden = false;
+    clear(host);
+
+    all.forEach(function (item) {
+      var row = el("div", "ref" + (item.primary ? " ref-main" : ""));
+      row.appendChild(el("span", "ref-name", item.name));
+      row.appendChild(el("span", "ref-temp", num(item.temp, 1) + "°"));
+      row.appendChild(el("span", "ref-range",
+        (item.day_min !== null && item.day_max !== null
+          ? num(item.day_min, 1) + "° έως " + num(item.day_max, 1) + "°"
+          : "")));
+      // The time is what keeps this honest: these lag, and by very different
+      // amounts depending on the station.
+      row.appendChild(el("span", "ref-age", item.observed + " · " + item.age_text));
+      row.appendChild(el("span", "ref-where", item.distance));
+      host.appendChild(row);
+    });
+  }
+
+  function renderRoad(road) {
+    var card = $("local-road");
+    if (!card) return 0;
+    if (!road) { card.hidden = true; return 0; }
+    card.hidden = false;
+    toneFor(card, road.color);
+    setBig("road-val", num(road.elevation) + " μ.");
+    var parts = [road.label];
+    if (road.depth) parts.push("χιόνι " + num(road.depth, 1) + " εκ.");
+    if (road.fall) parts.push("νέα χιόνι " + num(road.fall, 1) + " εκ.");
+    if (road.freezing) parts.push("παγώνει στα " + num(road.freezing) + " μ.");
+    setText($("road-sub"), parts.join(" · "));
+    card.title = road.text || "";
+    return 1;
+  }
+
   function renderGreeting(greeting) {
     var node = $("greet");
     if (!node) return;
@@ -714,6 +777,7 @@
 
     var shown = 0;
     shown += renderInversion(local.inversion);
+    shown += renderRoad(local.road);
     shown += renderSnow(local.snow);
     shown += renderFrost(local.frost);
     shown += renderHeating(local.heating);
@@ -897,6 +961,9 @@
     safely("normal", function () { renderNormal(data.normal); });
     safely("outfit", function () { renderOutfit(data.outfit); });
     safely("station", function () { renderStation(data.station); });
+    safely("refs", function () { renderStationRefs(data.station); });
+    safely("comfort", function () { renderComfort(data.comfort); });
+    safely("solar", function () { renderSolar(data.solar); });
     safely("sky", function () { renderSky(data.sky); });
     safely("stats", function () { renderStats(data.current || {}); });
     safely("sun", function () { renderSun(data); });

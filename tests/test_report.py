@@ -911,8 +911,13 @@ class StationTests(unittest.TestCase):
 
     def _station(self, rows=None, **config):
         payload = fixtures.station(rows) if rows is not None else fixtures.station()
+        if config.pop("empty", False):
+            payload = []
         cfg = sources.Config(**config) if config else sources.Config()
-        return report.build_station({"station": payload}, cfg, self.NOW)
+        found = report.build_stations({"station": payload}, cfg, self.NOW)
+        if not found:
+            return None
+        return found["all"][0]
 
     def test_the_slashes_mean_no_sensor_not_zero(self):
         """EMY writes missing readings as a run of slashes of varying length.
@@ -953,13 +958,14 @@ class StationTests(unittest.TestCase):
         self.assertIsNone(self._station(rows))
 
     def test_a_station_can_be_switched_off(self):
-        self.assertIsNone(self._station(station_id=""))
+        self.assertIsNone(self._station(empty=True))
 
     def test_missing_arguments_are_not_an_error(self):
         cfg = sources.Config()
         for snapshot in ({}, {"station": None}, {"station": {}},
-                         {"station": {"records": []}}):
-            self.assertIsNone(report.build_station(snapshot, cfg, self.NOW))
+                         {"station": []}, {"station": [{}]},
+                         {"station": [{"records": []}]}):
+            self.assertIsNone(report.build_stations(snapshot, cfg, self.NOW))
 
     def test_a_broken_timestamp_is_skipped(self):
         rows = [fixtures._row("not-a-stamp", "13.8")]

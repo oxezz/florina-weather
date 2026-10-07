@@ -1,0 +1,267 @@
+{
+  "description": "Μετεωρολογικά Δεδομένα σταθμού ΒΙΤΣΙ",
+  "keywords": [
+    "HNMS",
+    "meteorology",
+    "station",
+    "weather",
+    "ΕΜΥ",
+    "καιρός",
+    "μετεωρολογία",
+    "σταθμός"
+  ],
+  "license": {
+    "title": "Creative Commons Attribution",
+    "type": "cc-by",
+    "url": "http://www.opendefinition.org/licenses/cc-by"
+  },
+  "name": "emy-station-230",
+  "resources": [
+    {
+      "format": "CSV",
+      "hash": "98b0a360366df483465015d797cf75d8",
+      "name": "dedomena-stathmou",
+      "path": "station_230.dat",
+      "schema": {
+        "fields": [
+          {
+            "name": "yyyyMMddHHmm",
+            "type": "string"
+          },
+          {
+            "name": "Temp_Dry_5min",
+            "type": "string"
+          },
+          {
+            "name": "Temp_Dry_Min_5min",
+            "type": "string"
+          },
+          {
+            "name": "Temp_Dry_Max_5min",
+            "type": "string"
+          },
+          {
+            "name": "Rel_Hum_5min",
+            "type": "string"
+          },
+          {
+            "name": "Rel_Hum_Min_5min",
+            "type": "string"
+          },
+          {
+            "name": "Rel_Hum_Max_5min",
+            "type": "string"
+          },
+          {
+            "name": "Prec_Sum_1_5min",
+            "type": "string"
+          },
+          {
+            "name": "Prec_Intensity_1min_1_Max_5min",
+            "type": "string"
+          },
+          {
+            "name": "Prec_Sum_2_5min",
+            "type": "string"
+          },
+          {
+            "name": "Prec_Intensity_1min_2_Max_5min",
+            "type": "string"
+          },
+          {
+            "name": "Rad_Global_5min",
+            "type": "string"
+          },
+          {
+            "name": "Rad_Global_Min_5min",
+            "type": "string"
+          },
+          {
+            "name": "Rad_Global_Max_5min",
+            "type": "string"
+          },
+          {
+            "name": "Press_Barometer_5min",
+            "type": "string"
+          },
+          {
+            "name": "Press_Barometer_Min_5min",
+            "type": "string"
+          },
+          {
+            "name": "Press_Barometer_Max_5min",
+            "type": "string"
+          },
+          {
+            "name": "Evap_Level_5min",
+            "type": "string"
+          },
+          {
+            "name": "Evap_Level_Avg_5min",
+            "type": "string"
+          },
+          {
+            "name": "Evap_Temp_5min",
+            "type": "string"
+          },
+          {
+            "name": "Rad_PAR_5min",
+            "type": "string"
+          },
+          {
+            "name": "Rad_PAR_Min_5min",
+            "type": "string"
+          },
+          {
+            "name": "Rad_PAR_Max_5min",
+            "type": "string"
+          },
+          {
+            "name": "Rad_UV_5min",
+            "type": "string"
+          },
+          {
+            "name": "Rad_UV_Min_5min",
+            "type": "string"
+          },
+          {
+            "name": "Rad_UV_Max_5min",
+            "type": "string"
+          },
+          {
+            "name": "Temp_Soil_1_5min",
+            "type": "string"
+          },
+          {
+            "name": "Temp_Soil_2_5min",
+            "type": "string"
+          },
+          {
+            "name": "Temp_Soil_3_5min",
+            "type": "string"
+          },
+          {
+            "name": "Temp_Soil_4_5min",
+            "type": "string"
+          },
+          {
+            "name": "Temp_Soil_5_5min",
+            "type": "string"
+          },
+          {
+            "name": "Temp_Soil_6_5min",
+            "type": "string"
+          },
+          {
+            "name": "Temp_Soil_7_5min",
+            "type": "string"
+          },
+          {
+            "name": "Soil_Moist_1_5min",
+            "type": "string"
+          },
+          {
+            "name": "Soil_Moist_2_5min",
+            "type": "string"
+          },
+          {
+            "name": "Soil_Moist_3_5min",
+            "type": "string"
+          },
+          {
+            "name": "CO2_5min",
+            "type": "string"
+          },
+          {
+            "name": "Sun_Dur_Sum_5min",
+            "type": "string"
+          },
+          {
+            "name": "Wind_Speed_Avg_5min",
+            "type": "string"
+          },
+          {
+            "name": "Wind_Speed_Max_5min",
+            "type": "string"
+          },
+          {
+            "name": "Wind_Speed_Max_Dir_5min",
+            "type": "string"
+          },
+          {
+            "name": "Wind_Speed_Max_Time_5min",
+            "type": "string"
+          },
+          {
+            "name": "Wind_Dir_Avg_5min",
+            "type": "string"
+          },
+          {
+            "name": "Wind_Dir_Left_5min",
+            "type": "string"
+          },
+          {
+            "name": "Wind_Dir_Right_5min",
+            "type": "string"
+          },
+          {
+            "name": "Wind_Speed_2_Avg_5min",
+            "type": "string"
+          },
+          {
+            "name": "Wind_Speed_2_Max_5min",
+            "type": "string"
+          },
+          {
+            "name": "Wind_Speed_2_Max_Dir_5min",
+            "type": "string"
+          },
+          {
+            "name": "Wind_Speed_2_Max_Time_5min",
+            "type": "string"
+          },
+          {
+            "name": "Wind_Dir_2_Avg_5min",
+            "type": "string"
+          },
+          {
+            "name": "Wind_Dir_2_Left_5min",
+            "type": "string"
+          },
+          {
+            "name": "Wind_Dir_2_Right_5min",
+            "type": "string"
+          },
+          {
+            "name": "Dout3_State_5min",
+            "type": "string"
+          },
+          {
+            "name": "Dout0_State_5min",
+            "type": "string"
+          },
+          {
+            "name": "Dout1_State_5min",
+            "type": "string"
+          },
+          {
+            "name": "Pwrout2_State_5min",
+            "type": "string"
+          },
+          {
+            "name": "cRH_5min",
+            "type": "string"
+          }
+        ]
+      },
+      "sources": [
+        {
+          "path": "https://data.gov.gr/dataset/2832e42c-2aea-490d-b590-3b71682777e8/resource/08982d37-3906-4135-8901-656ff149d6bd/download/station_230.dat",
+          "title": "Δεδομένα σταθμού"
+        }
+      ],
+      "title": "Δεδομένα σταθμού"
+    }
+  ],
+  "title": "Μετεωρολογικά Δεδομένα σταθμού ΒΙΤΣΙ"
+}

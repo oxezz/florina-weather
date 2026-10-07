@@ -74,6 +74,14 @@ def forecast(days=DAYS, start=START, code=2):
             # The ground surface runs ~2 C below the 2 m air on a clear night,
             # which is the whole point of the frost card.
             "soil_temperature_0cm": [round(t - 2.0, 1) for t in temperature],
+            # Dew point about 8 C below the air temperature, and a solar curve
+            # that peaks at midday and is zero at night.
+            "dew_point_2m": [round(t - 8.0, 1) for t in temperature],
+            "freezing_level_height": [3400.0 for _ in times],
+            "shortwave_radiation": [
+                round(max(0.0, 700.0 * math.sin(math.pi * (int(s[11:13]) - 6) / 12.0)), 1)
+                for s in times
+            ],
         },
         "daily": {
             "time": daily_dates,
@@ -89,6 +97,8 @@ def forecast(days=DAYS, start=START, code=2):
             "daylight_duration": [41571.26 - i * 120 for i in range(days)],
             "sunshine_duration": [39600.0 for _ in range(days)],
             "uv_index_max": [5.35, 4.95, 5.3, 3.1, 1.2, 4.0, 4.4][:days],
+            # MJ/m2, matching what both the forecast and the archive report.
+            "shortwave_radiation_sum": [16.0, 15.2, 17.1, 8.4, 3.2, 12.0, 13.5][:days],
             "wind_speed_10m_max": [8.7 + d for d in range(days)],
             "wind_gusts_10m_max": [16.2 + d for d in range(days)],
             "wind_direction_10m_dominant": [189 for _ in range(days)],
@@ -199,21 +209,33 @@ def normals(years=10, end=2024):
                 times.append(day.isoformat())
                 values.append(round(seasonal + (year % 3) - 1, 1))
                 day += datetime.timedelta(days=1)
-        _NORMALS[key] = {"daily": {"time": times, "temperature_2m_mean": values}}
+        _NORMALS[key] = {"daily": {
+            "time": times,
+            "temperature_2m_mean": values,
+            # July around 25 MJ/m2, January around 5, in MJ/m2 as the archive
+            # reports it.
+            "shortwave_radiation_sum": [
+                round(15.0 + 10.0 * math.sin(2 * math.pi * (d - 105) / 365.0), 2)
+                for d in range(len(times))
+            ],
+        }}
     return _NORMALS[key]
 
 
 SNOW_POINTS = ((40.7722, 21.2682, 1535.0), (40.7833, 21.2500, 1426.0))
 
 
-def snow(fall=None, depth=None, points=SNOW_POINTS, days=7):
-    """The two-location daily snow call. Defaults to no snow, as in summer."""
+def snow(fall=None, depth=None, points=SNOW_POINTS, days=7,
+         hours=None, hourly_temp=4.0, hourly_precip=0.0, freezing=None):
+    """The two-location call. Defaults to no snow, as in summer."""
     fall = list(fall or [0.0] * days)
     depth = list(depth or [0.0] * days)
     out = []
     for lat, lon, elevation in points:
         times = [(START + datetime.timedelta(days=d)).strftime("%Y-%m-%d")
                  for d in range(days)]
+        hourly_times = [(START + datetime.timedelta(hours=h)).strftime(
+            "%Y-%m-%dT%H:%M") for h in range(days * 24)]
         out.append({
             "latitude": lat, "longitude": lon, "elevation": elevation,
             "daily": {
@@ -223,19 +245,38 @@ def snow(fall=None, depth=None, points=SNOW_POINTS, days=7):
                 "temperature_2m_min": [-2.0] * days,
                 "temperature_2m_max": [2.0] * days,
             },
+            "hourly": {
+                "time": hourly_times,
+                "temperature_2m": [hourly_temp] * len(hourly_times),
+                "precipitation": [hourly_precip] * len(hourly_times),
+                "freezing_level_height": [
+                    freezing if freezing is not None else elevation + 400
+                ] * len(hourly_times),
+            },
         })
     return out
 
 
-def station(rows=None, station_id="007"):
-    """The shape data.gov.gr returns: strings, and slashes for no sensor."""
+def station(rows=None, station_id="007", name="Καστοριά",
+            distance="30 χλμ. δυτικά", max_age_hours=12, primary=True):
+    """The shape ``fetch_station`` returns: a list, each with its own records.
+
+    Records arrive as strings, with a run of slashes where a sensor is absent.
+    """
     if rows is None:
         rows = [
             _row("202610061310", "13.8"),
             _row("202610061255", "13.4"),
             _row("202610061240", "11.0"),
         ]
-    return {"records": rows, "fields": [], "total": len(rows)}
+    return [{
+        "id": station_id,
+        "name": name,
+        "distance": distance,
+        "max_age_hours": max_age_hours,
+        "primary": primary,
+        "records": rows,
+    }]
 
 
 def station_package(station_id="007"):

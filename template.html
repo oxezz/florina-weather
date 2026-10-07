@@ -127,6 +127,8 @@
   <div class="card glass"><span class="lbl">Νέφωση</span><span class="big" id="s-cloud"><span class="skel skel-value"></span></span></div>
   <div class="card glass"><span class="lbl">Πίεση</span><span class="big"><span id="s-pressure"><span class="skel skel-value"></span></span> <small>hPa</small></span></div>
   <div class="card glass"><span class="lbl">Ορατότητα</span><span class="big" id="s-visibility"><span class="skel skel-value"></span></span><span class="sub" id="s-visibility-sub"></span></div>
+  <div class="card glass" id="dew-card" hidden><span class="lbl">Δείκτης δρόσου</span><span class="big"><span id="s-dew"></span> <small>&deg;C</small></span><span class="sub" id="s-dew-sub"></span></div>
+  <div class="card glass" id="solar-card" hidden><span class="lbl">Ηλιακή ενέργεια</span><span class="big"><span id="s-solar"></span> <small>kWh/m&sup2;</small></span><span class="sub" id="s-solar-sub"></span></div>
 </section>
 
 <section class="card glass panel">
@@ -230,6 +232,20 @@
         μοντέλων δείχνει πόσο αξιόπιστη είναι η μέτρηση.
       </p>
     </div>
+    <div class="local-card" id="local-road" hidden>
+      <span class="lbl">Διάσελο Βίγλας
+        <button class="info" type="button" aria-expanded="false"
+                aria-controls="hint-road" aria-label="Τι σημαίνει;">?</button>
+      </span>
+      <span class="val" id="road-val"></span>
+      <span class="sub" id="road-sub"></span>
+      <p class="hint" id="hint-road" hidden>
+        Ο δρόμος για το χιονοδρομικό περνάει από διάσελο στα 1.773 μέτρα, πολύ
+        ψηλότερα από την πόλη. Βροχή εδώ μπορεί να είναι χιόνι εκεί πάνω, γι'
+        αυτό κοιτάμε το ύψος στο οποίο παγώνει ο αέρας και όχι τη θερμοκρασία
+        της Φλώρινας. Η κάρτα εμφανίζεται μόνο όταν υπάρχει λόγος.
+      </p>
+    </div>
     <div class="local-card" id="local-snow" hidden>
       <span class="lbl">Χιόνι στα βουνά
         <button class="info" type="button" aria-expanded="false"
@@ -308,6 +324,19 @@
       <div class="chips" id="air-pollens"><span class="sub">Καμία αξιόλογη συγκέντρωση.</span></div>
     </div>
   </div>
+</section>
+
+<section class="card glass panel" id="station-strip" hidden>
+  <div class="panel-head">
+    <h2>Κοντινοί σταθμοί</h2>
+    <span class="chip muted">για σύγκριση</span>
+  </div>
+  <div class="refs" id="station-refs"></div>
+  <p class="ref-note">
+    Η Φλώρινα δεν έχει δικό της σταθμό της ΕΜΥ, οπότε οι παρακάτω μετρήσεις
+    έρχονται από τους πλησιέστερους. Είναι οι μόνες πραγματικές μετρήσεις στη
+    σελίδα &mdash; όλα τα υπόλοιπα είναι μοντέλα.
+  </p>
 </section>
 
 <footer>

@@ -114,12 +114,27 @@ the reasoning and the traps, most of which were found the hard way.
   per-frame work. Since the backdrop is a smooth gradient, blurring it was never
   visible anyway. A refresh also skips rebuilding the chart, the 48 hour tiles
   and the 7 day cards when that data has not changed.
+* **The solar card reads the daily total, not the hours so far.** Summing the
+  remaining hourly radiation made every evening look like heavy cloud: at 21:59
+  it read 0% and called a clear day «συννεφιά». Today's total is a daily variable on the
+  forecast API, and the ten-year normal rides along in the archive call that
+  already feeds the temperature comparison — so the ratio is the same at 3am
+  as at noon, and it costs no extra request.
+* **The dew point comes ready-made.** The Magnus formula in the original sketch
+  is not needed: Open-Meteo publishes dew_point_2m. It is a better comfort
+  measure than relative humidity, which reads 60% on both a dry 5 °C day and a
+  sticky 25 °C one.
+* **The mountain road is judged by the freezing level, not the town.** The Vigla
+  pass sits at 1773 m, so rain in Florina can be snow up there with the valley
+  none the wiser. reezing_level_height at or below the pass elevation, with
+  precipitation forecast, is the signal — the frost card's logic one altitude up.
+
 * **Headless Chrome reports `prefers-reduced-transparency: reduce` by default.**
   Any screenshot taken through CDP is therefore the *no-blur* variant unless the
   preference is explicitly emulated back to `no-preference`. It is a real
   supported feature, not an unknown one, so the fallback block genuinely
   engages — worth knowing before concluding the blur "doesn't work".
-* **The old EMY scraper is gone, but `oldportal.emy.gr` is not dead.** The
+* **The old EMY scraper is gone, but `oldportal.emy.gr` is not dead.**
   previous `extract_emy.py` / `emy_extract.py` scrapers were retired and then
   deleted: they pulled `meteoalarmJson` out of the EMY warning page with a
   regex, and warnings now come straight from the official Meteoalarm CAP feed,

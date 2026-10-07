@@ -627,11 +627,18 @@ def build_smog(air_hourly, forecast_hourly, now_local):
     }
 
 
-def build_local_conditions(snapshot, days, forecast_hourly, now_local, config):
-    """Assemble the hyper-local block, dropping anything with nothing to say."""
+def build_local_conditions(snapshot, days, forecast_hourly, now_local, config,
+                           snow=None):
+    """Assemble the hyper-local block, dropping anything with nothing to say.
+
+    ``snow`` is passed in because the road status needs it too, and fetching a
+    forecast twice for the same two points would be wasteful.
+    """
     blocks = {
         "inversion": build_inversion(snapshot.get("terrain"), config, now_local),
-        "snow": build_snow(snapshot, config),
+        "road": build_road(snow if snow is not None else build_snow(snapshot, config),
+                           config, now_local),
+        "snow": snow if snow is not None else build_snow(snapshot, config),
         "frost": build_frost(days, forecast_hourly),
         "heating": build_heating(snapshot.get("history"), now_local),
         "smog": build_smog(_air_hourly(snapshot.get("air")),
@@ -684,6 +691,9 @@ def _hourly_points(hourly, start_index, count, tz, moon=None):
             "wind_arrow": greek.wind_arrow(direction) if direction is not None else None,
             "uv": _at(hourly.get("uv_index"), index),
             "cloud": _at(hourly.get("cloud_cover"), index),
+            "dew_point": _at(hourly.get("dew_point_2m"), index),
+            "radiation": _at(hourly.get("shortwave_radiation"), index),
+            "freezing": _at(hourly.get("freezing_level_height"), index),
             "visibility": _at(hourly.get("visibility"), index),
             "visibility_text": greek.visibility_text(_at(hourly.get("visibility"), index)),
             "day": parsed.date().isoformat() if parsed else None,
@@ -782,6 +792,7 @@ def _daily_points(daily, tz, today, config, agreement=None, hourly=None):
             "daylight": greek.format_duration(_at(daily.get("daylight_duration"), index)),
             "sunshine": greek.format_duration(_at(daily.get("sunshine_duration"), index)),
             "uv_max": uv_max,
+            "radiation_sum": _at(daily.get("shortwave_radiation_sum"), index),
             "uv_level": uv_label,
             "uv_color": uv_colour,
             "wind_max": _at(daily.get("wind_speed_10m_max"), index),
@@ -1108,6 +1119,7 @@ def build_snow(snapshot, config):
     if not isinstance(payload, list):
         payload = [payload] if isinstance(payload, dict) else []
     points = []
+    hours = []
     for index, place in enumerate(config.snow_points):
         block = payload[index] if index < len(payload) else None
         if not block:
@@ -1143,8 +1155,27 @@ def build_snow(snapshot, config):
     if not points:
         return None
     points.sort(key=lambda p: -p["elevation"])
+
+    # The hours come from the first location, which is the highest — the pass
+    # the road status is about.
+    top = payload[0] if payload else {}
+    top_hourly = (top or {}).get("hourly") or {}
+    stamps = top_hourly.get("time") or []
+    temps = top_hourly.get("temperature_2m") or []
+    precip = top_hourly.get("precipitation") or []
+    levels = top_hourly.get("freezing_level_height") or []
+    for index, stamp in enumerate(stamps[:36]):          # 36 hours is plenty
+        hours.append({
+            "iso": str(stamp),
+            "time": str(stamp)[11:16],
+            "temp": _at(temps, index),
+            "precip": _at(precip, index, 0.0),
+            "freezing": _at(levels, index),
+        })
+
     return {
         "points": points,
+        "hours": hours,
         "deepest": max(p["depth"] for p in points),
         "fall": round(sum(p["fall"] for p in points), 1),
     }
@@ -1183,27 +1214,29 @@ def _reading(value):
         return None
 
 
-def build_station(snapshot, config, now_local):
-    """The latest real observation from the EMY network.
+def _station_reading(entry, now_local):
+    """One station's latest observation, or ``None`` if it is too stale.
 
     This is the only number on the page that is measured rather than modelled,
-    which is exactly why it is shown next to the forecast. It is also not
-    Florina: there is no EMY station in the town, so the nearest one that is
-    kept fresh is used and labelled with its own name and distance.
+    which is why it is shown next to the forecast. It is also not Florina:
+    there is no EMY station in the town, so each card names its own station.
+
+    Freshness varies wildly across the network — on the same day Kastoria ran
+    about five hours behind and Chortiatis a month — so each station carries
+    its own tolerance rather than sharing one.
     """
-    if not getattr(config, "station_id", ""):
-        return None
-    records = (snapshot.get("station") or {}).get("records") or []
+    records = entry.get("records") or []
     if not records:
         return None
-
     record = records[0]
     observed = _station_time(record.get("yyyyMMddHHmm"))
     if observed is None:
         return None
 
     age = (now_local.replace(tzinfo=None) - observed).total_seconds()
-    if age < -3600 or age > float(getattr(config, "station_max_age", 12 * 3600)):
+    limit = entry.get("max_age_hours")
+    limit = float(limit) * 3600.0 if limit else 12 * 3600.0
+    if age < -3600 or age > limit:
         return None                     # a month-old reading is not a reading
 
     temperature = _reading(record.get("Temp_Dry_5min"))
@@ -1216,20 +1249,20 @@ def build_station(snapshot, config, now_local):
     same_day = []
     rain_total = 0.0
     rain_seen = False
-    for entry in records:
-        stamp = _station_time(entry.get("yyyyMMddHHmm"))
+    for item in records:
+        stamp = _station_time(item.get("yyyyMMddHHmm"))
         if stamp is None or stamp.date() != today:
             continue
-        same_day.append(entry)
-        drop = _reading(entry.get("Prec_Sum_1_5min"))
+        same_day.append(item)
+        drop = _reading(item.get("Prec_Sum_1_5min"))
         if drop is not None:
             rain_seen = True
             rain_total += drop
 
     day_temps = []
-    for entry in same_day:
+    for item in same_day:
         for key in ("Temp_Dry_5min", "Temp_Dry_Min_5min", "Temp_Dry_Max_5min"):
-            value = _reading(entry.get(key))
+            value = _reading(item.get(key))
             if value is not None:
                 day_temps.append(value)
 
@@ -1246,9 +1279,10 @@ def build_station(snapshot, config, now_local):
     radiation = _reading(record.get("Rad_Global_5min"))
 
     return {
-        "id": config.station_id,
-        "name": config.station_name,
-        "distance": config.station_distance,
+        "id": entry.get("id"),
+        "name": entry.get("name") or entry.get("id"),
+        "distance": entry.get("distance") or "",
+        "primary": bool(entry.get("primary")),
         "observed": observed.strftime("%H:%M"),
         "age_minutes": int(round(age / 60.0)),
         "age_text": greek.format_duration(max(0.0, age)),
@@ -1266,6 +1300,161 @@ def build_station(snapshot, config, now_local):
         "rain_today": round(rain_total, 1) if rain_seen else None,
         "pressure": round(pressure, 1) if pressure is not None else None,
         "radiation": round(radiation, 1) if radiation is not None else None,
+    }
+
+
+def build_stations(snapshot, config, now_local):
+    """Every configured station that reported recently enough to trust."""
+    entries = snapshot.get("station")
+    if not isinstance(entries, list):
+        return None
+    readings = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        reading = _station_reading(entry, now_local)
+        if reading:
+            readings.append(reading)
+    if not readings:
+        return None
+    primaries = [r for r in readings if r["primary"]]
+    return {
+        "primary": primaries[0] if primaries else readings[0],
+        "all": readings,
+    }
+
+
+def build_comfort(hours):
+    """The dew point, which is what "muggy" actually means.
+
+    Relative humidity alone misleads: 60% at 5 °C is a dry day and 60% at 25 °C
+    is sticky. The dew point is the same number in both, so it is the honest
+    measure of how heavy the air feels.
+    """
+    if not hours:
+        return None
+    now = hours[0]
+    dew = now.get("dew_point")
+    if not _is_number(dew):
+        return None
+
+    ahead = [h.get("dew_point") for h in hours[:12]
+             if _is_number(h.get("dew_point"))]
+    low = min(ahead) if ahead else dew
+    high = max(ahead) if ahead else dew
+    key, label, colour = greek.comfort_level(dew)
+    return {
+        "dew_point": round(dew, 1),
+        "low": round(low, 1),
+        "high": round(high, 1),
+        "humidity": now.get("humidity"),
+        "level": key,
+        "label": label,
+        "color": colour,
+        "spread": round(high - low, 1),
+    }
+
+
+def build_solar(today, normals):
+    """Today's solar energy, against what the date normally delivers.
+
+    Both numbers are the day's total in MJ/m² — the forecast gives one and the
+    archive gives the other — so the comparison needs no conversion and reads
+    the same at 3am as at noon. Summing the *remaining* hours instead made
+    every evening look like heavy cloud.
+    """
+    if not today:
+        return None
+    energy = today.get("radiation_sum")
+    if not _is_number(energy):
+        return None
+
+    daily = (normals or {}).get("daily") or {}
+    times = daily.get("time") or []
+    values = daily.get("shortwave_radiation_sum") or []
+    target = str(today.get("iso") or "")[5:]        # MM-DD
+    if not target:
+        return None
+    history = []
+    for stamp, value in zip(times, values):
+        if str(stamp)[5:] == target and _is_number(value):
+            history.append(value)
+    if len(history) < 3:
+        return None
+
+    expected = sum(history) / len(history)
+    if expected <= 0:
+        return None
+    share = max(0.0, min(140.0, energy / expected * 100.0))
+    key, label, colour = greek.solar_level(share)
+    return {
+        # 1 MJ/m² = 0.2778 kWh/m², the unit a panel owner thinks in.
+        "energy": round(energy * 0.2778, 2),
+        "expected": round(expected * 0.2778, 2),
+        "share": round(share),
+        "years": len(history),
+        "level": key,
+        "label": label,
+        "color": colour,
+        "text": greek.solar_text(share),
+    }
+
+
+def build_road(snow, config, now_local):
+    """Whether the Vigla pass is likely to need chains.
+
+    The freezing level decides it, not the valley temperature: the pass sits at
+    about 1773 m, so rain in town can be snow up there with nobody the wiser.
+    A forecast of precipitation with the freezing level at or below the pass is
+    the signal — the same logic as the frost card, one altitude up.
+    """
+    points = (snow or {}).get("points") or []
+    if not points:
+        return None
+    top = points[0]                           # highest first, built that way
+    elevation = top.get("elevation") or 0
+    if not elevation:
+        return None
+
+    risk = 0
+    first = None
+    coldest = None
+    lowest = None
+    for hour in (snow or {}).get("hours") or []:
+        wet = _is_number(hour.get("precip")) and hour["precip"] >= 0.2
+        temp = hour.get("temp")
+        frozen = _is_number(temp) and temp <= 1.0
+        level = hour.get("freezing")
+        if _is_number(level):
+            lowest = level if lowest is None else min(lowest, level)
+            if level <= elevation:
+                frozen = True
+        if _is_number(temp):
+            coldest = temp if coldest is None else min(coldest, temp)
+        if wet and frozen:
+            risk += 1
+            if first is None:
+                first = hour
+
+    fall = top.get("fall") or 0.0
+    depth = top.get("depth") or 0.0
+    if risk == 0 and fall < 1.0 and depth < 2.0:
+        return None
+
+    key, label, colour = greek.road_level(risk, fall, depth)
+    return {
+        "name": config.snow_points[0].get("name") or "Βίγλα",
+        "elevation": round(elevation),
+        "level": key,
+        "label": label,
+        "color": colour,
+        "risk_hours": risk,
+        "fall": round(fall, 1),
+        "depth": round(depth, 1),
+        "coldest": round(coldest, 1) if coldest is not None else None,
+        "freezing": round(lowest) if lowest is not None else None,
+        "first": first,
+        "text": greek.road_text(key, risk),
     }
 
 
@@ -1353,13 +1542,21 @@ def build_report(snapshot, config, now=None):
             if current.get(field) is not None:
                 hours[0][field] = current[field]
 
-    local = build_local_conditions(snapshot, days, hourly_raw, now_local, config)
+    # Built once and shared: the road status needs the same forecast the snow
+    # card reads, and fetching those two points twice would be wasteful.
+    snow = build_snow(snapshot, config)
+
+    local = build_local_conditions(snapshot, days, hourly_raw, now_local, config,
+                                   snow)
     greeting = build_greeting(now_local, current)
     outfit = build_outfit(hours, now_local)
     air = parse_air(snapshot.get("air"))
     sky = build_sky(moon, hours, air)
     normal = build_normal(snapshot.get("normals"), today)
-    station = build_station(snapshot, config, now_local)
+    station = build_stations(snapshot, config, now_local)
+    comfort = build_comfort(hours)
+    solar = build_solar(today, snapshot.get("normals"))
+    road = build_road(snow, config, now_local)
 
     ages = snapshot.get("ages") or {}
     errors = snapshot.get("errors") or {}
@@ -1381,6 +1578,8 @@ def build_report(snapshot, config, now=None):
         "sky": sky,
         "normal": normal,
         "station": station,
+        "comfort": comfort,
+        "solar": solar,
         "air": air,
         "alerts": alerts,
         "status": {
