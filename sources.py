@@ -184,6 +184,11 @@ class Config:
     air_cache_ttl: float = 900.0
     history_cache_ttl: float = 1800.0
     alerts_cache_ttl: float = 300.0
+    # The longest a snapshot will wait for its slowest source. Open-Meteo is
+    # usually under a second but occasionally takes twenty, and the forecast
+    # is ready long before that. A source that misses the deadline is simply
+    # absent this time — it keeps running and the cache picks it up next load.
+    snapshot_deadline: float = 8.0
     max_stale: float = 6 * 3600.0
     timeout: float = 20.0
     # How long a source that just failed is left alone. Without this, every
@@ -538,17 +543,29 @@ class WeatherService:
         # sequence made a cold start cost the *sum* of five timeouts rather
         # than the slowest one.
         results = {}
-        with futures.ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+        pool = futures.ThreadPoolExecutor(max_workers=len(jobs))
+        try:
             pending = {
                 pool.submit(self._cached, key, ttl, loader, skip): key
                 for key, ttl, loader, skip in jobs
             }
-            for future in futures.as_completed(pending):
+            done, running = futures.wait(pending, timeout=cfg.snapshot_deadline)
+            for future in done:
                 key = pending[future]
                 try:
                     results[key] = future.result()
                 except Exception as exc:  # noqa: BLE001 - one source, never the page
                     results[key] = (None, None, False, str(exc))
+            for future in running:
+                key = pending[future]
+                results[key] = (None, None, False,
+                                "no answer within %.0fs" % cfg.snapshot_deadline)
+                log.warning("%s missed the %.0fs snapshot deadline",
+                            key, cfg.snapshot_deadline)
+        finally:
+            # Do not wait: a slow source that does arrive still warms the cache
+            # for the next request, it just does not hold up this one.
+            pool.shutdown(wait=False)
 
         def taken(key):
             value, age, stale, error = results.get(key, (None, None, False, None))

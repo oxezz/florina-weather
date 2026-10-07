@@ -600,11 +600,15 @@
       var agree = el("span", "agree");
       if (day.agreement) {
         agree.textContent = "\u00b1" + num(day.agreement.spread, 1) + "°";
+        // The headline is the wider of the two spreads, so the tooltip has to
+        // say which range it came from. Quoting the highs beside a figure the
+        // lows produced is what made this read as a bug.
+        var lows = day.agreement.driver === "min" && day.agreement.low_range;
+        var band = lows ? day.agreement.low_range : day.agreement.range;
         agree.title = day.agreement.label + " · " + day.agreement.models +
-                      " μοντέλα · εύρος " + num(day.agreement.range[0], 1) + "° έως " +
-                      num(day.agreement.range[1], 1) + "°";
+                      " μοντέλα · " + (lows ? "ελάχιστες" : "μέγιστες") + " " +
+                      num(band[0], 1) + "° έως " + num(band[1], 1) + "°";
         agree.style.setProperty("--tone", day.agreement.color);
-        if (day.agreement.level === "wide") agree.classList.add("wide");
       }
       card.appendChild(agree);
 
@@ -760,13 +764,14 @@
       parts.push("δεδομένα πριν " + Math.round(status.age) + " δευτ.");
     }
     if (navigator.onLine === false) parts.push("εκτός σύνδεσης");
+    if (state.fromCache) parts.push("\u26a0 παλιά δεδομένα (από τη μνήμη)");
     if (status.degraded && status.degraded.length) {
       parts.push("\u26a0 μη διαθέσιμα: " + status.degraded.join(", "));
     }
     if (state.error) parts.push("\u26a0 " + state.error);
     setText(node, parts.join(" · "));
     node.classList.toggle("warn", navigator.onLine === false ||
-      Boolean(state.error) ||
+      Boolean(state.error) || Boolean(state.fromCache) ||
       Boolean(status.degraded && status.degraded.length));
   }
 
@@ -843,6 +848,10 @@
       cache: "no-store"
     }).then(function (response) {
       if (!response.ok) throw new Error("HTTP " + response.status);
+      // The service worker tags anything it served from its own cache, which
+      // happens when the network is down or slow. Saying so beats passing old
+      // numbers off as current.
+      state.fromCache = response.headers.get("X-SW-Source") === "cache";
       return response.json();
     }).then(function (data) {
       state.error = null;

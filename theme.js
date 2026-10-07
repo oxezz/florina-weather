@@ -45,9 +45,17 @@
 
   function apply(mode) {
     var actual = resolve(mode);
-    root.classList.toggle("mode-light", actual === "light");
-    root.classList.toggle("mode-dark", actual !== "light");
+    var light = actual === "light";
+    root.classList.toggle("mode-light", light);
+    root.classList.toggle("mode-dark", !light);
     root.setAttribute("data-mode", mode);
+
+    /* The browser chrome has to follow, or a light page sits under a dark
+       address bar. `color-scheme` also repaints form controls and scrollbars. */
+    root.style.colorScheme = light ? "light" : "dark";
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", light ? "#eaf3fb" : "#0c2339");
+
     document.dispatchEvent(new CustomEvent("florina:mode", {
       detail: { mode: mode, actual: actual }
     }));

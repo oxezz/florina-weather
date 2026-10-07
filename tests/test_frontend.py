@@ -195,6 +195,44 @@ class ThemeBootstrapTests(unittest.TestCase):
         self.assertEqual(self.js.count("{"), self.js.count("}"))
         self.assertEqual(self.js.count("("), self.js.count(")"))
 
+    def test_the_browser_chrome_follows_the_mode(self):
+        """Without this a light page sat under a dark address bar."""
+        self.assertIn("colorScheme", self.js)
+        self.assertIn('meta[name="theme-color"]', self.js)
+
+    def test_the_light_colour_matches_the_stylesheet(self):
+        """The meta colour must be the value the canvas actually uses, or the
+        address bar is a slightly different shade from the page."""
+        css = read("style.css")
+        light_base = css.split("html.mode-light")[1].split("--b1:")[1].split(";")[0].strip()
+        self.assertIn(light_base, self.js,
+                      "theme.js disagrees with --b1 for light mode")
+
+    def test_the_meta_tag_exists_to_update(self):
+        self.assertIn('name="theme-color"', read("template.html"))
+
+
+class ServiceWorkerTests(unittest.TestCase):
+    """The worker decides what a user sees when the network misbehaves."""
+
+    def setUp(self):
+        self.js = read("sw.js")
+
+    def test_a_hanging_request_falls_back_to_cache(self):
+        self.assertIn("NETWORK_TIMEOUT", self.js)
+        self.assertIn("withTimeout", self.js)
+
+    def test_navigations_share_one_cache_key(self):
+        """Keying on the full URL kept a separate copy per ?mode= variant."""
+        self.assertIn('networkFirst(request, "/")', self.js)
+
+    def test_cached_responses_are_labelled(self):
+        self.assertIn('headers.set("X-SW-Source", "cache")', self.js)
+
+    def test_the_worker_still_handles_fetch(self):
+        # Without a fetch handler Android Chrome never offers the install prompt.
+        self.assertIn('addEventListener("fetch"', self.js)
+
 
 class SkeletonTests(unittest.TestCase):
     """Placeholders shown while /api/weather is in flight."""
@@ -295,10 +333,9 @@ class PwaTests(unittest.TestCase):
     def test_worker_never_serves_stale_weather_from_cache_first(self):
         # Weather goes network-first; only the shell is allowed to come from
         # cache immediately.
-        self.assertIn("networkFirst(request)", self.sw)
+        self.assertIn('networkFirst(request, url.origin + "/api/weather")', self.sw)
         self.assertIn('url.pathname === "/api/weather"', self.sw)
         self.assertIn("staleWhileRevalidate", self.sw)
-
     def test_worker_only_touches_same_origin_get_requests(self):
         self.assertIn('request.method !== "GET"', self.sw)
         self.assertIn("url.origin !== self.location.origin", self.sw)

@@ -117,6 +117,27 @@ class FetchingTests(unittest.TestCase):
         self.assertIsNotNone(snap["forecast"])
         self.assertIsNotNone(snap["alerts"])
 
+    def test_a_lagging_source_does_not_hold_up_the_page(self):
+        """Open-Meteo is usually under a second but occasionally takes twenty,
+        and the forecast is ready long before that."""
+        counter = {}
+        healthy = opener_for(counter)
+
+        def lagging(url, timeout):
+            if "air-quality" in url:
+                time.sleep(2.0)
+            return healthy(url, timeout)
+
+        config = sources.Config(snapshot_deadline=0.5)
+        service = sources.WeatherService(config, opener=lagging)
+        started = time.time()
+        snap = service.snapshot()
+
+        self.assertLess(time.time() - started, 1.5)
+        self.assertIsNotNone(snap["forecast"])
+        self.assertIsNone(snap["air"])
+        self.assertIn("air", snap["errors"])
+
 
 class NegativeCacheTests(unittest.TestCase):
 
