@@ -32,12 +32,13 @@ from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlsplit
 
 import greek
+import geography
 import notify
 import radar
 import report as report_mod
 import sources
 
-__version__ = "3.12.0"
+__version__ = "3.13.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(BASE_DIR, "template.html")
@@ -263,6 +264,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(self.service.health())
             elif path == "/api/radar":
                 self._serve_radar()
+            elif path == "/geography.json":
+                self._serve_geography()
             elif path in STATIC_FILES:
                 self._serve_static(path)
             elif path == "/favicon.ico":
@@ -351,6 +354,28 @@ class Handler(BaseHTTPRequestHandler):
                        "Δοκιμάστε ξανά σε λίγο.")
             return
         self._send(HTTPStatus.OK, payload, "application/json; charset=utf-8")
+
+    def _serve_geography(self):
+        """Lakes and borders for the radar, as JSON.
+
+        Separate from /api/radar and cached hard, because it never changes
+        while the radar payload is replaced every ten minutes. Riding along
+        with it cost a dry hour 7 KB instead of 200 bytes, and a dry hour is
+        the normal case here.
+        """
+        body = json.dumps({"lakes": geography.LAKES,
+                           "borders": geography.BORDERS},
+                          separators=(",", ":")).encode("utf-8")
+        tag = _etag(body)
+        if self.headers.get("If-None-Match") == tag:
+            self.send_response(HTTPStatus.NOT_MODIFIED)
+            self.send_header("ETag", tag)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        self._send(HTTPStatus.OK, body, "application/json; charset=utf-8",
+                   extra_headers={"ETag": tag,
+                                  "Cache-Control": "public, max-age=86400"})
 
     def _serve_static(self, path):
         filename, content_type = STATIC_FILES[path]
@@ -456,7 +481,8 @@ def main(argv=None):
     # answers 503 until the first grid is built, and the card stays hidden.
     radar_instance = None
     if config.radar_enabled:
-        radar_instance = radar.Radar(lat=config.lat, lon=config.lon)
+        radar_instance = radar.Radar(lat=config.lat, lon=config.lon,
+                                     place=config.place)
         radar_instance.start()
 
     try:

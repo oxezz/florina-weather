@@ -44,6 +44,8 @@
   });
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  var PLACE = "Φλώρινα";   /* replaced by the payload */
+  var geo = null, borders = [], lakes = [];
   var data = null, frames = [], colors = [], layer = null;
   var current = 0, playing = false, timer = 0, visible = false, loadedAt = 0;
 
@@ -67,6 +69,14 @@
   }
 
   function load() {
+    /* Fetched once and cached for a day: the geography never changes, and
+       riding along in every radar payload cost a dry hour 7 KB instead of
+       200 bytes - and a dry hour is the normal case here. */
+    if (!geo) {
+      geo = fetch("/geography.json")
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .catch(function () { return null; });
+    }
     fetch("/api/radar", { cache: "no-store" })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(function (json) {
@@ -74,6 +84,7 @@
           throw new Error("stale");
         }
         data = json;
+        if (json.place) PLACE = json.place;
         colors = json.palette.map(parseColor);
         frames = json.frames.map(function (runs) { return expand(runs, json.n); });
         loadedAt = Date.now();
@@ -86,6 +97,13 @@
         noteEl.textContent = wet ? "" : "Δεν εντοπίζεται βροχή σε ακτίνα " + json.km + " χλμ.";
         if (wet) { current = frames.length - 1; draw(); play(!reduceMotion); }
         else { stop(); }
+        /* Redraw when the outlines land, so a dry card still has context. */
+        geo.then(function (g) {
+          if (!g) return;
+          borders = g.borders || [];
+          lakes = g.lakes || [];
+          draw();
+        });
       })
       .catch(function () { panel.hidden = true; stop(); });
   }
@@ -105,6 +123,15 @@
     ];
   }
 
+  function pathRing(ring, close) {
+    ctx.beginPath();
+    for (var i = 0; i < ring.length; i++) {
+      var p = project(ring[i][1], ring[i][0]);
+      if (i) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]);
+    }
+    if (close) ctx.closePath();
+  }
+
   function draw() {
     if (!data) return;
     var n = data.n, cells = frames[current];
@@ -121,19 +148,37 @@
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, SIZE, SIZE);
+
+    /* Rivers and lakes take the card's text colour, so both themes work. */
+    var ink = getComputedStyle(canvas).color;
+    ctx.strokeStyle = ctx.fillStyle = ink;
+    ctx.lineWidth = 1;
+
+    /* Geography goes UNDER the rain, so where it matters - inside a shower -
+       the actual weather wins and the outline is only a hint. Without it the
+       card is a grid of squares and 60 km out has nothing to anchor to. */
+    ctx.save();
+    ctx.globalAlpha = 0.30;
+    borders.forEach(function (ring) { pathRing(ring, false); ctx.stroke(); });
+    ctx.globalAlpha = 0.20;
+    lakes.forEach(function (ring) { pathRing(ring, true); ctx.fill(); });
+    ctx.restore();
+
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(layer, 0, 0, SIZE, SIZE);
 
-    /* rings and landmarks take the card's text colour, so both themes work */
-    var ink = getComputedStyle(canvas).color;
     ctx.strokeStyle = ctx.fillStyle = ink;
-    ctx.lineWidth = 1;
     ctx.globalAlpha = 0.28;
     for (var km = 30; km <= data.km; km += 30) {
       ctx.beginPath();
       ctx.arc(SIZE / 2, SIZE / 2, km / data.km * SIZE / 2, 0, 6.2832);
       ctx.stroke();
+      ctx.globalAlpha = 0.45;
+      ctx.font = "9px system-ui, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(km + "", SIZE / 2 + km / data.km * SIZE / 2 + 3, SIZE / 2 + 10);
+      ctx.globalAlpha = 0.28;
     }
     ctx.globalAlpha = 0.75;
     ctx.font = "11px system-ui, sans-serif";
@@ -147,7 +192,7 @@
     ctx.globalAlpha = 1;
     ctx.beginPath(); ctx.arc(SIZE / 2, SIZE / 2, 4, 0, 6.2832); ctx.fill();
     ctx.textAlign = "left";
-    ctx.fillText("Φλώρινα", SIZE / 2 + 7, SIZE / 2 + 4);
+    ctx.fillText(PLACE, SIZE / 2 + 7, SIZE / 2 + 4);
 
     timeEl.textContent = clock.format(new Date(data.t[current] * 1000));
   }

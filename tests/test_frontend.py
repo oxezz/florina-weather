@@ -436,7 +436,7 @@ class ExplainerTests(unittest.TestCase):
         # the mountain one.
         # Counted by aria-controls rather than by class: the radar's play
         # button wears the same .info pill without being an explainer.
-        self.assertEqual(self.template.count('aria-controls="hint-'), 8)
+        self.assertEqual(self.template.count('aria-controls="hint-'), 9)
         for card in ("inversion", "frost", "heating", "smog"):
             self.assertIn('aria-controls="hint-%s"' % card, self.template)
             self.assertIn('id="hint-%s" hidden' % card, self.template)
@@ -447,11 +447,11 @@ class ExplainerTests(unittest.TestCase):
 
     def test_they_start_collapsed_and_are_labelled(self):
         self.assertNotIn('aria-expanded="true"', self.template)
-        self.assertEqual(self.template.count('aria-label="Τι σημαίνει;"'), 8)
+        self.assertEqual(self.template.count('aria-label="Τι σημαίνει;"'), 9)
 
     def test_explanations_are_written_in_greek(self):
         hints = re.findall(r'<p class="hint[^"]*"[^>]*>(.*?)</p>', self.template, re.S)
-        self.assertEqual(len(hints), 8)
+        self.assertEqual(len(hints), 9)
         for hint in hints:
             self.assertRegex(hint, "[\\u0370-\\u03ff]",
                              "explanation is not in Greek")

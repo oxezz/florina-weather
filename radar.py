@@ -32,12 +32,13 @@ import urllib.request
 import zlib
 from collections import Counter
 
+
 INDEX_URL = "https://api.rainviewer.com/public/weather-maps.json"
 ZOOM = 7            # free-tier maximum since 2026-01-01
 COLOR = 2           # "Universal Blue", the only scheme left on the free tier
 OPTIONS = "0_0"     # no smoothing (keeps exact palette colours), no snow tint
 GRID = 64           # output cells per side
-FRAMES = 6          # 10-minute steps -> the last hour
+FRAMES = 13         # 10-minute steps -> the full two hours RainViewer keeps
 RADIUS_KM = 90
 PALETTE_MAX = 15    # index 0 is "no echo"; 4 bits per cell would still fit
 
@@ -230,8 +231,10 @@ def sample_grid(png_for, cx, cy, half, n, palette):
 
 # --------------------------------------------------------------------------
 class Radar:
-    def __init__(self, lat, lon, radius_km=RADIUS_KM, fetch=_fetch, interval=600):
+    def __init__(self, lat, lon, radius_km=RADIUS_KM, fetch=_fetch, interval=600,
+                 place=""):
         self.lat, self.lon, self.radius_km = lat, lon, radius_km
+        self.place = place
         self.fetch, self.interval = fetch, interval
         self.cx, self.cy = world_px(lat, lon, ZOOM)
         mpp = 156543.03392 * math.cos(math.radians(lat)) / 2 ** ZOOM  # metres per px
@@ -273,6 +276,7 @@ class Radar:
             "km": self.radius_km,
             "half": self.half / (256 * 2 ** ZOOM),   # half-width in mercator units
             "center": [self.lat, self.lon],
+            "place": self.place,
             "palette": self.palette.css(),
             "frames": [rle(self._frames[t]) for t in times],
         }, separators=(",", ":")).encode()

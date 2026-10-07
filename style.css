@@ -479,23 +479,56 @@ a:hover { text-decoration: underline; }
 
 /* No basemap and no tiles: the server decodes RainViewer's radar and ships a
    64x64 grid of palette indexes, so this is one canvas and some rings. */
+.radar-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  margin: 0 auto;
+}
 #radar-cv {
   display: block;
   width: 100%;
-  max-width: 340px;
   aspect-ratio: 1;
-  margin: 0 auto;
+  border-radius: 18px;
+  /* A scope, not a hole in the card: the grid is transparent where it is dry,
+     and without a floor of its own the rings float on nothing. */
+  background:
+    radial-gradient(circle at 50% 45%,
+                    rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.16) 70%),
+    var(--glass-inner);
+  border: 1px solid var(--glass-border-soft);
   color: var(--text-faint);   /* the rings and labels inherit this */
 }
-.radar-foot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-height: 28px;
-  margin-top: 10px;
+
+/* Sits on the canvas rather than beside it, so the map stays square. */
+.radar-play {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--text);
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 120ms ease, background 120ms ease;
 }
-.radar-foot .sub { margin: 0; }
+.radar-play:hover { transform: scale(1.06); }
+.radar-play:active { transform: scale(0.96); }
+.radar-play:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* Blur only where there is a pointer to hover with, as everywhere else. */
+@media (hover: hover) and (pointer: fine) {
+  .radar-play {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+}
 
 /* ------------------------------------------------------ snow climate ---- */
 
@@ -1116,6 +1149,7 @@ footer { margin-top: 28px; font-size: .8rem; color: var(--text-faint); }
   /* Solid enough that text never reads against the weather behind it. */
   .glass { background-color: var(--b2); }
   .card { background-color: var(--b2); }
+  .radar-play { background-color: var(--b2); }
   .backdrop { opacity: .5; }
   .moon-verdict,
   .ocard-item { background: var(--b2); }

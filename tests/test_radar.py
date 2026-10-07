@@ -303,6 +303,40 @@ class PayloadTests(unittest.TestCase):
                                                     for i in range(radar.FRAMES)])
 
 
+
+class GeographyTests(unittest.TestCase):
+    """The outlines that give the scopeless card something to orient by."""
+
+    def test_the_data_is_where_it_should_be(self):
+        import geography
+        self.assertTrue(geography.LAKES)
+        self.assertTrue(geography.BORDERS)
+        # Every ring is at least a triangle, or it would not draw.
+        for ring in list(geography.LAKES) + list(geography.BORDERS):
+            self.assertGreaterEqual(len(ring), 3)
+            for lon, lat in ring:
+                self.assertTrue(-180 <= lon <= 180)
+                self.assertTrue(-90 <= lat <= 90)
+
+    def test_it_is_clipped_to_the_neighbourhood(self):
+        """The whole world is 5 MB. This must be the few degrees around town."""
+        import geography
+        for ring in list(geography.LAKES) + list(geography.BORDERS):
+            for lon, lat in ring:
+                self.assertLess(abs(lat - 40.7819), 1.4)
+                self.assertLess(abs(lon - 21.4090), 1.4)
+
+    def test_it_stays_small_enough_to_send(self):
+        """It is cached for a day, but it still has to be worth sending."""
+        import json
+        import geography
+        payload = json.dumps({"lakes": geography.LAKES,
+                              "borders": geography.BORDERS},
+                             separators=(",", ":"))
+        self.assertLess(len(payload), 12 * 1024)
+
+
+
 class ConfigTests(unittest.TestCase):
     def test_the_radar_can_be_switched_off(self):
         import sources
