@@ -618,45 +618,132 @@ class GreetingTests(unittest.TestCase):
 
 
 class OutfitTests(unittest.TestCase):
-    """Τι να φορέσω, from the feels-like temperature."""
+    """Τι να φορέσω, from the feels-like temperature across the day ahead."""
 
-    def test_layers_follow_apparent_temperature(self):
+    @staticmethod
+    def hour(apparent, wet=0, gusts=10, uv=0.5, temp=None, wind=None):
+        return {"apparent": apparent,
+                "temp": apparent if temp is None else temp,
+                "precip_prob": wet, "gusts": gusts,
+                "wind": (gusts / 2.0) if wind is None else wind, "uv": uv}
+
+    def card(self, hours):
+        return report.build_outfit(hours, NOW)
+
+    def keys(self, outfit):
+        return [i["key"] for i in outfit["items"]]
+
+    # -- the headline ------------------------------------------------------
+
+    def test_bands_follow_apparent_temperature(self):
         cases = [(-5.0, "severe"), (3.0, "cold"), (9.0, "cool"),
-                 (15.0, "mild"), (21.0, "warm"), (30.0, "light")]
+                 (15.0, "mild"), (21.0, "warm"), (28.0, "hot"),
+                 (35.0, "scorching")]
         for value, expected in cases:
             self.assertEqual(greek.outfit_layer(value)[0], expected,
                              "%s C should be %s" % (value, expected))
 
+    def test_the_headline_names_actual_garments(self):
+        """'Wear a jacket' tells you nothing you did not already know."""
+        for value in (-8, 3, 9, 15, 21, 28, 35):
+            text = greek.outfit_layer(value)[1]
+            self.assertGreater(len(text), 10, "too vague at %s" % value)
+            self.assertRegex(text, "(?i)(μπουφάν|ρούχα|ζακέτα|ισοθερμικά|"
+                                   "κοντομάνικο|ελαφριά|ζέστη)",
+                             "no garment named at %s" % value)
+
+    def test_a_wide_swing_names_both_ends(self):
+        """'Layers' on its own is not actionable."""
+        cold = self.hour(6.0)
+        warm = self.hour(20.0)
+        outfit = self.card([cold] * 6 + [warm] * 6)
+        self.assertEqual(outfit["key"], "layers")
+        self.assertIn("μπουφάν", outfit["text"])
+        self.assertIn("κοντομάνικο", outfit["text"])
+        # The headline already says it, so no chip repeats it.
+        self.assertNotIn("layers", self.keys(outfit))
+
+    def test_a_flat_day_keeps_the_single_answer(self):
+        outfit = self.card([self.hour(14.0)] * 12)
+        self.assertEqual(outfit["key"], "mild")
+        self.assertNotIn("layers", self.keys(outfit))
+
+    def test_the_detail_line_gives_the_range(self):
+        outfit = self.card([self.hour(8.0)] * 6 + [self.hour(18.0)] * 6)
+        self.assertIn("Αίσθηση", outfit["detail"])
+        self.assertIn("8", outfit["detail"])
+        self.assertIn("18", outfit["detail"])
+
+    # -- the extras --------------------------------------------------------
+
     def test_a_wet_afternoon_earns_an_umbrella(self):
-        hours = [{"apparent": 12.0, "precip_prob": 70, "uv": 1, "gusts": 10}]
-        outfit = report.build_outfit(hours, NOW)
-        self.assertIn("umbrella", [i["key"] for i in outfit["items"]])
+        self.assertIn("umbrella", self.keys(self.card([self.hour(12.0, wet=70)])))
+
+    def test_a_maybe_earns_a_maybe(self):
+        outfit = self.card([self.hour(12.0, wet=30)])
+        self.assertIn("maybe-umbrella", self.keys(outfit))
+        self.assertNotIn("umbrella", self.keys(outfit))
+
+    def test_a_gale_turns_the_umbrella_into_a_raincoat(self):
+        """The idea worth taking from the reference: a brolly in a gale is
+        worse than useless."""
+        outfit = self.card([self.hour(4.0, wet=65, gusts=45)])
+        self.assertIn("raincoat", self.keys(outfit))
+        self.assertNotIn("umbrella", self.keys(outfit))
+        self.assertIn("αδιάβροχο", outfit["advice"])
 
     def test_distant_rain_does_not_earn_one(self):
         # Rain eight hours out is not a decision anyone is making now.
-        hours = ([{"apparent": 12.0, "precip_prob": 5, "uv": 1, "gusts": 10}] * 6 +
-                 [{"apparent": 12.0, "precip_prob": 95, "uv": 1, "gusts": 10}] * 4)
-        outfit = report.build_outfit(hours, NOW)
-        self.assertNotIn("umbrella", [i["key"] for i in outfit["items"]])
+        hours = [self.hour(12.0, wet=5)] * 6 + [self.hour(12.0, wet=95)] * 4
+        self.assertNotIn("umbrella", self.keys(self.card(hours)))
 
     def test_a_strong_sun_earns_sunscreen(self):
         # UV alone earns the sunscreen; the hat needs real heat as well.
-        mild = report.build_outfit(
-            [{"apparent": 22.0, "precip_prob": 0, "uv": 8, "gusts": 10}], NOW)
-        self.assertIn("sunscreen", [i["key"] for i in mild["items"]])
-        self.assertNotIn("hat", [i["key"] for i in mild["items"]])
-
-        hot = report.build_outfit(
-            [{"apparent": 30.0, "precip_prob": 0, "uv": 8, "gusts": 10}], NOW)
-        self.assertIn("hat", [i["key"] for i in hot["items"]])
+        mild = self.card([self.hour(22.0, uv=8)])
+        self.assertIn("sunscreen", self.keys(mild))
+        self.assertNotIn("hat", self.keys(mild))
+        self.assertIn("hat", self.keys(self.card([self.hour(30.0, uv=8)])))
 
     def test_a_freezing_wet_morning_warns_about_ice(self):
-        hours = [{"apparent": -1.0, "precip_prob": 60, "uv": 0, "gusts": 10}]
-        outfit = report.build_outfit(hours, NOW)
-        self.assertIn("ice", [i["key"] for i in outfit["items"]])
+        self.assertIn("ice", self.keys(self.card([self.hour(-1.0, wet=60)])))
+
+    def test_a_gale_is_flagged_on_its_own(self):
+        """Wind matters here even in the dry: it is what makes Florina bite."""
+        self.assertIn("wind", self.keys(self.card([self.hour(14.0, gusts=55)])))
+
+    def test_several_extras_can_apply_at_once(self):
+        """A list, not one alert that has to win: hot, wet, windy and sunny
+        all at once is unusual but it is not a reason to drop three of them."""
+        outfit = self.card([self.hour(30.0, wet=70, gusts=15, uv=8, wind=12)])
+        keys = self.keys(outfit)
+        self.assertIn("umbrella", keys)
+        self.assertIn("sunscreen", keys)
+        self.assertIn("hat", keys)
+
+    def test_only_one_rain_advice_at_a_time(self):
+        # Calm rain gets a brolly; a gale swaps it for a raincoat. Never both.
+        calm = self.keys(self.card([self.hour(12.0, wet=70, gusts=10)]))
+        gale = self.keys(self.card([self.hour(12.0, wet=70, gusts=45)]))
+        self.assertIn("umbrella", calm)
+        self.assertIn("raincoat", gale)
+        self.assertNotIn("umbrella", gale)
+
+    def test_advice_is_omitted_when_the_chips_already_say_it(self):
+        self.assertIsNone(self.card([self.hour(15.0)])["advice"])
+
+    def test_freezing_and_scorching_get_a_line(self):
+        self.assertIn("Παγωνιά", self.card([self.hour(-8.0)])["advice"])
+        self.assertIn("Ζέστη", self.card([self.hour(36.0)])["advice"])
+
+    def test_a_big_swing_gets_a_line(self):
+        outfit = self.card([self.hour(-4.0)] * 6 + [self.hour(20.0)] * 6)
+        self.assertIn("διαφορά", outfit["advice"])
 
     def test_no_hours_means_no_card(self):
         self.assertIsNone(report.build_outfit([], NOW))
+
+    def test_a_missing_apparent_temperature_hides_the_card(self):
+        self.assertIsNone(report.build_outfit([{"precip_prob": 0}], NOW))
 
 
 class SkyTests(unittest.TestCase):

@@ -269,15 +269,24 @@
     panel.hidden = false;
     setText($("outfit-ico"), outfit.emoji);
     setText($("outfit-text"), outfit.text);
+    setText($("outfit-detail"), outfit.detail || "");
 
     var host = $("outfit-items");
-    if (!host) return;
-    clear(host);
-    (outfit.items || []).forEach(function (item) {
-      var chip = el("span", "ocard-item");
-      setText(chip, item.emoji + " " + item.text);
-      host.appendChild(chip);
-    });
+    if (host) {
+      clear(host);
+      (outfit.items || []).forEach(function (item) {
+        var chip = el("span", "ocard-item");
+        setText(chip, item.emoji + " " + item.text);
+        host.appendChild(chip);
+      });
+    }
+
+    // Only shown when two conditions together say more than each does alone.
+    var advice = $("outfit-advice");
+    if (advice) {
+      setText(advice, outfit.advice || "");
+      advice.hidden = !outfit.advice;
+    }
   }
 
   function renderSky(sky) {

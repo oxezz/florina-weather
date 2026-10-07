@@ -364,14 +364,45 @@ def stargazing_level(cloud, aqi, illumination):
 
 
 # Layers by apparent temperature, coldest first so the first match wins.
-_OUTFIT_LAYERS = (
-    (0.0, "severe", "Βαρύ μπουφάν, γάντια & σκούφος", "🧣"),
-    (6.0, "cold", "Βαρύ μπουφάν", "🧥"),
-    (12.0, "cool", "Μπουφάν", "🧥"),
-    (18.0, "mild", "Ζακέτα", "🧥"),
-    (25.0, "warm", "Άνετα ρούχα", "👕"),
+# Deliberately specific: "βάλε μπουφάν" tells you nothing you did not know,
+# while naming the actual garments is the whole point of the card.
+_OUTFIT_BANDS = (
+    (0.0, "severe", "Ισοθερμικά, βαρύ μπουφάν, σκούφος και γάντια", "🧣"),
+    (6.0, "cold", "Χειμωνιάτικο μπουφάν, ζεστά ρούχα", "🧥"),
+    (12.0, "cool", "Μπουφάν ή παλτό", "🧥"),
+    (18.0, "mild", "Ελαφρύ μπουφάν, φούτερ ή ζακέτα", "🧥"),
+    (25.0, "warm", "Κοντομάνικο, με ζακέτα για το βράδυ", "👕"),
+    (32.0, "hot", "Δροσερά, ελαφριά ρούχα", "🩳"),
 )
-_OUTFIT_LIGHT = ("light", "Ελαφριά ρούχα", "👕")
+_OUTFIT_SCORCHING = ("scorching", "Πολλή ζέστη — όσο πιο ελαφριά γίνεται", "🥵")
+
+# Short names, for when two bands have to appear in one line.
+_BAND_SHORT = {
+    "severe": "ισοθερμικά",
+    "cold": "χειμωνιάτικο",
+    "cool": "μπουφάν",
+    "mild": "ελαφρύ μπουφάν",
+    "warm": "κοντομάνικο",
+    "hot": "ελαφριά",
+    "scorching": "ελάχιστα",
+}
+
+# When the twelve hours ahead span this much, no single layer is the answer.
+OUTFIT_SWING = 10.0
+
+
+def outfit_swing(low, high):
+    """A headline naming both ends of a day too varied for one layer.
+
+    "Στρώσεις" on its own says nothing you could act on, which defeats the
+    point of the card. Naming the two garments does.
+    """
+    cold = outfit_layer(low)
+    warm = outfit_layer(high)
+    if cold is None or warm is None or cold[0] == warm[0]:
+        return None
+    return "Στρώσεις: %s για αρχή, %s για μετά" % (
+        _BAND_SHORT.get(cold[0], cold[1]), _BAND_SHORT.get(warm[0], warm[1]))
 
 # When the twelve hours ahead span ten degrees, no single layer is the answer.
 OUTFIT_LAYERS = ("layers", "Στρώσεις — η θερμοκρασία αλλάζει αρκετά", "🧥")
@@ -385,18 +416,31 @@ def outfit_layer(apparent):
         return None
     if value != value:  # NaN
         return None
-    for limit, key, text, emoji in _OUTFIT_LAYERS:
+    for limit, key, text, emoji in _OUTFIT_BANDS:
         if value < limit:
             return (key, text, emoji)
-    return _OUTFIT_LIGHT
+    return _OUTFIT_SCORCHING
 
 
-# Extras layered on top of the main suggestion. Several can apply at once.
+# Extras layered on top of the main suggestion. Several can apply at once, so
+# they are a list rather than one "alert" that has to win.
 OUTFIT_UMBRELLA = ("umbrella", "Ομπρέλα", "☂️")
+OUTFIT_MAYBE_UMBRELLA = ("maybe-umbrella", "Ίσως ομπρέλα", "🌂")
+OUTFIT_RAINCOAT = ("raincoat", "Αδιάβροχο, όχι ομπρέλα", "🧥")
 OUTFIT_SUNSCREEN = ("sunscreen", "Αντηλιακό", "🧴")
 OUTFIT_HAT = ("hat", "Καπέλο", "🧢")
-OUTFIT_WIND = ("wind", "Προσοχή στον άνεμο", "💨")
+OUTFIT_WIND = ("wind", "Δυνατός αέρας", "💨")
 OUTFIT_ICE = ("ice", "Προσοχή στον πάγο", "⚠️")
+OUTFIT_LAYERS = ("layers", "Στρώσεις", "🧅")
+
+# One line, only when two conditions combine into advice worth spelling out.
+OUTFIT_ADVICE = {
+    "wind-and-rain": "Δυνατός αέρας με βροχή — καλύτερα αδιάβροχο παρά ομπρέλα.",
+    "big-swing": "Μεγάλη διαφορά μέσα στη μέρα, πάρτε κάτι για τα δύο άκρα.",
+    "freezing": "Παγωνιά — καλύψτε πρόσωπο και χέρια.",
+    "scorching": "Ζέστη — νερό μαζί και σκιά το μεσημέρι.",
+    "wind-chill": "Ο αέρας κόβει, αισθάνεται αρκετά πιο κρύο απ' ό,τι δείχνει.",
+}
 
 
 def normal_text(delta):

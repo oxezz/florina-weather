@@ -560,6 +560,25 @@ class ExtrasTests(unittest.TestCase):
         # Built through setText, never innerHTML.
         self.assertIn("setText(chip, item.emoji", self.js)
 
+    def test_the_outfit_card_is_not_centred(self):
+        """`.card` sets text-align: center, which is right for a stat tile and
+        wrong for a sentence. It cannot be fixed on `.ocard` itself: `.ocard`
+        and `.card` are the same element, both are single-class selectors, and
+        `.card` is defined later, so it wins on source order."""
+        block = self.css.split(".ocard-body {")[1].split("}")[0]
+        self.assertIn("text-align: left", block)
+        # The ordering trap is real, so assert it rather than assume it.
+        self.assertLess(self.css.index(".ocard {"), self.css.index(".card {"))
+
+    def test_the_outfit_text_can_shrink(self):
+        """A grid column sizes to max-content by default, so a long headline
+        stretched the card past the viewport instead of wrapping."""
+        block = self.css.split(".ocard-body {")[1].split("}")[0]
+        self.assertIn("minmax(0, 1fr)", block)
+
+    def test_an_empty_chip_row_leaves_no_gap(self):
+        self.assertIn(".ocard-items:empty", self.css)
+
 
 class AccessibilityTests(unittest.TestCase):
     """Preferences the interface has to honour, not merely tolerate."""

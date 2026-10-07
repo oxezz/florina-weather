@@ -877,11 +877,18 @@ def build_greeting(now_local, current):
 
 
 def build_outfit(hours, now_local):
-    """What to wear, from the feels-like temperature across the day ahead.
+    """What to wear across the day ahead.
 
-    Reading only the current hour gave «Βαρύ μπουφάν» at 02:00 on a day that
-    would reach 20 °C by afternoon. The twelve hours ahead are what matters,
-    and when they span ten degrees the honest answer is layers.
+    Three layers of advice, in the order a person asks for it:
+
+    * a headline naming actual garments, from the feels-like temperature;
+    * a detail line giving the range over the next twelve hours, because
+      "12°" alone does not say whether that is the whole day;
+    * a short list of extras — umbrella, sunscreen, ice — several of which
+      can apply at once, which is why they are a list and not one alert.
+
+    ``now`` is the top of the hour closest to the present, so the headline
+    answers "what do I put on to go out", not "what was the average".
     """
     if not hours:
         return None
@@ -892,44 +899,86 @@ def build_outfit(hours, now_local):
     ahead = hours[:12]
     feels = [h.get("apparent") for h in ahead if _is_number(h.get("apparent"))]
     span = (max(feels) - min(feels)) if len(feels) > 1 else 0.0
+    low = min(feels) if feels else None
+    high = max(feels) if feels else None
 
-    if span >= 10.0:
+    # A wide swing makes the single layer answer wrong at one end or the other,
+    # so both ends are named instead of hiding behind the word "layers".
+    swing = None
+    if span >= greek.OUTFIT_SWING and low is not None and high is not None:
+        swing = greek.outfit_swing(low, high)
+    if swing:
         key, headline, emoji = greek.OUTFIT_LAYERS
+        headline = swing
     else:
         key, headline, emoji = greek.outfit_layer(now.get("apparent"))
 
-    items = []
-
-    # Rain within the next six hours is worth an umbrella; further out is not
-    # a decision anyone is making right now.
+    # Rain is judged over the hours you would actually be out in it.
     wet = max((h.get("precip_prob") or 0) for h in ahead[:6]) if ahead else 0
-    if wet >= 50:
-        items.append(greek.OUTFIT_UMBRELLA)
-
-    uv = now.get("uv")
-    if _is_number(uv) and uv >= 6:
-        items.append(greek.OUTFIT_SUNSCREEN)
-        if _is_number(now.get("apparent")) and now["apparent"] >= 27:
-            items.append(greek.OUTFIT_HAT)
-
     gusts = now.get("gusts")
-    if _is_number(gusts) and gusts >= 50:
+    wind_now = now.get("wind")
+    strongest = max([v for v in (gusts, wind_now) if _is_number(v)] or [0])
+    uv = now.get("uv")
+    apparent = now.get("apparent")
+
+    items = []
+    if wet >= 50:
+        # A brolly in a gale is worse than useless.
+        items.append(greek.OUTFIT_RAINCOAT if gusts is not None and gusts >= 40
+                     else greek.OUTFIT_UMBRELLA)
+    elif wet >= 20:
+        items.append(greek.OUTFIT_MAYBE_UMBRELLA)
+
+    if strongest >= 50:
         items.append(greek.OUTFIT_WIND)
 
+    if _is_number(uv) and uv >= 6:
+        items.append(greek.OUTFIT_SUNSCREEN)
+        if _is_number(apparent) and apparent >= 27:
+            items.append(greek.OUTFIT_HAT)
+
     # Ice needs both a freezing surface and water about.
-    cold = min(feels) if feels else None
-    if cold is not None and cold <= 1 and wet >= 30:
+    if _is_number(apparent) and apparent <= 1 and wet >= 30:
         items.append(greek.OUTFIT_ICE)
+
+    # The chip is only needed when the headline does not already say it.
+    if span >= greek.OUTFIT_SWING and not swing:
+        items.append(greek.OUTFIT_LAYERS)
+
+    # One combined line, only when two things together say more than each does
+    # alone. Otherwise the chips already cover it.
+    advice = None
+    if wet >= 50 and gusts is not None and gusts >= 40:
+        advice = greek.OUTFIT_ADVICE["wind-and-rain"]
+    elif span >= 15.0:
+        advice = greek.OUTFIT_ADVICE["big-swing"]
+    elif _is_number(apparent) and apparent <= -5:
+        advice = greek.OUTFIT_ADVICE["freezing"]
+    elif _is_number(apparent) and apparent >= 33:
+        advice = greek.OUTFIT_ADVICE["scorching"]
+    elif (strongest >= 40 and _is_number(apparent)
+          and apparent <= now.get("temp", apparent) - 4):
+        advice = greek.OUTFIT_ADVICE["wind-chill"]
+
+    detail = "Αίσθηση %+.1f° τώρα" % apparent if _is_number(apparent) else ""
+    if low is not None and high is not None and span >= 2.0:
+        detail += (" · " if detail else "") + \
+                  "τις επόμενες ώρες %.0f° έως %.0f°" % (low, high)
 
     return {
         "key": key,
         "text": headline,
         "emoji": emoji,
-        "apparent": now.get("apparent"),
-        "feels_low": round(min(feels), 1) if feels else None,
-        "feels_high": round(max(feels), 1) if feels else None,
+        "detail": detail,
+        "advice": advice,
+        "apparent": apparent,
+        "temp": now.get("temp"),
+        "feels_low": round(low, 1) if low is not None else None,
+        "feels_high": round(high, 1) if high is not None else None,
         "span": round(span, 1),
         "rain_chance": round(wet) if _is_number(wet) else None,
+        "wind": round(strongest, 1) if strongest else None,
+        "uv": uv if _is_number(uv) else None,
         "items": [{"key": k, "text": t, "emoji": e} for k, t, e in items],
     }
 
