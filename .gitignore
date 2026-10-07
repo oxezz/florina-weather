@@ -29,4 +29,11 @@ htmlcov/
 Thumbs.db
 desktop.ini
 
+# Research downloads. The scripts kept here fetch what they need and cache it
+# in research/_cache/, which is local only. Everything else that lands in this
+# directory - PDFs, scraped HTML, station dumps, shapefiles - is source
+# material, not part of the project. 91 MB of it was committed once by a
+# 'git add -A'; this rule is why it will not be again.
+research/*
+!research/*.py
 research/_cache/

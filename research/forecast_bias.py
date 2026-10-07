@@ -3,14 +3,14 @@
 
 Run from the repository root:  python research/forecast_bias.py
 
-The inversion index is a difference between two modelled temperatures, so any
-bias not common to both legs lands in it. This measures the valley leg against
-the station over every year the archived-forecast API covers, and prints the
-per-hour table the night figure is taken from.
+The inversion index is a difference between two modelled temperatures, so a
+bias common to both legs cancels and a bias that is not lands in the result.
+This measures the valley leg against Florina's own station over every year the
+archived-forecast API covers, and prints the per-hour table the night figure is
+taken from.
 
-The inversion index compares two modelled temperatures, so a bias that is
-common to both cancels and a bias that is not does not. This measures the
-valley leg against the station; the slope leg is a separate, weaker check.
+Needs research/_cache/isd_florina.csv, which snow_climatology.py writes; run
+that one first on a fresh clone.
 """
 import csv
 import json
