@@ -29,3 +29,24 @@ there is no Greek coverage and the idea is dead.
 a computed pixel offset. No Leaflet (144 KB — 2.4× this whole app), no CSP
 change, no third-party requests from the browser, cached like every other
 source, and roughly 2.5 KB dry. The 13-frame loop would be about 30 KB.
+
+**A frost alert webhook** — push a message when the frost card fires, via ntfy
+or Telegram, using `urllib` so the app keeps its no-dependencies rule. Needs a
+decision first: which service, and the topic name or bot token. Nothing else
+about it is hard.
+
+**A real station reading next to the forecast.** Not yet shown to exist.
+Checked so far:
+
+- **aqicn** — `feed/florina` returns `Unknown station`, but the demo token
+  ignores the search term entirely and serves a fixed dataset (a Greece search
+  came back with Bangalore), so the demo cannot settle it. A real token is
+  needed before drawing any conclusion.
+- **NOA / meteo.gr** — the station search requires a login, and the open-data
+  URL 404s.
+- **sensoto** — surfaced in search for Florina, but serves an app shell with no
+  reachable endpoint.
+
+So the honest position is unresolved rather than absent. A station in the basin
+would be genuinely valuable: it would let the whole model stack — the inversion
+index especially — be checked against reality instead of against itself.
