@@ -434,7 +434,9 @@ class ExplainerTests(unittest.TestCase):
         # Four local cards, plus an explainer on each of the 48-hour, 7-day,
         # snow and mountain panels. The road and snow cards were merged into
         # the mountain one.
-        self.assertEqual(self.template.count('class="info"'), 8)
+        # Counted by aria-controls rather than by class: the radar's play
+        # button wears the same .info pill without being an explainer.
+        self.assertEqual(self.template.count('aria-controls="hint-'), 8)
         for card in ("inversion", "frost", "heating", "smog"):
             self.assertIn('aria-controls="hint-%s"' % card, self.template)
             self.assertIn('id="hint-%s" hidden' % card, self.template)

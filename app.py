@@ -33,10 +33,11 @@ from urllib.parse import parse_qs, urlsplit
 
 import greek
 import notify
+import radar
 import report as report_mod
 import sources
 
-__version__ = "3.11.0"
+__version__ = "3.12.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(BASE_DIR, "template.html")
@@ -46,6 +47,7 @@ STATIC_FILES = {
     "/style.css": ("style.css", "text/css; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/theme.js": ("theme.js", "text/javascript; charset=utf-8"),
+    "/radar.js": ("radar.js", "text/javascript; charset=utf-8"),
     "/sw.js": ("sw.js", "text/javascript; charset=utf-8"),
     "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
     "/favicon.svg": ("favicon.svg", "image/svg+xml"),
@@ -168,6 +170,7 @@ class Handler(BaseHTTPRequestHandler):
     service: sources.WeatherService = None
     shell: ShellCache = None
     config: sources.Config = None
+    radar = None
 
     # -- plumbing ----------------------------------------------------------
 
@@ -258,6 +261,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._serve_weather(force="force" in query)
             elif path == "/api/health":
                 self._send_json(self.service.health())
+            elif path == "/api/radar":
+                self._serve_radar()
             elif path in STATIC_FILES:
                 self._serve_static(path)
             elif path == "/favicon.ico":
@@ -333,6 +338,20 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send_json(payload)
 
+    def _serve_radar(self):
+        """The decoded radar grid, or 503 until the first refresh lands.
+
+        Already JSON bytes, so it goes out as-is and _send compresses it; a
+        rainy frame is about 46 KB raw and about 10 KB gzipped.
+        """
+        payload = self.radar.payload() if self.radar else None
+        if not payload:
+            self._fail(HTTPStatus.SERVICE_UNAVAILABLE,
+                       "Το ραντάρ δεν είναι ακόμα έτοιμο.",
+                       "Δοκιμάστε ξανά σε λίγο.")
+            return
+        self._send(HTTPStatus.OK, payload, "application/json; charset=utf-8")
+
     def _serve_static(self, path):
         filename, content_type = STATIC_FILES[path]
         full = os.path.join(BASE_DIR, filename)
@@ -371,12 +390,17 @@ class Server(ThreadingHTTPServer):
     request_queue_size = 32
 
 
-def create_server(config, service=None):
-    """Build a ready-to-serve HTTP server (used by the tests too)."""
+def create_server(config, service=None, radar_instance=None):
+    """Build a ready-to-serve HTTP server (used by the tests too).
+
+    ``radar_instance`` is injected so the tests never touch RainViewer, and so
+    a caller can pass ``None`` to run without the radar card at all.
+    """
     handler = type("BoundHandler", (Handler,), {
         "service": service or sources.WeatherService(config),
         "shell": ShellCache(TEMPLATE),
         "config": config,
+        "radar": radar_instance,
     })
     return Server((config.host, config.port), handler)
 
@@ -427,8 +451,16 @@ def main(argv=None):
         alert_emma_ids=_split(args.alert_emma_ids),
     )
 
+    # The radar refreshes on its own thread and starts empty, so a slow or
+    # failing RainViewer never delays the first page load: /api/radar simply
+    # answers 503 until the first grid is built, and the card stays hidden.
+    radar_instance = None
+    if config.radar_enabled:
+        radar_instance = radar.Radar(lat=config.lat, lon=config.lon)
+        radar_instance.start()
+
     try:
-        httpd = create_server(config)
+        httpd = create_server(config, radar_instance=radar_instance)
     except OSError as exc:
         log.error("cannot bind %s:%s — %s", config.host, config.port, exc)
         log.error("Try another port:  python app.py --port 8080")

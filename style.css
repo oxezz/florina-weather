@@ -475,6 +475,28 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--glass-border-soft);
 }
 
+/* ---------------------------------------------------------- radar ------ */
+
+/* No basemap and no tiles: the server decodes RainViewer's radar and ships a
+   64x64 grid of palette indexes, so this is one canvas and some rings. */
+#radar-cv {
+  display: block;
+  width: 100%;
+  max-width: 340px;
+  aspect-ratio: 1;
+  margin: 0 auto;
+  color: var(--text-faint);   /* the rings and labels inherit this */
+}
+.radar-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 28px;
+  margin-top: 10px;
+}
+.radar-foot .sub { margin: 0; }
+
 /* ------------------------------------------------------ snow climate ---- */
 
 /* Always visible, unlike every other seasonal card: a climatology means

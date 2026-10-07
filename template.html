@@ -212,7 +212,26 @@
     <div class="day skel day-skel" data-skeleton></div>
     <div class="day skel day-skel" data-skeleton></div>
     <div class="day skel day-skel" data-skeleton></div>
+   </div>
+</section>
+
+<section class="card glass panel" id="radar-panel" hidden>
+  <div class="panel-head">
+    <h2>Ραντάρ βροχής</h2>
+    <span class="chip muted" id="radar-time"></span>
   </div>
+  <canvas id="radar-cv" role="img"
+          aria-label="Ραντάρ βροχής γύρω από τη Φλώρινα"></canvas>
+  <div class="radar-foot">
+    <button type="button" class="info" id="radar-play" aria-label="Παύση" hidden>&#10074;&#10074;</button>
+    <p class="sub" id="radar-note" aria-live="polite"></p>
+  </div>
+  <p class="ref-note">
+    Ακτίνες 30, 60 και 90 χλμ. από τη Φλώρινα, με κουκκίδες για Καστοριά,
+    Έδεσσα, Μοναστήρι και Πτολεμαΐδα. Δεν υπάρχει χάρτης: τα σκούρα σημεία
+    είναι οι πόλεις, όχι το έδαφος.
+    Ραντάρ: <a href="https://www.rainviewer.com" target="_blank" rel="noopener">RainViewer</a>.
+  </p>
 </section>
 
 <section class="card glass panel" id="local-panel" hidden>
@@ -410,5 +429,6 @@
 </footer>
 
 <script src="/app.js?v={{VERSION}}"></script>
+<script src="/radar.js?v={{VERSION}}"></script>
 </body>
 </html>

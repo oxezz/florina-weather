@@ -279,6 +279,11 @@ class Config:
     # the open-data stations costs nothing and keeps the card current.
     florina_enabled: bool = True
     florina_cache_ttl: float = 420.0
+
+    # The radar decodes RainViewer tiles on the server and republishes a tiny
+    # grid, so the browser never sees a tile or a map library. Free-tier terms
+    # require visible credit, which the card carries.
+    radar_enabled: bool = True
     # A half-hourly feed, so an hour of lag means something is wrong upstream.
     florina_max_age: float = 3600.0
     florina_name: str = "Φλώρινα"

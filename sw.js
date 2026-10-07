@@ -37,7 +37,15 @@ var SHELL = [
   "/icon-192.png",
   "/icon-512.png",
   "/icon-maskable-512.png",
-  "/icon-180.png"
+  "/icon-180.png",
+  // The page shell also needs the scripts and the stylesheet, or an offline
+  // launch renders unstyled and says nothing. The radar grid is deliberately
+  // NOT here: it is stale within minutes, and a cached grid would draw weather
+  // that has already fallen.
+  "/style.css",
+  "/app.js",
+  "/theme.js",
+  "/radar.js"
 ];
 
 self.addEventListener("install", function (event) {
