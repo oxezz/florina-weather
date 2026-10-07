@@ -5,6 +5,7 @@ A real server is started on an ephemeral port with an injected offline opener,
 so the whole request path is exercised without touching the network.
 """
 
+import datetime
 import gzip
 import http.client
 import json
@@ -32,7 +33,11 @@ def recording_opener(counter):
             return fixtures.dumps(fixtures.air())
         if "meteoalarm" in url:
             counter["alerts"] = counter.get("alerts", 0) + 1
-            return fixtures.dumps(fixtures.alerts())
+            # Anchored to the real clock: this opener feeds the live HTTP
+            # server, so a fixed warning window silently expires one day and
+            # the assertion starts failing on a date rather than on a bug.
+            return fixtures.dumps(
+                fixtures.alerts(now=datetime.datetime.now(datetime.timezone.utc)))
         # Same host as the forecast, but daily-only: the HDD history call.
         if "temperature_2m_mean" in url:
             counter["history"] = counter.get("history", 0) + 1

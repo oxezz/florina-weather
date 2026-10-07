@@ -330,9 +330,9 @@ def build_agreement(terrain, config):
         # Two models is the minimum for a disagreement to mean anything.
         if len(highs) < 2:
             continue
-        worst = max(highs) - min(highs)
-        if len(lows) > 1:
-            worst = max(worst, max(lows) - min(lows))
+        high_spread = max(highs) - min(highs)
+        low_spread = (max(lows) - min(lows)) if len(lows) > 1 else 0.0
+        worst = max(high_spread, low_spread)
         key, label, colour = greek.agreement_level(worst)
         spread[str(stamp)] = {
             "spread": round(worst, 1),
@@ -340,7 +340,13 @@ def build_agreement(terrain, config):
             "label": label,
             "color": colour,
             "models": len(highs),
+            # The headline number is the wider of the two, so both ranges are
+            # reported and the tooltip says which one it came from. Quoting
+            # only the highs left "±2.9" sitting next to a 19.8-20.2 range.
+            "driver": "max" if high_spread >= low_spread else "min",
             "range": [round(min(highs), 1), round(max(highs), 1)],
+            "low_range": ([round(min(lows), 1), round(max(lows), 1)]
+                          if len(lows) > 1 else None),
         }
     return spread
 
@@ -684,7 +690,62 @@ def _hourly_points(hourly, start_index, count, tz, moon=None):
     return points
 
 
-def _daily_points(daily, tz, today, config, agreement=None):
+def _day_icon(hourly, day_iso, daily_code, precip_sum, precip_prob):
+    """Pick a day's icon from its *daylight* hours.
+
+    Open-Meteo's daily ``weather_code`` is the most severe hour of the 24, so
+    it reports a thunderstorm for 0.8 mm of rain and a cloudy icon for a day
+    that was clear from sunrise to sunset. Reading the daytime hours instead
+    gives the icon people actually experience.
+    """
+    times = (hourly or {}).get("time") or []
+    codes = (hourly or {}).get("weather_code") or []
+    cloud = (hourly or {}).get("cloud_cover") or []
+    daylight = (hourly or {}).get("is_day") or []
+
+    daytime_codes, clouds = [], []
+    for index, stamp in enumerate(times):
+        if str(stamp)[:10] != day_iso:
+            continue
+        if not _at(daylight, index, 1):
+            continue                    # the night is not what the day looked like
+        code = _at(codes, index)
+        if code is not None:
+            daytime_codes.append(code)
+        cover = _at(cloud, index)
+        if cover is not None:
+            clouds.append(cover)
+
+    wet = ((_is_number(precip_sum) and precip_sum >= 1.0) or
+           (_is_number(precip_prob) and precip_prob >= 40))
+
+    if wet:
+        frozen = (any(c in _CODES_SNOW for c in daytime_codes) or
+                  daily_code in _CODES_SNOW)
+        if frozen:
+            return daily_code if daily_code in _CODES_SNOW else 73
+        # Thunder needs real rain behind it, not a 0.8 mm squall.
+        if (daily_code in _CODES_STORM and _is_number(precip_sum)
+                and precip_sum >= 1.0):
+            return daily_code
+        if daily_code in _CODES_RAIN:
+            return daily_code
+        return 61
+    if daily_code in _CODES_FOG or any(c in _CODES_FOG for c in daytime_codes):
+        return 45
+    if not clouds:
+        return daily_code               # no daytime data: trust the API
+    mean = sum(clouds) / len(clouds)
+    if mean < 15:
+        return 0
+    if mean < 40:
+        return 1
+    if mean < 70:
+        return 2
+    return 3
+
+
+def _daily_points(daily, tz, today, config, agreement=None, hourly=None):
     times = daily.get("time") or []
     points = []
     for index, stamp in enumerate(times):
@@ -692,7 +753,10 @@ def _daily_points(daily, tz, today, config, agreement=None):
             day = date.fromisoformat(str(stamp))
         except ValueError:
             continue
-        code = _at(daily.get("weather_code"), index, 0)
+        code = _day_icon(hourly, str(stamp),
+                         _at(daily.get("weather_code"), index, 0),
+                         _at(daily.get("precipitation_sum"), index, 0.0),
+                         _at(daily.get("precipitation_probability_max"), index, 0))
         uv_max = _at(daily.get("uv_index_max"), index)
         uv_label, uv_colour = greek.uv_level(uv_max)
         direction = _at(daily.get("wind_direction_10m_dominant"), index)
@@ -812,21 +876,32 @@ def build_greeting(now_local, current):
 
 
 def build_outfit(hours, now_local):
-    """What to wear, from the feels-like temperature and the hours ahead."""
+    """What to wear, from the feels-like temperature across the day ahead.
+
+    Reading only the current hour gave «Βαρύ μπουφάν» at 02:00 on a day that
+    would reach 20 °C by afternoon. The twelve hours ahead are what matters,
+    and when they span ten degrees the honest answer is layers.
+    """
     if not hours:
         return None
     now = hours[0]
-    layer = greek.outfit_layer(now.get("apparent"))
-    if layer is None:
+    if greek.outfit_layer(now.get("apparent")) is None:
         return None
-    key, headline, emoji = layer
+
+    ahead = hours[:12]
+    feels = [h.get("apparent") for h in ahead if _is_number(h.get("apparent"))]
+    span = (max(feels) - min(feels)) if len(feels) > 1 else 0.0
+
+    if span >= 10.0:
+        key, headline, emoji = greek.OUTFIT_LAYERS
+    else:
+        key, headline, emoji = greek.outfit_layer(now.get("apparent"))
 
     items = []
 
     # Rain within the next six hours is worth an umbrella; further out is not
     # a decision anyone is making right now.
-    ahead = hours[:6]
-    wet = max((h.get("precip_prob") or 0) for h in ahead) if ahead else 0
+    wet = max((h.get("precip_prob") or 0) for h in ahead[:6]) if ahead else 0
     if wet >= 50:
         items.append(greek.OUTFIT_UMBRELLA)
 
@@ -841,7 +916,8 @@ def build_outfit(hours, now_local):
         items.append(greek.OUTFIT_WIND)
 
     # Ice needs both a freezing surface and water about.
-    if _is_number(now.get("apparent")) and now["apparent"] <= 1 and wet >= 30:
+    cold = min(feels) if feels else None
+    if cold is not None and cold <= 1 and wet >= 30:
         items.append(greek.OUTFIT_ICE)
 
     return {
@@ -849,6 +925,9 @@ def build_outfit(hours, now_local):
         "text": headline,
         "emoji": emoji,
         "apparent": now.get("apparent"),
+        "feels_low": round(min(feels), 1) if feels else None,
+        "feels_high": round(max(feels), 1) if feels else None,
+        "span": round(span, 1),
         "rain_chance": round(wet) if _is_number(wet) else None,
         "items": [{"key": k, "text": t, "emoji": e} for k, t, e in items],
     }
@@ -887,9 +966,19 @@ def build_sky(moon, hours, air):
     if not moon:
         return None
 
-    # Tonight is the dark stretch after sunset. Cloud and haze are read from
-    # the same hours the observing would actually happen in.
-    night = [h for h in hours if not h.get("is_day")][:8]
+    # Tonight is the *remaining* dark hours, starting now. Taking the first
+    # eight night hours from an 02:00 request mixed in the following evening,
+    # so a 35% cloud figure was really tomorrow night's.
+    night, started = [], False
+    for hour in hours:
+        if hour.get("is_day"):
+            if started:
+                break
+            continue                    # still daytime: wait for sunset
+        started = True
+        night.append(hour)
+        if len(night) >= 12:
+            break
     clouds = [h.get("cloud") for h in night if _is_number(h.get("cloud"))]
     cover = round(sum(clouds) / len(clouds)) if clouds else None
 
@@ -943,7 +1032,8 @@ def build_report(snapshot, config, now=None):
     start = _start_index(hourly_raw, now_local)
     hours = _hourly_points(hourly_raw, start, max(1, config.forecast_hours), tz, moon)
     agreement = build_agreement(snapshot.get("terrain"), config)
-    days = _daily_points(daily_raw, tz, now_local.date(), config, agreement)
+    days = _daily_points(daily_raw, tz, now_local.date(), config, agreement,
+                         hourly_raw)
 
     visibility = hours[0]["visibility"] if hours else None
     code = current_raw.get("weather_code", 0)

@@ -229,10 +229,28 @@ def _info(area_desc, geocode, language, event, headline, description,
     }
 
 
-def alerts():
-    """A Meteoalarm Greece feed: one for us, one elsewhere, one expired, one cancelled."""
-    onset = "2026-10-06T18:00:00+00:00"
-    expires = "2026-10-07T06:00:00+00:00"
+def alerts(now=None):
+    """A Meteoalarm Greece feed: one for us, one elsewhere, one expired, one cancelled.
+
+    ``now`` anchors the validity window. The report tests pass their frozen
+    clock; anything going through the real HTTP server must pass the real one,
+    or the warning silently expires and the assertion fails on a date rather
+    than on a bug.
+    """
+    anchor = now or datetime.datetime(2026, 10, 6, 18, 0)
+    if anchor.tzinfo is None:
+        anchor = anchor.replace(tzinfo=datetime.timezone.utc)
+    anchor = anchor.astimezone(datetime.timezone.utc)
+
+    def stamp(moment):
+        return moment.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+
+    # The default anchor is the original 18:00 UTC onset, so the frozen-clock
+    # report tests see exactly the window they always did.
+    onset = stamp(anchor)
+    expires = stamp(anchor + datetime.timedelta(hours=12))
+    expired_from = stamp(anchor - datetime.timedelta(days=35))
+    expired_to = stamp(anchor - datetime.timedelta(days=35, hours=-6))
     return {"warnings": [
         # Relevant to Florina, bilingual: the Greek block must win.
         {"alert": {
@@ -267,7 +285,7 @@ def alerts():
             "msgType": "Update",
             "info": [_info("West Macedonia", "GR009", "el-GR", "Κίτρινη Προειδοποίηση",
                            "Παλιά προειδοποίηση", "Έχει λήξει.",
-                           "2026-09-01T00:00:00+00:00", "2026-09-01T06:00:00+00:00",
+                           expired_from, expired_to,
                            "1; Wind", "2; Yellow; Moderate", "Moderate")],
         }},
         # Withdrawn.

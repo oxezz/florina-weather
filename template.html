@@ -14,8 +14,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="{{PLACE}}">
-<link rel="stylesheet" href="/style.css">
-<script src="/theme.js"></script>
+<!-- The version stamp matters: after a deploy the service worker can still be
+     holding the previous app.js and style.css, so the page would run new HTML
+     against old code for one load. A changed URL is a guaranteed cache miss. -->
+<link rel="stylesheet" href="/style.css?v={{VERSION}}">
+<script src="/theme.js?v={{VERSION}}"></script>
 </head>
 <body class="wrap" data-refresh="{{REFRESH}}" data-version="{{VERSION}}">
 
@@ -279,6 +282,6 @@
   <div class="foot-row muted" id="foot-status"></div>
 </footer>
 
-<script src="/app.js"></script>
+<script src="/app.js?v={{VERSION}}"></script>
 </body>
 </html>

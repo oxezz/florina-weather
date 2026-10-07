@@ -19,6 +19,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent import futures
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -185,6 +186,11 @@ class Config:
     alerts_cache_ttl: float = 300.0
     max_stale: float = 6 * 3600.0
     timeout: float = 20.0
+    # How long a source that just failed is left alone. Without this, every
+    # page view retries every source during an outage or a 429.
+    failure_ttl: float = 45.0
+    # The shortest gap between two honoured `?force` refreshes.
+    force_min_interval: float = 45.0
     forecast_days: int = 7
     forecast_hours: int = 48
     history_days: int = 45      # enough to cover any month-to-date window
@@ -352,6 +358,9 @@ class WeatherService:
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self.cache = Cache()
         self._lock = threading.Lock()
+        self._key_locks = {}
+        self._failures = {}
+        self._last_force = None
         self.last_error = {}
         self.last_success = {}
 
@@ -433,24 +442,74 @@ class WeatherService:
 
     # -- caching ------------------------------------------------------------
 
-    def _cached(self, key, ttl, loader):
-        """Return ``(value, age_seconds, stale, error)``."""
+    def _lock_for(self, key):
+        """One lock per source, so a stampede at expiry becomes one fetch."""
+        with self._lock:
+            lock = self._key_locks.get(key)
+            if lock is None:
+                lock = self._key_locks[key] = threading.Lock()
+            return lock
+
+    def _recently_failed(self, key):
+        when = self._failures.get(key)
+        if when is None:
+            return False
+        return (self._clock() - when).total_seconds() < self.config.failure_ttl
+
+    def _force_allowed(self):
+        """Rate-limit ``?force`` so a held-down refresh cannot hammer upstream."""
+        now = self._clock()
+        with self._lock:
+            if (self._last_force is not None and
+                    (now - self._last_force).total_seconds()
+                    < self.config.force_min_interval):
+                return False
+            self._last_force = now
+            return True
+
+    def _cached(self, key, ttl, loader, skip_ttl=False):
+        """Return ``(value, age_seconds, stale, error)``.
+
+        Three guards against leaning on upstream harder than we need to:
+
+        * ``skip_ttl`` (a manual refresh) re-reads *without* discarding the
+          entry we hold, so a refresh that fails still has something to serve.
+          Dropping it first is what left the page with nothing at all.
+        * a per-key lock collapses concurrent callers at expiry into one fetch.
+        * a source that just failed is left alone for ``failure_ttl`` rather
+          than being retried on every single page view.
+        """
         entry = self.cache.get(key)
         age = self.cache.age(entry)
-        if entry is not None and age is not None and age < ttl:
+
+        if not skip_ttl and entry is not None and age is not None and age < ttl:
             return entry.value, age, False, None
-        try:
-            value = loader()
-        except Exception as exc:  # noqa: BLE001 - deliberately broad: never 500 the page
-            self.last_error[key] = str(exc)
+
+        if not skip_ttl and self._recently_failed(key):
             if entry is not None and age is not None and age < self.config.max_stale:
-                log.warning("serving stale %s (age %.0fs): %s", key, age, exc)
-                return entry.value, age, True, str(exc)
-            raise
-        self.last_success[key] = self._clock()
-        self.last_error.pop(key, None)
-        entry = self.cache.put(key, value)
-        return value, 0.0, False, None
+                return entry.value, age, True, self.last_error.get(key)
+            raise RuntimeError(self.last_error.get(key) or (key + " unavailable"))
+
+        with self._lock_for(key):
+            # Another thread may have refreshed while we waited for the lock.
+            entry = self.cache.get(key)
+            age = self.cache.age(entry)
+            if not skip_ttl and entry is not None and age is not None and age < ttl:
+                return entry.value, age, False, None
+            try:
+                value = loader()
+            except Exception as exc:  # noqa: BLE001 - never 500 the page for this
+                self.last_error[key] = str(exc)
+                self._failures[key] = self._clock()
+                if entry is not None and age is not None and age < self.config.max_stale:
+                    log.warning("serving stale %s (age %.0fs): %s", key, age, exc)
+                    return entry.value, age, True, str(exc)
+                raise
+            self.last_success[key] = self._clock()
+            self.last_error.pop(key, None)
+            self._failures.pop(key, None)
+            entry = self.cache.put(key, value)
+            return value, 0.0, False, None
 
     # -- public API ---------------------------------------------------------
 
@@ -461,46 +520,46 @@ class WeatherService:
         ``errors`` and reported as ``None`` so the page still renders.
         """
         cfg = self.config
-        if force:
-            # A manual refresh only needs to re-read the forecast; the slower
-            # sources (air quality, alerts) keep their own TTLs.
-            with self._lock:
-                self.cache.drop("forecast")
 
-        forecast, forecast_age, forecast_stale, forecast_error = self._cached(
-            "forecast", cfg.cache_ttl, self.fetch_forecast)
+        # A manual refresh re-reads the forecast without dropping it, and is
+        # rate-limited so a held-down button cannot hammer upstream. The slower
+        # sources keep their own TTLs.
+        skip_forecast = bool(force) and self._force_allowed()
 
-        air = air_age = None
-        air_error = None
-        try:
-            air, air_age, _air_stale, air_error = self._cached(
-                "air", cfg.air_cache_ttl, self.fetch_air)
-        except Exception as exc:  # noqa: BLE001
-            air_error = str(exc)
+        jobs = (
+            ("forecast", cfg.cache_ttl, self.fetch_forecast, skip_forecast),
+            ("air", cfg.air_cache_ttl, self.fetch_air, False),
+            ("history", cfg.history_cache_ttl, self.fetch_history, False),
+            ("terrain", cfg.terrain_cache_ttl, self.fetch_terrain, False),
+            ("alerts", cfg.alerts_cache_ttl, self.fetch_alerts, False),
+        )
 
-        history = history_age = None
-        history_error = None
-        try:
-            history, history_age, _history_stale, history_error = self._cached(
-                "history", cfg.history_cache_ttl, self.fetch_history)
-        except Exception as exc:  # noqa: BLE001
-            history_error = str(exc)
+        # One thread per source. They are independent, and fetching them in
+        # sequence made a cold start cost the *sum* of five timeouts rather
+        # than the slowest one.
+        results = {}
+        with futures.ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+            pending = {
+                pool.submit(self._cached, key, ttl, loader, skip): key
+                for key, ttl, loader, skip in jobs
+            }
+            for future in futures.as_completed(pending):
+                key = pending[future]
+                try:
+                    results[key] = future.result()
+                except Exception as exc:  # noqa: BLE001 - one source, never the page
+                    results[key] = (None, None, False, str(exc))
 
-        terrain = terrain_age = None
-        terrain_error = None
-        try:
-            terrain, terrain_age, _terrain_stale, terrain_error = self._cached(
-                "terrain", cfg.terrain_cache_ttl, self.fetch_terrain)
-        except Exception as exc:  # noqa: BLE001
-            terrain_error = str(exc)
+        def taken(key):
+            value, age, stale, error = results.get(key, (None, None, False, None))
+            return value, age, error
 
-        alerts = alerts_age = None
-        alerts_error = None
-        try:
-            alerts, alerts_age, _alerts_stale, alerts_error = self._cached(
-                "alerts", cfg.alerts_cache_ttl, self.fetch_alerts)
-        except Exception as exc:  # noqa: BLE001
-            alerts_error = str(exc)
+        forecast, forecast_age, forecast_error = taken("forecast")
+        air, air_age, air_error = taken("air")
+        history, history_age, history_error = taken("history")
+        terrain, terrain_age, terrain_error = taken("terrain")
+        alerts, alerts_age, alerts_error = taken("alerts")
+        forecast_stale = results.get("forecast", (None, None, False, None))[2]
 
         errors = {}
         for name, message in (("forecast", forecast_error),

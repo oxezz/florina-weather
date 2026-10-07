@@ -373,6 +373,9 @@ _OUTFIT_LAYERS = (
 )
 _OUTFIT_LIGHT = ("light", "Ελαφριά ρούχα", "👕")
 
+# When the twelve hours ahead span ten degrees, no single layer is the answer.
+OUTFIT_LAYERS = ("layers", "Στρώσεις — η θερμοκρασία αλλάζει αρκετά", "🧥")
+
 
 def outfit_layer(apparent):
     """(key, Greek suggestion, emoji) for what to wear, by feels-like °C."""
