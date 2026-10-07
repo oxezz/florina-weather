@@ -144,6 +144,27 @@ class FetchingTests(unittest.TestCase):
         self.assertIsNone(snap["air"])
         self.assertIn("air", snap["errors"])
 
+    def test_a_slow_forecast_is_waited_for_rather_than_failed(self):
+        """The forecast has no deadline: dropping it turns a slow start into a
+        503 for the first visitor, which is worse than making them wait."""
+        counter = {}
+        healthy = opener_for(counter)
+
+        def slow_forecast(url, timeout):
+            if "archive-api" not in url and "models=" not in url \
+                    and "snowfall_sum" not in url and "meteoalarm" not in url \
+                    and "temperature_2m_mean" not in url \
+                    and "air-quality" not in url:
+                time.sleep(1.0)
+            return healthy(url, timeout)
+
+        config = sources.Config(snapshot_deadline=0.3)
+        service = sources.WeatherService(config, opener=slow_forecast)
+        snap = service.snapshot()
+
+        self.assertIsNotNone(snap["forecast"], "the forecast was dropped")
+        self.assertNotIn("forecast", snap["errors"])
+
 
 class NegativeCacheTests(unittest.TestCase):
 

@@ -499,13 +499,15 @@ class HourlyStripTests(unittest.TestCase):
         self.assertIn("overscroll-behavior-x: contain", strip)
 
     def test_each_hour_carries_a_rain_gauge(self):
-        self.assertIn('el("div", anyRain ? "bar" : "bar idle")', self.js)
+        self.assertIn('el("div", chance > 0 ? "bar" : "bar idle")', self.js)
         # Wired to the precipitation probability, not just any number.
         self.assertIn('setProperty("--rain", num(hour.precip_prob, 0))', self.js)
 
-    def test_a_wholly_dry_strip_shows_no_empty_tracks(self):
-        """Eleven bare tracks in a row read as unfilled skeletons."""
-        self.assertIn("var anyRain = hours.some", self.js)
+    def test_an_empty_track_is_decided_per_hour(self):
+        """Deciding it for the whole strip at once meant a single hour at 1%
+        made all 48 tracks visible, 47 of them empty grey boxes."""
+        self.assertIn("var chance = Number(hour.precip_prob) || 0", self.js)
+        self.assertNotIn("anyRain", self.js)
         block = self.css.split(".h .bar.idle {")[1].split("}")[0]
         self.assertIn("background: transparent", block)
 

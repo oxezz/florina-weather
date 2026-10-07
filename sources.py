@@ -602,7 +602,6 @@ class WeatherService:
         skip_forecast = bool(force) and self._force_allowed()
 
         jobs = (
-            ("forecast", cfg.cache_ttl, self.fetch_forecast, skip_forecast),
             ("air", cfg.air_cache_ttl, self.fetch_air, False),
             ("history", cfg.history_cache_ttl, self.fetch_history, False),
             ("terrain", cfg.terrain_cache_ttl, self.fetch_terrain, False),
@@ -612,11 +611,21 @@ class WeatherService:
         )
 
         # One thread per source. They are independent, and fetching them in
-        # sequence made a cold start cost the *sum* of five timeouts rather
-        # than the slowest one.
+        # sequence made a cold start cost the *sum* of timeouts rather than the
+        # slowest one.
         results = {}
-        pool = futures.ThreadPoolExecutor(max_workers=len(jobs))
+        pool = futures.ThreadPoolExecutor(max_workers=len(jobs) + 1)
         try:
+            # The forecast is not optional: without it there is no page at all,
+            # so it is started first and waited for however long it takes. A
+            # deadline on this one turned a merely slow start into a 503 for
+            # the first visitor, which is worse than making them wait.
+            forecast_future = pool.submit(
+                self._cached, "forecast", cfg.cache_ttl,
+                self.fetch_forecast, skip_forecast)
+
+            # Everything else is a bonus, so it gets the deadline. A source
+            # that misses it keeps running and the cache picks it up next load.
             pending = {
                 pool.submit(self._cached, key, ttl, loader, skip): key
                 for key, ttl, loader, skip in jobs
@@ -634,9 +643,15 @@ class WeatherService:
                                 "no answer within %.0fs" % cfg.snapshot_deadline)
                 log.warning("%s missed the %.0fs snapshot deadline",
                             key, cfg.snapshot_deadline)
+
+            # Started first, waited for last, with no deadline of its own.
+            try:
+                results["forecast"] = forecast_future.result()
+            except Exception as exc:  # noqa: BLE001 - the page reports it
+                results["forecast"] = (None, None, False, str(exc))
         finally:
-            # Do not wait: a slow source that does arrive still warms the cache
-            # for the next request, it just does not hold up this one.
+            # Do not wait: a slow optional source that does arrive still warms
+            # the cache for the next request, it just does not hold this one up.
             pool.shutdown(wait=False)
 
         def taken(key):

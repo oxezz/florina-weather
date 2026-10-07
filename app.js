@@ -546,12 +546,6 @@
     if (!hours || !hours.length) return;
     var previousDay = null;
 
-    // With no rain anywhere in the strip, eleven empty tracks in a row look
-    // exactly like unfilled skeletons. The space is kept so nothing shifts.
-    var anyRain = hours.some(function (hour) {
-      return Number(hour.precip_prob) > 0;
-    });
-
     hours.forEach(function (hour, index) {
       if (hour.day && hour.day !== previousDay) {
         previousDay = hour.day;
@@ -571,9 +565,14 @@
       card.appendChild(el("span", "i", hour.emoji));
       card.appendChild(el("span", "d", num(hour.temp, 1) + "°"));
 
-      // A mini bar for the rain probability. Across 48 adjacent cards it reads
-      // as one continuous chart, which is far easier to scan than the numbers.
-      var gauge = el("div", anyRain ? "bar" : "bar idle");
+      // A mini bar for the rain probability. Across adjacent cards it reads as
+      // one continuous chart, which is far easier to scan than the numbers.
+      //
+      // The track is only drawn for hours that actually have a chance of rain.
+      // Deciding that for the whole strip at once was wrong: a single hour at
+      // 1% made all 48 tracks visible and 47 of them empty grey boxes.
+      var chance = Number(hour.precip_prob) || 0;
+      var gauge = el("div", chance > 0 ? "bar" : "bar idle");
       gauge.setAttribute("aria-hidden", "true");
       var fill = el("i");
       fill.style.setProperty("--rain", num(hour.precip_prob, 0));
