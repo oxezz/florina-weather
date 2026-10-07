@@ -26,7 +26,7 @@ def read(name):
 
 # Placeholders app.py knows how to substitute.
 KNOWN_PLACEHOLDERS = {"TITLE", "PLACE", "REGION", "REFRESH", "REFRESH_TEXT",
-                      "VERSION", "SLOPE_NAME"}
+                      "VERSION", "SLOPE_NAME", "OG_URL", "OG_IMAGE", "DESCRIPTION"}
 
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
@@ -597,6 +597,42 @@ class AccessibilityTests(unittest.TestCase):
     def test_the_chart_keeps_its_role_and_label(self):
         self.assertIn('role="img"', self.template)
         self.assertIn('aria-label', self.template)
+
+
+class LinkPreviewTests(unittest.TestCase):
+    """A shared link should show a card, not a bare URL."""
+
+    def setUp(self):
+        self.template = read("template.html")
+
+    def test_the_og_tags_are_present(self):
+        for prop in ("og:title", "og:description", "og:image", "og:url",
+                     "og:type", "og:locale", "og:image:width", "og:image:height"):
+            self.assertIn('property="%s"' % prop, self.template)
+        self.assertIn('name="twitter:card"', self.template)
+
+    def test_the_image_is_a_real_file_we_serve(self):
+        self.assertIn("/og-image.png", app.STATIC_FILES)
+        filename, content_type = app.STATIC_FILES["/og-image.png"]
+        self.assertEqual(content_type, "image/png")
+        self.assertTrue(os.path.exists(os.path.join(app.BASE_DIR, filename)))
+
+    def test_the_image_is_the_size_the_tags_claim(self):
+        with open(os.path.join(app.BASE_DIR, "og-image.png"), "rb") as handle:
+            head = handle.read(24)
+        self.assertEqual(head[:8], PNG_MAGIC)
+        width = int.from_bytes(head[16:20], "big")
+        height = int.from_bytes(head[20:24], "big")
+        self.assertEqual((width, height), (1200, 630))
+
+    def test_urls_are_absolute_when_a_public_url_is_configured(self):
+        config = sources.Config(public_url="https://example.org")
+        rendered = app.ShellCache(app.TEMPLATE).render(config)
+        self.assertIn('content="https://example.org/og-image.png"', rendered)
+
+    def test_urls_stay_relative_without_one(self):
+        rendered = app.ShellCache(app.TEMPLATE).render(sources.Config())
+        self.assertIn('content="/og-image.png"', rendered)
 
 
 class StylesheetTests(unittest.TestCase):

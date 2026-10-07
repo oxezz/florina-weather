@@ -34,7 +34,7 @@ import greek
 import report as report_mod
 import sources
 
-__version__ = "3.0.0"
+__version__ = "3.0.1"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(BASE_DIR, "template.html")
@@ -52,6 +52,7 @@ STATIC_FILES = {
     "/icon-192.png": ("icon-192.png", "image/png"),
     "/icon-512.png": ("icon-512.png", "image/png"),
     "/icon-maskable-512.png": ("icon-maskable-512.png", "image/png"),
+    "/og-image.png": ("og-image.png", "image/png"),
 }
 
 # The service worker and the manifest must never be served stale, or a browser
@@ -110,6 +111,14 @@ class ShellCache:
             # The inversion hint names the place and the comparison point, so
             # both have to follow the configuration rather than be typed in.
             "SLOPE_NAME": config.slope_name,
+            # Open Graph. Scrapers want absolute URLs, so they are built from
+            # public_url when it is set and left as root-relative paths when it
+            # is not - which most scrapers resolve against the page URL anyway.
+            "OG_URL": (config.public_url or "").rstrip("/") + "/",
+            "OG_IMAGE": (config.public_url or "").rstrip("/") + "/og-image.png",
+            "DESCRIPTION": (
+                "Τρέχουσες συνθήκες, 48ωρη πρόγνωση, 7ήμερος, ποιότητα αέρα "
+                "και τοπικό μικροκλίμα — %s, %s." % (config.place, config.region)),
         }
         for key, value in values.items():
             text = text.replace("{{%s}}" % key, html.escape(str(value)))

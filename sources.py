@@ -176,6 +176,9 @@ class Config:
     lon: float = 21.4097
     place: str = "Φλώρινα"
     region: str = "Δυτική Μακεδονία"
+    # Absolute base for Open Graph URLs. Scrapers want absolute ones; when this
+    # is empty the tags fall back to paths, which most of them resolve anyway.
+    public_url: str = ""
     timezone: str = "Europe/Athens"
     host: str = "127.0.0.1"
     port: int = 8000
@@ -236,6 +239,8 @@ class Config:
             lon=_env_float("FLORINA_LON", cls.lon),
             place=os.environ.get("FLORINA_PLACE", cls.place),
             region=os.environ.get("FLORINA_REGION", cls.region),
+            # Set this on a deployment so Open Graph URLs are absolute.
+            public_url=os.environ.get("FLORINA_PUBLIC_URL", cls.public_url),
             timezone=os.environ.get("FLORINA_TZ", cls.timezone),
             host=os.environ.get("FLORINA_HOST", cls.host),
             # PaaS platforms (Render, Fly, Heroku) inject a generic PORT;

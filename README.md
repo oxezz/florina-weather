@@ -120,7 +120,7 @@ saving it, so a particular look is linkable.
 | `manifest.webmanifest` | Web app manifest — name, icons, standalone display |
 | `Dockerfile` | Container image for Render / Fly / any container host |
 | `cacert.pem` | Mozilla CA bundle, used when the host has no trust store |
-| `tests/` | 288 tests, all offline |
+| `tests/` | 293 tests, all offline |
 
 ### API
 
@@ -183,7 +183,7 @@ warning is shown.
 python -m unittest discover -s tests -t .
 ```
 
-All 288 tests run offline: upstream responses are replaced by fixtures, and the
+All 293 tests run offline: upstream responses are replaced by fixtures, and the
 HTTP tests start a real server on an ephemeral port with an injected opener.
 
 ## Greek wording

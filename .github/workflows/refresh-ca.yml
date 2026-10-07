@@ -1,0 +1,62 @@
+name: refresh CA bundle
+
+# cacert.pem is committed so the app can reach upstream on hosts with no trust
+# store of their own - Wasmer Edge loaded zero certificates, which broke every
+# HTTPS call until the bundle was shipped. Roots do expire and new ones appear,
+# so the copy is re-fetched monthly rather than left to rot.
+on:
+  schedule:
+    - cron: "23 4 1 * *"        # the first of the month, off the hour
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the current Mozilla bundle
+        run: |
+          set -eu
+          curl -sS --fail --max-time 90 -o cacert.new https://curl.se/ca/cacert.pem
+          test -s cacert.new
+          # Refuse anything that is not plausibly a CA bundle, so a captive
+          # portal or an error page can never be committed as our trust store.
+          count=$(grep -c 'BEGIN CERTIFICATE' cacert.new || true)
+          echo "certificates: $count"
+          test "$count" -gt 100
+          grep -q 'BEGIN CERTIFICATE' cacert.new
+          tail -c 40 cacert.new | grep -q 'END CERTIFICATE'
+
+      - name: Keep it only if it changed
+        id: diff
+        run: |
+          if cmp -s cacert.pem cacert.new; then
+            echo "unchanged since last month"
+            rm cacert.new
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            mv cacert.new cacert.pem
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Confirm the app still starts with the new bundle
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          python3 -c "import sources; print('tls store:', sources.tls_source())"
+
+      - name: Commit
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          set -eu
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cacert.pem
+          git commit -m "Refresh the bundled CA certificates
+
+Fetched from curl.se, which packages Mozilla's list. Only the changed
+trust store is committed; the monthly run is a no-op otherwise."
+          git push

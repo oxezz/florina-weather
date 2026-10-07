@@ -1,0 +1,57 @@
+name: uptime
+
+# A ping that fails loudly. Wasmer Edge serves the app, and a deploy that
+# silently breaks TLS or an upstream that starts refusing us looks exactly like
+# a quiet day from the outside. A red run is the difference.
+on:
+  schedule:
+    - cron: "17 */6 * * *"      # every six hours, off the hour
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check /api/health
+        env:
+          BASE_URL: ${{ vars.FLORINA_BASE_URL || 'https://florina-weather.wasmer.app' }}
+        run: |
+          set -eu
+          body=$(curl -sS --max-time 30 --retry 2 --retry-delay 5 "$BASE_URL/api/health")
+          echo "health: $body"
+          echo "$body" | python3 -c '
+          import json, sys
+          payload = json.load(sys.stdin)
+          if not payload.get("ok"):
+              raise SystemExit("health reported not ok: %r" % payload)
+          tls = payload.get("tls") or "unknown"
+          print("ok, tls trust store:", tls)
+          '
+
+      - name: Check the page itself
+        env:
+          BASE_URL: ${{ vars.FLORINA_BASE_URL || 'https://florina-weather.wasmer.app' }}
+        run: |
+          set -eu
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$BASE_URL/")
+          echo "GET / -> $code"
+          test "$code" = "200"
+
+      - name: Check the API answers with usable data
+        env:
+          BASE_URL: ${{ vars.FLORINA_BASE_URL || 'https://florina-weather.wasmer.app' }}
+        run: |
+          set -eu
+          curl -sS --max-time 45 "$BASE_URL/api/weather" | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          if not data.get("hourly"):
+              raise SystemExit("no hourly data in the payload")
+          degraded = (data.get("status") or {}).get("degraded") or []
+          print("hourly points:", len(data["hourly"]), "| degraded:", degraded or "none")
+          if len(degraded) >= 4:
+              raise SystemExit("too many sources down: %r" % degraded)
+          '
