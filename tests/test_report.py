@@ -1088,6 +1088,67 @@ class FlorinaStationTests(unittest.TestCase):
         self.assertEqual(built["primary"]["name"], "Καστοριά")
 
 
+class SnowClimateTests(unittest.TestCase):
+    """How often it snows, and how that changed. Always visible, because a
+    climatology means something in July."""
+
+    JAN = datetime.datetime(2026, 1, 15, 9, 0)
+    JUL = datetime.datetime(2026, 7, 15, 9, 0)
+
+    def test_it_is_available_in_every_month(self):
+        for month in range(1, 13):
+            card = report.build_snow_climatology(
+                datetime.datetime(2026, month, 15, 9, 0))
+            self.assertIsNotNone(card, "missing in month %d" % month)
+
+    def test_it_marks_the_current_month_only_in_winter(self):
+        self.assertEqual(report.build_snow_climatology(self.JAN)["current"], 1)
+        self.assertIsNone(report.build_snow_climatology(self.JUL)["current"])
+
+    def test_the_winter_months_are_the_four_that_matter(self):
+        card = report.build_snow_climatology(self.JAN)
+        self.assertEqual([m["month"] for m in card["months"]], [12, 1, 2, 3])
+
+    def test_every_month_got_less_snowy(self):
+        """The finding the card exists to report."""
+        card = report.build_snow_climatology(self.JAN)
+        for month in card["months"]:
+            self.assertLess(month["now"], month["before"],
+                            "%s did not decline" % month["name"])
+
+    def test_january_is_the_biggest_change(self):
+        card = report.build_snow_climatology(self.JAN)
+        drops = {m["month"]: m["before"] - m["now"] for m in card["months"]}
+        self.assertEqual(max(drops, key=drops.get), 1)
+
+    def test_the_headline_counts_halved(self):
+        card = report.build_snow_climatology(self.JAN)
+        self.assertEqual(card["days_before"], 60)
+        self.assertEqual(card["days_now"], 24)
+        self.assertLess(card["days_now"], card["days_before"] * 0.5)
+
+    def test_the_decade_series_falls(self):
+        card = report.build_snow_climatology(self.JAN)
+        decades = [d["days"] for d in card["decades"]]
+        self.assertEqual(len(decades), 9)
+        self.assertGreater(decades[0], decades[-1])
+        # Monotonic would be too strong — 1950s dip below the 1960s — but the
+        # trend has to be downward overall.
+        self.assertGreater(sum(decades[:3]) / 3, sum(decades[-3:]) / 3)
+
+    def test_the_peak_is_usable_for_scaling(self):
+        card = report.build_snow_climatology(self.JAN)
+        self.assertGreaterEqual(card["peak"],
+                                max(m["before"] for m in card["months"]))
+        self.assertGreaterEqual(card["decade_peak"],
+                                max(d["days"] for d in card["decades"]))
+
+    def test_the_note_says_fewer_not_smaller(self):
+        card = report.build_snow_climatology(self.JAN)
+        self.assertIn("Λιγότερες", card["note"])
+        self.assertIn("όχι μικρότερες", card["note"])
+
+
 class MountainCardTests(unittest.TestCase):
     """One card, two seasons, one forecast. The station on the ridge is real
     but its feed batches a day or more behind, so conditions come from the

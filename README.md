@@ -120,7 +120,7 @@ saving it, so a particular look is linkable.
 | `manifest.webmanifest` | Web app manifest — name, icons, standalone display |
 | `Dockerfile` | Container image for Render / Fly / any container host |
 | `cacert.pem` | Mozilla CA bundle, used when the host has no trust store |
-| `tests/` | 371 tests, all offline |
+| `tests/` | 380 tests, all offline |
 
 ### API
 
@@ -213,7 +213,7 @@ must be latin-1, and a Greek title sent as one arrives mangled.
 python -m unittest discover -s tests -t .
 ```
 
-All 371 tests run offline: upstream responses are replaced by fixtures, and the
+All 380 tests run offline: upstream responses are replaced by fixtures, and the
 HTTP tests start a real server on an ephemeral port with an injected opener.
 
 ## Greek wording

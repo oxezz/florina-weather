@@ -718,6 +718,20 @@ MONTHS_GENITIVE = ("Ιανουαρίου", "Φεβρουαρίου", "Μαρτί
                    "Μαΐου", "Ιουνίου", "Ιουλίου", "Αυγούστου",
                    "Σεπτεμβρίου", "Οκτωβρίου", "Νοεμβρίου", "Δεκεμβρίου")
 
+# Three-letter forms, for the axis of a small chart where the genitive is too
+# long to sit under a bar.
+MONTHS_SHORT = ("Ιαν", "Φεβ", "Μαρ", "Απρ", "Μάι", "Ιούν",
+                "Ιούλ", "Αύγ", "Σεπ", "Οκτ", "Νοέ", "Δεκ")
+
+
+def month_short(month):
+    """Three-letter Greek month name, 1-12."""
+    try:
+        month = int(month)
+    except (TypeError, ValueError):
+        return ""
+    return MONTHS_SHORT[month - 1] if 1 <= month <= 12 else ""
+
 
 def weekday_name(date):
     """Full Greek weekday, e.g. ``"Τρίτη"``."""

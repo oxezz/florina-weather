@@ -1791,6 +1791,80 @@ def build_mountain(snow, road, current, config, now_local):
     }
 
 
+# ---------------------------------------------------------- snow climate ---
+#
+# No source observes snow at Florina. GHCN-Daily carries only TMAX/TMIN there,
+# data.gov.gr's station files have no snow column, EMY's own AUTO reports have
+# no snow group, and NOAA ISD's additional-data section is precipitation-only.
+#
+# So snow is proxied as "precipitation recorded and minimum at or below 1 °C",
+# a definition deliberately loose enough to compare two different observing
+# networks without the instrument change standing in for a climate change. Two
+# checks say that is fair: ISD and NOA agree on daily minimum to -0.09 °C over
+# 3 334 overlapping days, and ERA5's independent snow-day count for 2010-2023
+# (26.1) lands within two days of NOA's (24.1).
+#
+# Regenerate with `python research/snow_climatology.py`, which prints exactly
+# these tables.
+SNOW_SHARE_BY_MONTH = {
+    "old":    {12: 0.41, 1: 0.64, 2: 0.48, 3: 0.26},   # ISD, 1932-1981
+    "recent": {12: 0.21, 1: 0.22, 2: 0.18, 3: 0.12},   # NOA, 2010-2023
+}
+SNOW_DAYS_PER_WINTER = {"old": 60, "recent": 24}
+# ERA5, which spans the years the two gauges miss. Modelled, so it is shown as
+# a shape rather than quoted as a figure.
+SNOW_DAYS_BY_DECADE = [
+    (1940, 46), (1950, 37), (1960, 38), (1970, 38), (1980, 32),
+    (1990, 29), (2000, 29), (2010, 27), (2020, 21),
+]
+# The deepest single winter day by decade: 23, 20, 23, 32 cm. Falling day
+# counts, steady or rising storm size — which is what the card says in words.
+SNOW_MONTHS = (12, 1, 2, 3)
+
+
+def build_snow_climatology(today):
+    """How often it snows in Florina, and how that has changed.
+
+    Always shown, unlike every other seasonal card: a climatology means
+    something in July, and this one is the reference the winter cards are read
+    against.
+    """
+    months = []
+    for month in SNOW_MONTHS:
+        before = SNOW_SHARE_BY_MONTH["old"].get(month)
+        now = SNOW_SHARE_BY_MONTH["recent"].get(month)
+        if before is None or now is None:
+            continue
+        months.append({
+            "month": month,
+            "name": greek.month_short(month),
+            "before": round(before * 100),
+            "now": round(now * 100),
+        })
+    if not months:
+        return None
+
+    current = getattr(today, "month", None)
+    headline = SNOW_DAYS_PER_WINTER
+    if not headline.get("old") or not headline.get("recent"):
+        return None
+
+    peak = max(max(m["before"], m["now"]) for m in months) or 1
+    return {
+        "months": months,
+        # A winter month gets highlighted; the rest of the year none does,
+        # because the card is not about the current weather.
+        "current": current if current in SNOW_MONTHS else None,
+        "peak": peak,
+        "days_before": SNOW_DAYS_PER_WINTER["old"],
+        "days_now": SNOW_DAYS_PER_WINTER["recent"],
+        "decades": [{"decade": d, "days": v} for d, v in SNOW_DAYS_BY_DECADE],
+        "decade_peak": max(v for _, v in SNOW_DAYS_BY_DECADE) or 1,
+        "note": ("Λιγότερες χιονοπτώσεις, όχι μικρότερες: η πιο βαριά μέρα "
+                 "χιονιού του χειμώνα παραμένει ίδια εδώ και δεκαετίες."),
+    }
+
+
 def build_report(snapshot, config, now=None):
     """Assemble the JSON document served at ``/api/weather``."""
     forecast = snapshot.get("forecast")
@@ -1915,6 +1989,7 @@ def build_report(snapshot, config, now=None):
         "comfort": comfort,
         "solar": solar,
         "mountain": mountain,
+        "snow": build_snow_climatology(today),
         "air": air,
         "alerts": alerts,
         "status": {

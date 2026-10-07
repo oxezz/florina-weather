@@ -285,6 +285,44 @@
   </div>
 </section>
 
+<section class="card glass panel" id="snow-panel" hidden>
+  <div class="panel-head">
+    <h2>Χιόνι στη Φλώρινα</h2>
+    <span class="chip muted">μετρήσεις 1932&ndash;2023</span>
+    <button class="info" type="button" aria-expanded="false"
+            aria-controls="hint-snow" aria-label="Τι σημαίνει;">?</button>
+  </div>
+
+  <div class="snow-head">
+    <span class="snow-now"><strong id="snow-days-now"></strong>
+      <span class="snow-unit">μέρες με χιόνι τον χειμώνα</span></span>
+    <span class="snow-before" id="snow-days-before"></span>
+  </div>
+
+  <div class="snow-months" id="snow-months"></div>
+
+  <div class="snow-decades" id="snow-decades" aria-hidden="true"></div>
+  <div class="snow-axis"><span>1940</span><span>σήμερα</span></div>
+
+  <p class="snow-note" id="snow-note"></p>
+  <p class="hint" id="hint-snow" hidden>
+    Πόσο συχνά χιονίζει στη Φλώρινα, μετρημένο και όχι υπολογισμένο. Επειδή
+    καμία υπηρεσία δεν καταγράφει ύψος χιονιού εδώ, μία μέρα μετράει ως
+    χιονόπτωση όταν <strong>καταγράφηκε υετός και η ελάχιστη θερμοκρασία ήταν
+    1&deg;C ή χαμηλότερα</strong>.
+    <br><br>
+    Τα δύο διαστήματα προέρχονται από διαφορετικά δίκτυα (ISD 1932&ndash;1981,
+    ΕΑΑ/meteo.gr 2010&ndash;2023), γι' αυτό ελέγχθηκαν πρώτα μεταξύ τους: όπου
+    συμπίπτουν συμφωνούν στις ελάχιστες θερμοκρασίες με διαφορά
+    &minus;0,09&deg;C.
+    <br><br>
+    Τα βροχόμετρα <strong>υπομετρούν το χιόνι</strong>, οπότε οι μέρες είναι
+    λιγότερες από τις πραγματικές &mdash; με την ίδια όμως επιβάρυνση και στις
+    δύο περιόδους, άρα η σύγκριση στέκει. Η γκρίζα μπάρα είναι το παλιό
+    ποσοστό, η χρωματισμένη το σημερινό.
+  </p>
+</section>
+
 <section class="card glass panel" id="mountain-panel" hidden>
   <div class="panel-head">
     <h2><span id="mountain-ico" aria-hidden="true">&#127935;</span>

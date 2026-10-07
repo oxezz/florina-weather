@@ -335,6 +335,51 @@ the reasoning and the traps, most of which were found the hard way.
   a grid cell against a point station on complex terrain; and the coordinates
   are inferred, not published.
 
+* **There is no observed snow record for Florina, from anywhere.** Four
+  independent sources, all checked and all negative: GHCN-Daily carries the
+  station as `GRE00105242` with `TMAX, TMIN` only; data.gov.gr's 60-field
+  station files have no snow column; EMY's own AUTO reports
+  (`613 071200Z AUTO … 24/01 Q1021`) have no snow group; and NOAA ISD's
+  additional-data section is precipitation-only. The nearest long snow record
+  is Makedonia, 160 km away at 6.7 m — a coastal airport, useless for a 662 m
+  inland basin.
+
+  So snow is **proxied**: a day counts when precipitation was recorded and the
+  minimum was at or below 1 °C. That definition is loose on purpose, so two
+  different observing networks can be compared without an instrument change
+  standing in for a climate change. Two checks say it is fair: ISD and NOA
+  agree on daily minimum to **−0.09 °C over 3 334 overlapping days**, and
+  ERA5's independent snow-day count for 2010–2023 (**26.1**) lands within two
+  days of NOA's (**24.1**).
+
+  `research/snow_climatology.py` derives the shipped tables and prints them, so
+  the constants in `report.py` have provenance rather than being magic. It
+  caches ~7 MB under `research/_cache/`, which is ignored.
+
+* **The finding, and the version of it that is actually true.** Snow days per
+  winter in Florina roughly halved:
+
+  | | snow days/winter | January, share of days |
+  |---|---|---|
+  | ISD, 1932–1981 | **60** | 64 % |
+  | NOA, 2010–2023 | **24** | 22 % |
+
+  ERA5 shows the same shape across the years the gauges miss — 46 days in the
+  1940s to 21 in the 2020s.
+
+  The tempting headline is "less snow". The accurate one is **fewer snowfalls,
+  not smaller ones**: totals fell by half (117 → 54 cm) but the *deepest single
+  day* per decade did not, and the 2020s are the highest of any decade at
+  32 cm. The season is not producing weaker storms; it is producing far fewer
+  opportunities. That distinction is why someone can remember 2023–24 as a real
+  winter — 32 cm in one day, the largest since 1983 — while the day count was
+  only 13.
+
+  Caveats kept in view: the old-era absolute level differs between ISD (60) and
+  ERA5 (40), ISD covers 24 of 50 winters, and gauges undercatch snow — which
+  depresses both eras equally and so largely cancels from the comparison, the
+  part that matters.
+
 * **Headless Chrome reports `prefers-reduced-transparency: reduce` by default.**
   Any screenshot taken through CDP is therefore the *no-blur* variant unless the
   preference is explicitly emulated back to `no-preference`. It is a real

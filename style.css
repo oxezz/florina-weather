@@ -475,6 +475,90 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--glass-border-soft);
 }
 
+/* ------------------------------------------------------ snow climate ---- */
+
+/* Always visible, unlike every other seasonal card: a climatology means
+   something in July. The two-tone bars are the point — the pale track is the
+   old share and the fill is today's, so the shrink is what you see. */
+.snow-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin-bottom: 16px;
+  text-align: left;
+}
+.snow-now strong { font-size: 1.7rem; font-weight: 700; }
+.snow-unit { font-size: .84rem; color: var(--text-dim); }
+.snow-before { font-size: .82rem; color: var(--text-faint); }
+
+.snow-months { display: grid; gap: 9px; }
+.snow-month {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 52px 76px;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+.snow-month-name { font-size: .8rem; font-weight: 650; }
+/* The current month, when it is a winter one, gets a mark rather than a
+   colour — the bars are already carrying two colours each. */
+.snow-month.is-now .snow-month-name::after {
+  content: "•";
+  margin-left: 3px;
+  color: var(--accent);
+}
+.snow-track {
+  position: relative;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--glass-inner);
+  overflow: hidden;
+}
+.snow-fill { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 7px; }
+.snow-fill.was { background: var(--glass-border-soft); }
+.snow-fill.now { background: var(--accent); opacity: .85; }
+.snow-month-val {
+  font-size: .86rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.snow-month-was {
+  font-size: .76rem;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.snow-decades {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 56px;
+  margin: 20px 0 4px;
+}
+.snow-decade {
+  flex: 1;
+  border-radius: 3px 3px 0 0;
+  background: var(--accent);
+  opacity: .55;
+}
+.snow-decade:last-child { opacity: .95; }
+.snow-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: .7rem;
+  color: var(--text-faint);
+}
+.snow-note {
+  margin: 16px 0 0;
+  font-size: .82rem;
+  line-height: 1.5;
+  color: var(--accent);
+  text-align: left;
+}
+
 /* --------------------------------------------------- mountain card ------ */
 
 /* Three metrics that change meaning with the season: the labels and values are

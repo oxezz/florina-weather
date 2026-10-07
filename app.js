@@ -325,6 +325,55 @@
   }
 
 
+  function renderSnowClimate(snow) {
+    var panel = $("snow-panel");
+    if (!panel) return;
+    if (!snow) { panel.hidden = true; return; }
+    panel.hidden = false;
+
+    // Just the number: the label beside it already says "μέρες με χιόνι",
+    // and repeating the unit printed "24 μέρες μέρες με χιόνι".
+    setText($("snow-days-now"), String(snow.days_now));
+    setText($("snow-days-before"),
+      "από " + snow.days_before + " κατά μέσο όρο παλιότερα");
+
+    // Two bars per month: the old share as a pale track, today's as a fill on
+    // top of it, so the shrink is the thing you see rather than two numbers.
+    var host = $("snow-months");
+    clear(host);
+    snow.months.forEach(function (item) {
+      var row = el("div", "snow-month" +
+        (item.month === snow.current ? " is-now" : ""));
+      row.appendChild(el("span", "snow-month-name", item.name));
+
+      var track = el("div", "snow-track");
+      var before = el("div", "snow-fill was");
+      before.style.width = Math.round(item.before / snow.peak * 100) + "%";
+      var now = el("div", "snow-fill now");
+      now.style.width = Math.round(item.now / snow.peak * 100) + "%";
+      track.appendChild(before);
+      track.appendChild(now);
+      row.appendChild(track);
+
+      row.appendChild(el("span", "snow-month-val", item.now + "%"));
+      row.appendChild(el("span", "snow-month-was", "ήταν " + item.before + "%"));
+      host.appendChild(row);
+    });
+
+    var bars = $("snow-decades");
+    clear(bars);
+    (snow.decades || []).forEach(function (item) {
+      var bar = el("div", "snow-decade");
+      // 92% leaves headroom, so the tallest bar is not flush with the top.
+      bar.style.height = Math.max(8, Math.round(
+        item.days / snow.decade_peak * 92)) + "%";
+      bar.title = item.decade + "s: " + item.days + " μέρες";
+      bars.appendChild(bar);
+    });
+
+    setText($("snow-note"), snow.note || "");
+  }
+
   function renderMountain(mountain) {
     var panel = $("mountain-panel");
     if (!panel) return;
@@ -992,6 +1041,7 @@
     safely("outfit", function () { renderOutfit(data.outfit); });
     safely("station", function () { renderStation(data.station); });
     safely("refs", function () { renderStationRefs(data.station); });
+    safely("snow", function () { renderSnowClimate(data.snow); });
     safely("mountain", function () { renderMountain(data.mountain); });
     safely("comfort", function () { renderComfort(data.comfort); });
     safely("solar", function () { renderSolar(data.solar); });
