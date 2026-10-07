@@ -81,6 +81,7 @@
   </div>
 
   <p class="code" id="code"><span class="skel skel-code"></span></p>
+  <p class="normal" id="normal" hidden></p>
   <p class="summary" id="summary"><span class="skel skel-line"></span></p>
   <p class="stamp" id="stamp"><span class="skel skel-stamp"></span></p>
 </header>
@@ -204,6 +205,19 @@
         είναι θερμότερο από ό,τι προβλέπει η κανονική πτώση της θερμοκρασίας με
         το ύψος (&minus;0,65&deg;C ανά 100 μ.), έχουμε αναστροφή. Η διαφωνία των
         μοντέλων δείχνει πόσο αξιόπιστη είναι η μέτρηση.
+      </p>
+    </div>
+    <div class="local-card" id="local-snow" hidden>
+      <span class="lbl">Χιόνι στα βουνά
+        <button class="info" type="button" aria-expanded="false"
+                aria-controls="hint-snow" aria-label="Τι σημαίνει;">?</button>
+      </span>
+      <span class="val" id="snow-val"></span>
+      <span class="sub" id="snow-sub"></span>
+      <p class="hint" id="hint-snow" hidden>
+        Χιόνι στα κοντινά υψώματα, από τα ίδια δεδομένα με την πρόβλεψη.
+        Ο αριθμός είναι το βαθύτερο στρώμα χιονιού τις επόμενες ημέρες, σε
+        εκατοστά. Η κάρτα εμφανίζεται μόνο όταν υπάρχει χιόνι να αναφερθεί.
       </p>
     </div>
     <div class="local-card" id="local-frost" hidden>

@@ -6,6 +6,7 @@ Kept in one place so the report and server tests exercise the same fixtures.
 
 import datetime
 import json
+import math
 
 START = datetime.datetime(2026, 10, 6, 0, 0)
 DAYS = 7
@@ -176,6 +177,54 @@ def terrain(models=("best_match", "icon_eu", "ecmwf_ifs025", "gfs_seamless"),
 
     return [location(valley_z, valley_temp, 20.0, offsets),
             location(slope_z, slope_temp, 18.0, slope_offsets)]
+
+
+_NORMALS = {}
+
+
+def normals(years=10, end=2024):
+    """Ten years of daily means, the shape the archive API returns.
+
+    Memoised because it is 3650 entries and nearly every test asks for it.
+    """
+    key = (years, end)
+    if key not in _NORMALS:
+        times, values = [], []
+        for year in range(end - years + 1, end + 1):
+            day = datetime.date(year, 1, 1)
+            while day.year == year:
+                doy = day.timetuple().tm_yday
+                seasonal = 13.0 + 12.0 * math.sin(2 * math.pi * (doy - 105) / 365.0)
+                # A little year-to-year wobble so the range is not a point.
+                times.append(day.isoformat())
+                values.append(round(seasonal + (year % 3) - 1, 1))
+                day += datetime.timedelta(days=1)
+        _NORMALS[key] = {"daily": {"time": times, "temperature_2m_mean": values}}
+    return _NORMALS[key]
+
+
+SNOW_POINTS = ((40.7722, 21.2682, 1535.0), (40.7833, 21.2500, 1426.0))
+
+
+def snow(fall=None, depth=None, points=SNOW_POINTS, days=7):
+    """The two-location daily snow call. Defaults to no snow, as in summer."""
+    fall = list(fall or [0.0] * days)
+    depth = list(depth or [0.0] * days)
+    out = []
+    for lat, lon, elevation in points:
+        times = [(START + datetime.timedelta(days=d)).strftime("%Y-%m-%d")
+                 for d in range(days)]
+        out.append({
+            "latitude": lat, "longitude": lon, "elevation": elevation,
+            "daily": {
+                "time": times,
+                "snowfall_sum": (fall + [0.0] * days)[:days],
+                "snow_depth_max": (depth + [0.0] * days)[:days],
+                "temperature_2m_min": [-2.0] * days,
+                "temperature_2m_max": [2.0] * days,
+            },
+        })
+    return out
 
 
 def daily_history(days=46, end=datetime.date(2026, 10, 6)):

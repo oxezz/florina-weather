@@ -28,6 +28,9 @@ import sources  # noqa: E402
 def recording_opener(counter):
     """A stand-in for the network that answers from the fixtures."""
     def opener(url, timeout):
+        if "archive-api" in url:
+            counter["normals"] = counter.get("normals", 0) + 1
+            return fixtures.dumps(fixtures.normals())
         if "air-quality" in url:
             counter["air"] = counter.get("air", 0) + 1
             return fixtures.dumps(fixtures.air())
@@ -38,6 +41,9 @@ def recording_opener(counter):
             # the assertion starts failing on a date rather than on a bug.
             return fixtures.dumps(
                 fixtures.alerts(now=datetime.datetime.now(datetime.timezone.utc)))
+        if "snowfall_sum" in url:
+            counter["snow"] = counter.get("snow", 0) + 1
+            return fixtures.dumps(fixtures.snow())
         # Same host as the forecast, but daily-only: the HDD history call.
         if "temperature_2m_mean" in url:
             counter["history"] = counter.get("history", 0) + 1

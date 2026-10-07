@@ -24,6 +24,8 @@ def snapshot(**overrides):
         "air": fixtures.air(),
         "history": fixtures.daily_history(),
         "terrain": fixtures.terrain(),
+        "normals": fixtures.normals(),
+        "snow": fixtures.snow(),
         "alerts": fixtures.alerts(),
         "ages": {"forecast": 4.0, "air": 60.0, "history": 120.0,
                  "terrain": 90.0, "alerts": 30.0},
@@ -726,6 +728,92 @@ class SkyTests(unittest.TestCase):
         data = report.build_report(snapshot(forecast=forecast),
                                    sources.Config(), now=NOW)
         self.assertNotEqual(data["current"]["emoji"], "🌕")
+
+
+class NormalTests(unittest.TestCase):
+    """Today against the decade's average for the same date."""
+
+    def _normal(self):
+        data = report.build_report(snapshot(), sources.Config(), now=NOW)
+        return data["normal"]
+
+    def test_it_compares_against_the_same_date(self):
+        """Not against yesterday and not against the month: the archive holds
+        whole years, so the value is one calendar day averaged over ten."""
+        normal = self._normal()
+        self.assertIsNotNone(normal)
+        self.assertEqual(normal["years"], 10)
+        self.assertAlmostEqual(normal["today"] - normal["value"],
+                               normal["delta"], places=1)
+
+    def test_a_warm_day_reads_as_warmer(self):
+        normal = report.build_normal(
+            fixtures.normals(), {"iso": "2026-10-06", "min": 20.0, "max": 24.0})
+        self.assertTrue(normal["warmer"])
+        self.assertIn("θερμότερα", normal["text"])
+        self.assertAlmostEqual(normal["today"], 22.0, places=1)
+
+    def test_a_cold_day_reads_as_colder(self):
+        normal = report.build_normal(
+            fixtures.normals(), {"iso": "2026-10-06", "min": 2.0, "max": 4.0})
+        self.assertFalse(normal["warmer"])
+        self.assertIn("ψυχρότερα", normal["text"])
+
+    def test_a_typical_day_says_so(self):
+        # Read the normal rather than guessing it, so the fixture's seasonal
+        # curve can change without silently turning this into a cold-day test.
+        value = self._normal()["value"]
+        typical = report.build_normal(
+            fixtures.normals(),
+            {"iso": "2026-10-06", "min": value, "max": value})
+        self.assertIn("κανονικά", typical["text"])
+
+    def test_too_few_years_is_not_a_normal(self):
+        thin = {"daily": {"time": ["2024-10-06"], "temperature_2m_mean": [14.0]}}
+        self.assertIsNone(report.build_normal(
+            thin, {"iso": "2026-10-06", "min": 10.0, "max": 12.0}))
+
+    def test_missing_normals_are_not_an_error(self):
+        for broken in (None, {}, {"daily": {}}):
+            data = report.build_report(snapshot(normals=broken),
+                                       sources.Config(), now=NOW)
+            self.assertIsNone(data["normal"])
+
+
+class SnowTests(unittest.TestCase):
+    """Snow on the mountains, shown only when there is any."""
+
+    def _snow(self, local_only=True, **kwargs):
+        data = report.build_report(snapshot(snow=fixtures.snow(**kwargs)),
+                                   sources.Config(), now=NOW)
+        return (data["local"] or {}).get("snow")
+
+    def test_a_green_winter_hides_the_card(self):
+        self.assertIsNone(self._snow())
+
+    def test_a_fall_shows_it(self):
+        snow = self._snow(fall=[3.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        self.assertIsNotNone(snow)
+        self.assertEqual(len(snow["points"]), 2)
+        self.assertAlmostEqual(snow["fall"], 16.0, places=1)
+        # Highest ground first, so the card reads top-down.
+        self.assertGreater(snow["points"][0]["elevation"],
+                           snow["points"][1]["elevation"])
+
+    def test_a_shallow_cover_hides_it(self):
+        # Half a centimetre is not worth a card.
+        self.assertIsNone(self._snow(fall=[0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]))
+
+    def test_depth_alone_is_enough(self):
+        # snow_depth is metres of water equivalent; 0.10 m becomes 10 cm.
+        snow = self._snow(depth=[0.10, 0.10, 0.0, 0.0, 0.0, 0.0, 0.0])
+        self.assertIsNotNone(snow)
+        self.assertAlmostEqual(snow["deepest"], 10.0, places=1)
+
+    def test_missing_snow_data_is_not_an_error(self):
+        data = report.build_report(snapshot(snow=None),
+                                   sources.Config(), now=NOW)
+        self.assertIsNone((data["local"] or {}).get("snow"))
 
 
 class DegradedTests(unittest.TestCase):

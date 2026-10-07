@@ -382,6 +382,14 @@ a:hover { text-decoration: underline; }
   text-wrap: balance;
 }
 
+/* How today compares with the decade's average for the same date. */
+.normal {
+  margin: 10px 0 0;
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
 .ocard {
   display: flex;
   align-items: center;

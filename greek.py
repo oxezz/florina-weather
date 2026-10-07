@@ -399,6 +399,20 @@ OUTFIT_WIND = ("wind", "Προσοχή στον άνεμο", "💨")
 OUTFIT_ICE = ("ice", "Προσοχή στον πάγο", "⚠️")
 
 
+def normal_text(delta):
+    """How today compares with the decade's average for the same date."""
+    try:
+        value = float(delta)
+    except (TypeError, ValueError):
+        return ""
+    if value != value:  # NaN
+        return ""
+    if abs(value) < 0.5:
+        return "κοντά στα κανονικά για την εποχή"
+    return "%.1f°C %s από το κανονικό" % (
+        abs(value), "θερμότερα" if value > 0 else "ψυχρότερα")
+
+
 def greeting_word(hour):
     """Καλημέρα before noon, Καλησπέρα after.
 

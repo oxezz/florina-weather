@@ -226,6 +226,33 @@
 
   /* ---------------------------------------------------------------- extras */
 
+  function renderNormal(normal) {
+    var node = $("normal");
+    if (!node) return;
+    if (!normal || !normal.text) { node.hidden = true; return; }
+    node.textContent = normal.text + " (μέσος όρος " + normal.years +
+      " ετών: " + num(normal.value, 1) + "°)";
+    node.hidden = false;
+  }
+
+  function renderSnow(snow) {
+    var card = $("local-snow");
+    if (!card) return 0;
+    if (!snow || !snow.points || !snow.points.length) {
+      card.hidden = true;
+      return 0;
+    }
+    card.hidden = false;
+    toneFor(card, "#bae6fd");
+
+    setBig("snow-val", num(snow.deepest, 0) + " εκ.");
+    setText($("snow-sub"), snow.points.map(function (point) {
+      return point.name + " " + num(point.elevation) + " μ. · " +
+             num(point.fall, 1) + " εκ.";
+    }).join(" · "));
+    return 1;
+  }
+
   function renderGreeting(greeting) {
     var node = $("greet");
     if (!node) return;
@@ -647,6 +674,7 @@
 
     var shown = 0;
     shown += renderInversion(local.inversion);
+    shown += renderSnow(local.snow);
     shown += renderFrost(local.frost);
     shown += renderHeating(local.heating);
     shown += renderSmog(local.smog);
@@ -826,6 +854,7 @@
     safely("alerts", function () { renderAlerts(data.alerts); });
     safely("hero", function () { renderHero(data); });
     safely("greeting", function () { renderGreeting(data.greeting); });
+    safely("normal", function () { renderNormal(data.normal); });
     safely("outfit", function () { renderOutfit(data.outfit); });
     safely("sky", function () { renderSky(data.sky); });
     safely("stats", function () { renderStats(data.current || {}); });

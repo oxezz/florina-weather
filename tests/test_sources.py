@@ -27,10 +27,14 @@ UTC = datetime.timezone.utc
 def opener_for(counter, failing=()):
     """An opener that counts calls per source and can fail a chosen few."""
     def opener(url, timeout):
-        if "air-quality" in url:
+        if "archive-api" in url:
+            name = "normals"
+        elif "air-quality" in url:
             name = "air"
         elif "meteoalarm" in url:
             name = "alerts"
+        elif "snowfall_sum" in url:
+            name = "snow"
         elif "temperature_2m_mean" in url:
             name = "history"
         elif "models=" in url:
@@ -46,6 +50,8 @@ def opener_for(counter, failing=()):
             "history": fixtures.daily_history,
             "terrain": fixtures.terrain,
             "forecast": fixtures.forecast,
+            "normals": fixtures.normals,
+            "snow": fixtures.snow,
         }[name]())
     return opener
 
@@ -78,8 +84,8 @@ class FetchingTests(unittest.TestCase):
         counter = {}
         service = sources.WeatherService(sources.Config(), opener=opener_for(counter))
         service.snapshot()
-        self.assertEqual(sorted(counter), ["air", "alerts", "forecast",
-                                           "history", "terrain"])
+        self.assertEqual(sorted(counter), ["air", "alerts", "forecast", "history",
+                                           "normals", "snow", "terrain"])
 
     def test_a_second_snapshot_serves_from_cache(self):
         counter = {}

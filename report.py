@@ -631,6 +631,7 @@ def build_local_conditions(snapshot, days, forecast_hourly, now_local, config):
     """Assemble the hyper-local block, dropping anything with nothing to say."""
     blocks = {
         "inversion": build_inversion(snapshot.get("terrain"), config, now_local),
+        "snow": build_snow(snapshot, config),
         "frost": build_frost(days, forecast_hourly),
         "heating": build_heating(snapshot.get("history"), now_local),
         "smog": build_smog(_air_hourly(snapshot.get("air")),
@@ -1007,6 +1008,99 @@ def build_sky(moon, hours, air):
     }
 
 
+def build_normal(normals, today):
+    """How today compares with the same date over the past decade.
+
+    The archive API returns whole years, so the value for a given day is
+    averaged across the years it covers rather than fetched per year.
+    """
+    daily = (normals or {}).get("daily") or {}
+    times = daily.get("time") or []
+    values = daily.get("temperature_2m_mean") or []
+    if not times or not today:
+        return None
+    target = str(today.get("iso"))[5:]          # MM-DD
+    if not target:
+        return None
+
+    seen = []
+    for stamp, value in zip(times, values):
+        if str(stamp)[5:] == target and value is not None:
+            seen.append(value)
+    if len(seen) < 3:                            # too few years to call it normal
+        return None
+
+    mean = sum(seen) / len(seen)
+    today_mean = today.get("mean")
+    if today_mean is None:
+        low, high = today.get("min"), today.get("max")
+        if low is None or high is None:
+            return None
+        today_mean = (low + high) / 2.0
+
+    delta = today_mean - mean
+    return {
+        "value": round(mean, 1),
+        "today": round(today_mean, 1),
+        "delta": round(delta, 1),
+        "years": len(seen),
+        "range": [round(min(seen), 1), round(max(seen), 1)],
+        "warmer": delta >= 0,
+        "text": greek.normal_text(delta),
+    }
+
+
+def build_snow(snapshot, config):
+    """Snow at the ski area, when there is any worth reporting.
+
+    Returns ``None`` out of season: a row of zeros all summer is noise.
+    """
+    payload = snapshot.get("snow")
+    if not isinstance(payload, list):
+        payload = [payload] if isinstance(payload, dict) else []
+    points = []
+    for index, place in enumerate(config.snow_points):
+        block = payload[index] if index < len(payload) else None
+        if not block:
+            continue
+        daily = block.get("daily") or {}
+        times = daily.get("time") or []
+        if not times:
+            continue
+
+        falls = [v for v in (daily.get("snowfall_sum") or []) if _is_number(v)]
+        depths = [v for v in (daily.get("snow_depth_max") or []) if _is_number(v)]
+        lows = [v for v in (daily.get("temperature_2m_min") or []) if _is_number(v)]
+        if not falls and not depths:
+            continue
+
+        total_fall = sum(falls) if falls else 0.0
+        deepest = max(depths) if depths else 0.0
+        # snow_depth is metres of water equivalent, snowfall is centimetres.
+        depth_cm = deepest * 100.0
+        if total_fall < 1.0 and depth_cm < 2.0:
+            continue                              # nothing to say
+
+        points.append({
+            "key": place.get("key") or str(index),
+            "name": place.get("name") or "?",
+            "elevation": round(block.get("elevation") or 0),
+            "fall": round(total_fall, 1),
+            "depth": round(depth_cm, 1),
+            "min": round(min(lows), 1) if lows else None,
+            "days": len([v for v in falls if v >= 1.0]),
+            "level": "snow" if (total_fall >= 1.0 or depth_cm >= 2.0) else "none",
+        })
+    if not points:
+        return None
+    points.sort(key=lambda p: -p["elevation"])
+    return {
+        "points": points,
+        "deepest": max(p["depth"] for p in points),
+        "fall": round(sum(p["fall"] for p in points), 1),
+    }
+
+
 def build_report(snapshot, config, now=None):
     """Assemble the JSON document served at ``/api/weather``."""
     forecast = snapshot.get("forecast")
@@ -1096,6 +1190,7 @@ def build_report(snapshot, config, now=None):
     outfit = build_outfit(hours, now_local)
     air = parse_air(snapshot.get("air"))
     sky = build_sky(moon, hours, air)
+    normal = build_normal(snapshot.get("normals"), today)
 
     ages = snapshot.get("ages") or {}
     errors = snapshot.get("errors") or {}
@@ -1115,6 +1210,7 @@ def build_report(snapshot, config, now=None):
         "greeting": greeting,
         "outfit": outfit,
         "sky": sky,
+        "normal": normal,
         "air": air,
         "alerts": alerts,
         "status": {

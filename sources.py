@@ -28,6 +28,7 @@ log = logging.getLogger("florina.sources")
 USER_AGENT = "florina-weather/2.0 (+local; python-urllib)"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
 # --------------------------------------------------------------------------
 # TLS trust
@@ -206,6 +207,20 @@ class Config:
     slope_name: str = "υψίπεδο 1073 μ."
     compare_models: list = field(default_factory=lambda: list(DEFAULT_MODELS))
     terrain_cache_ttl: float = 900.0
+
+    # Climate normals, for "colder than usual". Ten years of daily means from
+    # the archive API is about 63 KB, so it is cached for a day: the value
+    # changes once a year, not once an hour.
+    normals_years: int = 10
+    normals_cache_ttl: float = 86400.0
+
+    # Snow on the ground up at the ski area. Coordinates are Open-Meteo's; the
+    # elevation it reports for each is shown on the card.
+    snow_points: list = field(default_factory=lambda: [
+        {"key": "vigla", "name": "Βίγλα", "lat": 40.7722, "lon": 21.2682},
+        {"key": "pisoderi", "name": "Πισοδέρι", "lat": 40.7833, "lon": 21.2500},
+    ])
+    snow_cache_ttl: float = 1800.0
     alert_country: str = "greece"
     alert_areas: list = field(default_factory=lambda: ["west macedonia", "δυτική μακεδονία"])
     alert_emma_ids: list = field(default_factory=list)
@@ -440,6 +455,38 @@ class WeatherService:
         return get_json(FORECAST_URL, self._terrain_params(),
                         timeout=self.config.timeout, opener=self._opener)
 
+    def _normals_params(self):
+        """Ten years ending last year, so the normal is a closed set."""
+        cfg = self.config
+        last = datetime.now(timezone.utc).year - 1
+        return {
+            "latitude": cfg.lat,
+            "longitude": cfg.lon,
+            "start_date": "%d-01-01" % (last - cfg.normals_years + 1),
+            "end_date": "%d-12-31" % last,
+            "daily": "temperature_2m_mean",
+            "timezone": cfg.timezone,
+        }
+
+    def fetch_normals(self):
+        return get_json(ARCHIVE_URL, self._normals_params(),
+                        timeout=max(self.config.timeout, 45.0), opener=self._opener)
+
+    def _snow_params(self):
+        cfg = self.config
+        return {
+            "latitude": ",".join(str(p["lat"]) for p in cfg.snow_points),
+            "longitude": ",".join(str(p["lon"]) for p in cfg.snow_points),
+            "daily": ("snowfall_sum,snow_depth_max,"
+                      "temperature_2m_min,temperature_2m_max"),
+            "forecast_days": min(cfg.forecast_days, 7),
+            "timezone": cfg.timezone,
+        }
+
+    def fetch_snow(self):
+        return get_json(FORECAST_URL, self._snow_params(),
+                        timeout=self.config.timeout, opener=self._opener)
+
     def fetch_alerts(self):
         url = ALERTS_URL.format(country=self.config.alert_country)
         return get_json(url, None, timeout=self.config.timeout, opener=self._opener)
@@ -536,6 +583,8 @@ class WeatherService:
             ("history", cfg.history_cache_ttl, self.fetch_history, False),
             ("terrain", cfg.terrain_cache_ttl, self.fetch_terrain, False),
             ("alerts", cfg.alerts_cache_ttl, self.fetch_alerts, False),
+            ("normals", cfg.normals_cache_ttl, self.fetch_normals, False),
+            ("snow", cfg.snow_cache_ttl, self.fetch_snow, False),
         )
 
         # One thread per source. They are independent, and fetching them in
@@ -575,6 +624,8 @@ class WeatherService:
         history, history_age, history_error = taken("history")
         terrain, terrain_age, terrain_error = taken("terrain")
         alerts, alerts_age, alerts_error = taken("alerts")
+        normals, normals_age, normals_error = taken("normals")
+        snow, snow_age, snow_error = taken("snow")
         forecast_stale = results.get("forecast", (None, None, False, None))[2]
 
         errors = {}
@@ -582,7 +633,9 @@ class WeatherService:
                               ("air", air_error),
                               ("history", history_error),
                               ("terrain", terrain_error),
-                              ("alerts", alerts_error)):
+                              ("alerts", alerts_error),
+                              ("normals", normals_error),
+                              ("snow", snow_error)):
             if message:
                 errors[name] = message
 
@@ -592,12 +645,16 @@ class WeatherService:
             "history": history,
             "terrain": terrain,
             "alerts": alerts,
+            "normals": normals,
+            "snow": snow,
             "ages": {
                 "forecast": forecast_age,
                 "air": air_age,
                 "history": history_age,
                 "terrain": terrain_age,
                 "alerts": alerts_age,
+                "normals": normals_age,
+                "snow": snow_age,
             },
             "errors": errors,
             "stale": bool(forecast_stale),
