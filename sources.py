@@ -224,6 +224,19 @@ class Config:
         {"key": "pisoderi", "name": "Πισοδέρι", "lat": 40.7833, "lon": 21.2500},
     ])
     snow_cache_ttl: float = 1800.0
+
+    # Outbound frost alerts. Nothing is ever sent unless a transport is both
+    # chosen and given somewhere to send to, so the defaults are silent.
+    alert_webhook: str = ""             # "ntfy" or "telegram"
+    ntfy_url: str = ""                  # e.g. https://ntfy.sh/florina-frost
+    telegram_token: str = ""
+    telegram_chat: str = ""
+    # The frost card stays lit for days once a cold snap is forecast, so the
+    # same alert is suppressed for this long.
+    webhook_min_interval: float = 6 * 3600.0
+    # Where the "already sent" record lives. Empty keeps it in memory, which
+    # is lost on restart; a path survives one if the host allows writes.
+    webhook_state_path: str = ""
     alert_country: str = "greece"
     alert_areas: list = field(default_factory=lambda: ["west macedonia", "δυτική μακεδονία"])
     alert_emma_ids: list = field(default_factory=list)
@@ -241,6 +254,12 @@ class Config:
             region=os.environ.get("FLORINA_REGION", cls.region),
             # Set this on a deployment so Open Graph URLs are absolute.
             public_url=os.environ.get("FLORINA_PUBLIC_URL", cls.public_url),
+            alert_webhook=os.environ.get("FLORINA_ALERT_WEBHOOK", cls.alert_webhook),
+            ntfy_url=os.environ.get("FLORINA_NTFY_URL", cls.ntfy_url),
+            telegram_token=os.environ.get("FLORINA_TELEGRAM_TOKEN",
+                                          cls.telegram_token),
+            telegram_chat=os.environ.get("FLORINA_TELEGRAM_CHAT",
+                                         cls.telegram_chat),
             timezone=os.environ.get("FLORINA_TZ", cls.timezone),
             host=os.environ.get("FLORINA_HOST", cls.host),
             # PaaS platforms (Render, Fly, Heroku) inject a generic PORT;

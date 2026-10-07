@@ -10,6 +10,10 @@ venv/
 /_*.txt
 /_*.mjs
 /_*.log
+/_*.json
+
+# Runtime state, if a deployment points the alert webhook at a file.
+_florina_state*.json
 
 # Tooling
 .pytest_cache/

@@ -120,7 +120,7 @@ saving it, so a particular look is linkable.
 | `manifest.webmanifest` | Web app manifest — name, icons, standalone display |
 | `Dockerfile` | Container image for Render / Fly / any container host |
 | `cacert.pem` | Mozilla CA bundle, used when the host has no trust store |
-| `tests/` | 293 tests, all offline |
+| `tests/` | 315 tests, all offline |
 
 ### API
 
@@ -175,6 +175,36 @@ Warnings arrive from the Greek Meteoalarm CAP feed and are matched against
 one. If both `alert_areas` and `alert_emma_ids` are left empty, every current
 warning is shown.
 
+### Frost alerts
+
+Off by default. With a transport configured, the frost card pushes a message
+when it forecasts an actual freeze — `risk` stays quiet, because a night *near*
+freezing is not worth a buzz at 3am.
+
+```sh
+# ntfy, no account needed
+FLORINA_ALERT_WEBHOOK=ntfy
+FLORINA_NTFY_URL=https://ntfy.sh/your-topic
+
+# or Telegram
+FLORINA_ALERT_WEBHOOK=telegram
+FLORINA_TELEGRAM_TOKEN=123:abc
+FLORINA_TELEGRAM_CHAT=42
+```
+
+The same alert is suppressed for `FLORINA_WEBHOOK_MIN_INTERVAL` seconds
+(six hours by default), because the frost card stays lit for days once a cold
+snap is in the forecast — without that, every request would send it again. An
+*escalation* is never suppressed: going from `frost` to `severe` always gets
+through.
+
+Alert state lives in memory unless `FLORINA_WEBHOOK_STATE_PATH` names a writable
+file, in which case it survives a restart. Both are tested, including the
+read-only case.
+
+ntfy is published through its JSON body form rather than headers: header values
+must be latin-1, and a Greek title sent as one arrives mangled.
+
 ---
 
 ## Tests
@@ -183,7 +213,7 @@ warning is shown.
 python -m unittest discover -s tests -t .
 ```
 
-All 293 tests run offline: upstream responses are replaced by fixtures, and the
+All 315 tests run offline: upstream responses are replaced by fixtures, and the
 HTTP tests start a real server on an ephemeral port with an injected opener.
 
 ## Greek wording

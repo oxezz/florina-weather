@@ -28,13 +28,15 @@ import threading
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlsplit
 
 import greek
+import notify
 import report as report_mod
 import sources
 
-__version__ = "3.0.1"
+__version__ = "3.1.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(BASE_DIR, "template.html")
@@ -298,10 +300,25 @@ class Handler(BaseHTTPRequestHandler):
             ),
         })
 
+    def _maybe_alert(self, payload):
+        """Fire a frost alert if one is due.
+
+        Runs off ordinary traffic rather than a scheduler, which is why the
+        suppression window matters: without it every request during a cold snap
+        would send the same warning again. Never allowed to fail the request.
+        """
+        if not notify.configured(self.config):
+            return
+        try:
+            notify.notify_frost(self.config, payload, datetime.now(timezone.utc))
+        except Exception as exc:  # noqa: BLE001 - an alert is not worth a 500
+            log.warning("frost alert failed: %s", exc)
+
     def _serve_weather(self, force=False):
         try:
             snapshot = self.service.snapshot(force=force)
             payload = report_mod.build_report(snapshot, self.config)
+            self._maybe_alert(payload)
         except report_mod.ReportError as exc:
             log.error("cannot build report: %s", exc)
             self._fail(HTTPStatus.SERVICE_UNAVAILABLE,
