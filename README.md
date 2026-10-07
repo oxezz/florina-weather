@@ -1,100 +1,102 @@
-# Καιρός · Φλώρινα (Florina Weather)
+# Καιρός · Φλώρινα
 
 [![tests](https://github.com/oxezz/florina-weather/actions/workflows/tests.yml/badge.svg)](https://github.com/oxezz/florina-weather/actions/workflows/tests.yml)
 
-A small self-hosted weather page for **Φλώρινα, Δυτική Μακεδονία**, in Greek.
-Python standard library only — no `pip install`, no API key, no build step.
-Requires **Python 3.10 or newer** (3.9 is end-of-life).
+Μια μικρή σελίδα καιρού για τη **Φλώρινα, Δυτική Μακεδονία**, στα ελληνικά.
+Μόνο η βασική βιβλιοθήκη της Python — χωρίς `pip install`, χωρίς κλειδί API,
+χωρίς βήμα build. Θέλει **Python 3.10 ή νεότερη** (η 3.9 έχει καταργηθεί).
 
-**Live:** <https://florina-weather.wasmer.app/> — or run your own with the
-command below.
+**Σε λειτουργία:** <https://florina-weather.wasmer.app/> — ή τρέξε τη δική σου:
 
 ```bash
 cd florina-weather
 python app.py
 ```
 
-Then open **http://127.0.0.1:8000**.
+και άνοιξε το **http://127.0.0.1:8000**.
 
 ---
 
-## Deploying it
+## Ανέβασμα σε server
 
-The repo is ready to push to GitHub and deploy from there. Nothing needs
-installing, because the app has no dependencies.
+Το repo είναι έτοιμο να ανέβει στο GitHub και να στηθεί από εκεί. Δεν χρειάζεται
+εγκατάσταση, γιατί η εφαρμογή δεν έχει εξαρτήσεις.
 
-**Any container host** — Render, Fly.io, Railway, a VPS. Point it at the repo;
-it builds the [`Dockerfile`](Dockerfile) and runs. The image binds
-`0.0.0.0:8000` and honours the generic `PORT` variable those platforms inject,
-so there is nothing to configure.
+**Οποιοδήποτε container host** — Render, Fly.io, Railway, ένα VPS. Δείξε του το
+repo· χτίζει το [`Dockerfile`](Dockerfile) και τρέχει. Το image ακούει στο
+`0.0.0.0:8000` και σέβεται τη μεταβλητή `PORT` που δίνουν αυτές οι πλατφόρμες,
+οπότε δεν ρυθμίζεις τίποτα.
 
-**Wasmer Edge** works, and is verified in production: it runs the app
-unmodified, including the threaded HTTP server. It does need the CA bundle
-described below, which is why `cacert.pem` is committed.
+**Το Wasmer Edge** δουλεύει και είναι δοκιμασμένο σε παραγωγή: τρέχει την
+εφαρμογή ως έχει, μαζί με τον threaded HTTP server. Χρειάζεται όμως το πακέτο
+πιστοποιητικών που εξηγείται παρακάτω, γι' αυτό το `cacert.pem` είναι μέσα στο
+repo.
 
-**Static hosts will not work** — GitHub Pages, Netlify and Cloudflare Pages
-serve files, and this is a running server that fetches and caches upstream data.
+**Οι στατικοί hosts δεν κάνουν** — GitHub Pages, Netlify, Cloudflare Pages
+σερβίρουν αρχεία, ενώ αυτό είναι server που κατεβάζει και κρατά δεδομένα.
 
-CI runs the whole suite on every push across Python 3.10, 3.12, 3.13 and 3.14
+Το CI τρέχει όλα τα tests σε κάθε push, σε Python 3.10, 3.12, 3.13 και 3.14
 ([`.github/workflows/tests.yml`](.github/workflows/tests.yml)).
 
-### TLS trust store
+### Πιστοποιητικά TLS
 
-Minimal hosts often ship no CA bundle at all. Wasmer Edge's Python runtime, for
-instance, loads **zero** certificates into its default context, so every HTTPS
-call fails with `CERTIFICATE_VERIFY_FAILED`.
+Οι minimal hosts συχνά δεν έχουν καθόλου CA bundle. Το Python runtime του
+Wasmer Edge, για παράδειγμα, φορτώνει **μηδέν** πιστοποιητικά στο προεπιλεγμένο
+context, οπότε κάθε κλήση HTTPS αποτυγχάνει με `CERTIFICATE_VERIFY_FAILED`.
 
-So [`cacert.pem`](cacert.pem) — Mozilla's CA list, via
-[curl.se](https://curl.se/ca/cacert.pem) — ships with the app. The precedence is:
+Γι' αυτό το [`cacert.pem`](cacert.pem) — η λίστα της Mozilla, μέσω
+[curl.se](https://curl.se/ca/cacert.pem) — ταξιδεύει μαζί με την εφαρμογή. Η
+σειρά προτεραιότητας:
 
-1. `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE` or `CURL_CA_BUNDLE`, if set and valid
-2. the host's own store, *if it genuinely contains certificates*
-3. the bundled `cacert.pem`
+1. `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE` ή `CURL_CA_BUNDLE`, αν υπάρχουν και είναι έγκυρα
+2. το δικό του trust store του host, *αν όντως περιέχει πιστοποιητικά*
+3. το `cacert.pem` που συνοδεύει την εφαρμογή
 
-`/api/health` reports which one is active under `"tls"`. Refresh the bundle
-occasionally by re-downloading it from curl.se.
+Το `/api/health` δείχνει ποιο ισχύει, στο πεδίο `"tls"`. Καλό είναι να
+ξανακατεβάζεις το bundle από το curl.se πού και πού.
 
-That file is Mozilla's data, distributed under the **MPL-2.0**, and is not
-covered by this project's MIT licence.
+Το αρχείο αυτό είναι δεδομένα της Mozilla, υπό **MPL-2.0**, και δεν καλύπτεται
+από την άδεια MIT του project.
 
 ---
 
-## Features
+## Τι κάνει
 
 | | |
 |---|---|
-| **Current conditions** | temperature, apparent temperature, humidity, wind (speed, direction, arrow and Beaufort), gusts, precipitation, cloud cover, pressure and visibility |
-| **Greeting & outfit** | a hello keyed to the hour and the weather, and a «Τι να φορέσω;» card suggesting a layer from the feels-like temperature, with umbrella, sunscreen, hat or ice warnings layered on top |
-| **Moon & stargazing** | the lunar phase, how much of the disc is lit, moonrise and moonset, plus a verdict on whether tonight is worth looking up — cloud first, then haze, then moonlight |
-| **48-hour outlook** | an inline SVG chart of temperature with precipitation-probability bars and night shading, plus a horizontally scrollable hour-by-hour strip |
-| **7-day forecast** | per-day icon, description, min/max with a relative range bar, rainfall, UV and peak gusts |
-| **Official warnings** | live **Meteoalarm / EMY** alerts for West Macedonia, colour-coded, shown as a banner at the top |
-| **Air quality** | European AQI, PM2.5 / PM10 and pollen (grass, olive, ragweed, mugwort, birch, alder) |
-| **Local conditions** | Hyper-local cards for the basin climate: **frost risk** for growers, **heating degree days** for the month, and the evening **wood-smoke** build-up. Each card is simply absent when it has nothing to say, so the whole panel disappears in summer |
-| **Live updates** | the page refreshes itself in place — no reload, no flicker — and pauses while the tab is hidden |
-| **Installable (PWA)** | A manifest and a service worker, so "Add to Home Screen" gives a standalone app with no URL bar — and the refresh button is always there for an immediate update |
-| **Works offline** | The shell is cached, so a repeat launch is instant and an offline reload still shows the last weather with an «εκτός σύνδεσης» note rather than the browser's error page |
-| **Loading skeletons** | 31 placeholders shaped like the real content, so the first paint already looks finished and nothing jumps when the data lands. They stay invisible for the first 350 ms, because a skeleton that flashes for two frames looks worse than none |
-| **Light & dark** | an iOS-style segmented control (Αυτόματα / Φωτεινό / Σκοτεινό). The choice is remembered and can be linked with `?mode=dark` |
-| **Liquid-glass surfaces** | translucent saturated blur, a specular rim along the top edge, a sheen out of the top-left corner, and a highlight that follows the pointer. All of it degrades gracefully — with no hover or no JavaScript the panels still read correctly |
-| **Weather-aware backdrop** | shifts between clear-day, clear-night, cloud, rain, snow, storm and fog, in both light and dark |
+| **Τρέχουσες συνθήκες** | θερμοκρασία, αίσθηση, υγρασία, άνεμος (ταχύτητα, διεύθυνση, βέλος και μποφόρ), ριπές, υετός, νέφωση, πίεση και ορατότητα |
+| **Χαιρετισμός & ντύσιμο** | ένα «καλημέρα» ανάλογα με την ώρα και τον καιρό, και μια κάρτα «Τι να φορέσω;» που προτείνει στρώσεις με βάση την αίσθηση, με ομπρέλα, αντηλιακό, καπέλο ή προειδοποίηση για πάγο από πάνω |
+| **Σελήνη & αστροπαρατήρηση** | η φάση, πόσο φωτισμένος είναι ο δίσκος, ανατολή και δύση, και μια γνώμη για το αν αξίζει να κοιτάξεις ψηλά απόψε — πρώτα η νέφωση, μετά η θολούρα, μετά το φεγγαρόφωτο |
+| **Επόμενες 48 ώρες** | γράφημα θερμοκρασίας σε SVG, με μπάρες πιθανότητας υετού και σκίαση της νύχτας, και μια λωρίδα ωρών με οριζόντιο κύλισμα |
+| **Πρόβλεψη 7 ημερών** | εικονίδιο, περιγραφή, ελάχιστη/μέγιστη με σχετική μπάρα, υετός, UV και μέγιστες ριπές |
+| **Επίσημες προειδοποιήσεις** | ζωντανές ειδοποιήσεις **Meteoalarm / ΕΜΥ** για τη Δυτική Μακεδονία, με χρώματα, σε μπάνερ στην κορυφή |
+| **Ποιότητα αέρα** | ευρωπαϊκός δείκτης EAQI, PM2.5 / PM10 και γύρη (γρασίδι, ελιά, αμβροσία, αψιθιά, σημύδα, κλήθρα) |
+| **Τοπικές συνθήκες** | κάρτες για το μικροκλίμα της λεκάνης: **κίνδυνος παγετού** για όσους καλλιεργούν, **βαθμοημέρες θέρμανσης** για τον μήνα, και η βραδινή συγκέντρωση **καπνού από τζάκια**. Κάθε κάρτα απλώς δεν εμφανίζεται όταν δεν έχει κάτι να πει, οπότε όλο το πάνελ εξαφανίζεται το καλοκαίρι |
+| **Ζωντανή ανανέωση** | η σελίδα ανανεώνεται μόνη της — χωρίς reload, χωρίς τρεμόπαιγμα — και σταματά όταν η καρτέλα είναι κρυμμένη |
+| **Εγκατάσταση (PWA)** | manifest και service worker, ώστε το «Προσθήκη στην αρχική» να δίνει αυτόνομη εφαρμογή χωρίς γραμμή διεύθυνσης — και το κουμπί ανανέωσης είναι πάντα εκεί για άμεση ενημέρωση |
+| **Δουλεύει offline** | Το shell είναι cached, οπότε το άνοιγμα είναι ακαριαίο και μια επαναφόρτωση χωρίς σύνδεση δείχνει τον τελευταίο καιρό με σημείωση «εκτός σύνδεσης», αντί για τη σελίδα σφάλματος του browser |
+| **Skeletons φόρτωσης** | 31 placeholders στο σχήμα του πραγματικού περιεχομένου, ώστε το πρώτο paint να δείχνει έτοιμο και τίποτα να μην πηδάει όταν φτάσουν τα δεδομένα. Μένουν αόρατα για τα πρώτα 350 ms, γιατί ένα skeleton που αναβοσβήνει για δύο frames είναι χειρότερο από καθόλου |
+| **Φωτεινό & σκοτεινό** | διακόπτης σε στυλ iOS (Αυτόματα / Φωτεινό / Σκοτεινό). Η επιλογή θυμάται και μπορεί να μπει link με `?mode=dark` |
+| **Υαλικές επιφάνειες** | ημιδιαφανές κορεσμένο blur, φωτεινή γραμμή στην πάνω άκρη, λάμψη από πάνω αριστερά, και φως που ακολουθεί τον δείκτη. Όλα υποχωρούν ομαλά — χωρίς hover ή χωρίς JavaScript τα πάνελ διαβάζονται κανονικά |
+| **Φόντο ανάλογα με τον καιρό** | αλλάζει ανάμεσα σε καθαρή μέρα, καθαρή νύχτα, συννεφιά, βροχή, χιόνι, καταιγίδα και ομίχλη, σε φωτεινό και σκοτεινό |
 
-### Appearance
+### Εμφάνιση
 
-The mode is independent of the weather theme: `html.mode-light` / `html.mode-dark`
-sets the *material* (text, glass tint, shadows) and `body.theme-*` sets the
-*backdrop hue*. Auto follows `prefers-color-scheme` live.
+Η λειτουργία είναι ανεξάρτητη από το θέμα του καιρού: το `html.mode-light` /
+`html.mode-dark` ορίζει το *υλικό* (κείμενο, χρώμα γυαλιού, σκιές) και το
+`body.theme-*` την *απόχρωση του φόντου*. Το Αυτόματα ακολουθεί το
+`prefers-color-scheme` ζωντανά.
 
-`?mode=light` or `?mode=dark` overrides the stored choice for one visit without
-saving it, so a particular look is linkable.
+Το `?mode=light` ή `?mode=dark` παρακάμπτει την αποθηκευμένη επιλογή για μία
+επίσκεψη χωρίς να την αλλάξει, ώστε μια συγκεκριμένη όψη να μπαίνει σε link.
 
-| Dark | Light |
+| Σκοτεινό | Φωτεινό |
 |:----:|:-----:|
 | [![Dark](docs/dark.jpg)](docs/dark.jpg) | [![Light](docs/light.jpg)](docs/light.jpg) |
 
 ---
 
-## How it works
+## Πώς δουλεύει
 
 ```
    ┌──────────────────────┐
@@ -106,60 +108,63 @@ saving it, so a particular look is linkable.
                                     stale-if-error   JSON doc         JSON API     update in place
 ```
 
-| File | Purpose |
+| Αρχείο | Ρόλος |
 |------|---------|
-| `app.py` | CLI, HTTP server, routing. Serves the shell, `/api/weather`, `/api/health` and an allow-list of static files |
-| `sources.py` | Configuration plus the four upstream clients, the TTL cache and stale-if-error handling |
-| `report.py` | Pure functions that turn raw upstream payloads into the document the UI consumes |
-| `greek.py` | Greek vocabulary: WMO code → description + emoji, compass, Beaufort, UV/AQI bands, dates |
-| `template.html` | The page shell. Only five placeholders, all server-filled |
-| `theme.js` | Appearance bootstrap, loaded from `<head>` so light mode never flashes dark |
-| `app.js` | Fetches `/api/weather` and renders it. Never injects upstream text as HTML |
-| `style.css` | Glass material, light/dark tokens, the seven weather backdrops, layout |
-| `sw.js` | Service worker: offline shell, and what lets Android offer "Install app" |
-| `manifest.webmanifest` | Web app manifest — name, icons, standalone display |
-| `Dockerfile` | Container image for Render / Fly / any container host |
-| `cacert.pem` | Mozilla CA bundle, used when the host has no trust store |
-| `tests/` | 382 tests, all offline |
+| `app.py` | CLI, HTTP server, routing. Σερβίρει το shell, το `/api/weather`, το `/api/health` και μια λίστα επιτρεπτών στατικών αρχείων |
+| `sources.py` | Ρυθμίσεις, οι clients των upstream πηγών, το cache με TTL και η λογική stale-if-error |
+| `report.py` | Καθαρές συναρτήσεις που μετατρέπουν τα ακατέργαστα δεδομένα στο έγγραφο που καταναλώνει το UI |
+| `greek.py` | Ελληνικό λεξιλόγιο: κωδικός WMO → περιγραφή + emoji, πυξίδα, μποφόρ, ζώνες UV/AQI, ημερομηνίες |
+| `template.html` | Το shell της σελίδας. Μόνο πέντε placeholders, όλα συμπληρώνονται από τον server |
+| `theme.js` | Bootstrap εμφάνισης, φορτώνεται από το `<head>` ώστε το φωτεινό θέμα να μην περνά ποτέ από σκοτεινό |
+| `app.js` | Κατεβάζει το `/api/weather` και το ζωγραφίζει. Δεν περνά ποτέ κείμενο από πάνω ως HTML |
+| `style.css` | Υλικό γυαλιού, μεταβλητές φωτεινού/σκοτεινού, τα επτά φόντα καιρού, διάταξη |
+| `sw.js` | Service worker: offline shell, και αυτό που επιτρέπει στο Android να προτείνει «Εγκατάσταση εφαρμογής» |
+| `manifest.webmanifest` | Web app manifest — όνομα, εικονίδια, standalone εμφάνιση |
+| `Dockerfile` | Image για Render / Fly / οποιοδήποτε container host |
+| `cacert.pem` | CA bundle της Mozilla, για hosts χωρίς trust store |
+| `tools/` | Scripts που φτιάχνουν στατικά αρχεία, όπως τη μοιραζόμενη εικόνα |
+| `research/` | Scripts που παράγουν νούμερα τα οποία στον κώδικα είναι σταθερές |
+| `tests/` | 382 tests, όλα offline |
 
 ### API
 
-* `GET /` — the page
-* `GET /api/weather` — the full JSON document; add `?force` to bypass the forecast cache
-* `GET /api/health` — last success and last error per source
+* `GET /` — η σελίδα
+* `GET /api/weather` — το πλήρες JSON· με `?force` παρακάμπτεται το cache της πρόγνωσης
+* `GET /api/health` — τελευταία επιτυχία και τελευταίο σφάλμα ανά πηγή
 
-Errors are returned as HTML when a browser is navigating and as JSON when
-`Accept: application/json` is sent, so the client can always parse the response.
+Τα σφάλματα επιστρέφονται ως HTML όταν περιηγείται browser και ως JSON όταν
+σταλεί `Accept: application/json`, ώστε ο client να μπορεί πάντα να διαβάσει την
+απάντηση.
 
 ---
 
-## Configuration
+## Ρυθμίσεις
 
-Every flag has a matching `FLORINA_*` environment variable.
+Κάθε flag έχει και αντίστοιχη μεταβλητή περιβάλλοντος `FLORINA_*`.
 
 ```bash
 python app.py --port 8080 --place Φλώρινα --refresh 120 --verbose
 FLORINA_PORT=8080 FLORINA_REFRESH=120 python app.py
 ```
 
-| Flag | Env | Default | Meaning |
+| Flag | Μεταβλητή | Προεπιλογή | Σημασία |
 |------|-----|---------|---------|
-| `--host` | `FLORINA_HOST` | `127.0.0.1` | Bind address. Use `0.0.0.0` to reach it from other devices |
-| `--port` | `FLORINA_PORT` | `8000` | TCP port |
-| `--place` | `FLORINA_PLACE` | `Φλώρινα` | Town name on the page |
-| `--region` | `FLORINA_REGION` | `Δυτική Μακεδονία` | Region name on the page |
-| `--lat` / `--lon` | `FLORINA_LAT` / `FLORINA_LON` | `40.7822` / `21.4097` | Coordinates |
-| `--refresh` | `FLORINA_REFRESH` | `600` | Client refresh interval, seconds. Open-Meteo's models update roughly every 15 minutes, so polling much faster only burns bandwidth |
-| `--cache-ttl` | `FLORINA_CACHE_TTL` | `600` | Server-side forecast cache, seconds |
-| `--forecast-days` | `FLORINA_FORECAST_DAYS` | `7` | Days in the daily forecast |
-| `--forecast-hours` | `FLORINA_FORECAST_HOURS` | `48` | Hours in the chart and strip |
-| — | `FLORINA_HISTORY_DAYS` | `45` | Days of daily history fetched for the heating-degree total |
-| `--alert-areas` | `FLORINA_ALERT_AREAS` | `west macedonia,δυτική μακεδονία` | Which Meteoalarm areas to show |
-| `--alert-emma-ids` | `FLORINA_ALERT_EMMA_IDS` | *(empty)* | Match warnings by EMMA region code instead of name |
-| `--open` | — | off | Open the browser on start |
-| `--verbose` | — | off | Debug logging |
+| `--host` | `FLORINA_HOST` | `127.0.0.1` | Διεύθυνση. Βάλε `0.0.0.0` για πρόσβαση από άλλες συσκευές |
+| `--port` | `FLORINA_PORT` | `8000` | Θύρα TCP |
+| `--place` | `FLORINA_PLACE` | `Φλώρινα` | Όνομα πόλης στη σελίδα |
+| `--region` | `FLORINA_REGION` | `Δυτική Μακεδονία` | Όνομα περιοχής στη σελίδα |
+| `--lat` / `--lon` | `FLORINA_LAT` / `FLORINA_LON` | `40.7822` / `21.4097` | Συντεταγμένες |
+| `--refresh` | `FLORINA_REFRESH` | `600` | Κάθε πότε ανανεώνει ο client, σε δευτερόλεπτα. Τα μοντέλα του Open-Meteo ανανεώνονται περίπου κάθε 15 λεπτά, οπότε πιο συχνό polling καίει bandwidth χωρίς λόγο |
+| `--cache-ttl` | `FLORINA_CACHE_TTL` | `600` | Cache της πρόγνωσης στον server, σε δευτερόλεπτα |
+| `--forecast-days` | `FLORINA_FORECAST_DAYS` | `7` | Ημέρες στην πρόγνωση |
+| `--forecast-hours` | `FLORINA_FORECAST_HOURS` | `48` | Ώρες στο γράφημα και τη λωρίδα |
+| — | `FLORINA_HISTORY_DAYS` | `45` | Ημέρες ιστορικού για το σύνολο βαθμοημερών θέρμανσης |
+| `--alert-areas` | `FLORINA_ALERT_AREAS` | `west macedonia,δυτική μακεδονία` | Ποιες περιοχές Meteoalarm εμφανίζονται |
+| `--alert-emma-ids` | `FLORINA_ALERT_EMMA_IDS` | *(κενό)* | Αντιστοίχιση προειδοποιήσεων με κωδικό EMMA αντί για όνομα |
+| `--open` | — | κλειστό | Άνοιγμα του browser στην εκκίνηση |
+| `--verbose` | — | κλειστό | Αναλυτικά logs |
 
-**Retargeting another town** needs no code change:
+**Αλλαγή πόλης** χωρίς αλλαγή κώδικα:
 
 ```bash
 python app.py --place Καστοριά --region Δυτική Μακεδονία \
@@ -167,43 +172,44 @@ python app.py --place Καστοριά --region Δυτική Μακεδονία 
               --alert-areas "west macedonia"
 ```
 
-### Warnings filter
+### Φίλτρο προειδοποιήσεων
 
-Warnings arrive from the Greek Meteoalarm CAP feed and are matched against
-`FLORINA_ALERT_AREAS`, accent- and case-insensitively (`ΔΥΤΙΚΗ ΜΑΚΕΔΟΝΙΑ` matches
-`Δυτική Μακεδονία`). The Greek text of each warning is preferred over the English
-one. If both `alert_areas` and `alert_emma_ids` are left empty, every current
-warning is shown.
+Οι προειδοποιήσεις έρχονται από την ελληνική ροή CAP του Meteoalarm και
+συγκρίνονται με το `FLORINA_ALERT_AREAS`, χωρίς διάκριση τόνων και πεζών/κεφαλαίων
+(το `ΔΥΤΙΚΗ ΜΑΚΕΔΟΝΙΑ` πιάνει το `Δυτική Μακεδονία`). Το ελληνικό κείμενο κάθε
+προειδοποίησης προτιμάται από το αγγλικό. Αν μείνουν κενά και το `alert_areas`
+και το `alert_emma_ids`, εμφανίζονται όλες οι τρέχουσες προειδοποιήσεις.
 
-### Frost alerts
+### Ειδοποιήσεις παγετού
 
-Off by default. With a transport configured, the frost card pushes a message
-when it forecasts an actual freeze — `risk` stays quiet, because a night *near*
-freezing is not worth a buzz at 3am.
+Κλειστές από προεπιλογή. Με ρυθμισμένο transport, η κάρτα παγετού στέλνει μήνυμα
+όταν προβλέπεται πραγματικός παγετός — το `risk` μένει σιωπηλό, γιατί μια νύχτα
+*κοντά* στους μηδέν δεν αξίζει ειδοποίηση στις 3 τα ξημερώματα.
 
 ```sh
-# ntfy, no account needed
+# ntfy, χωρίς λογαριασμό
 FLORINA_ALERT_WEBHOOK=ntfy
 FLORINA_NTFY_URL=https://ntfy.sh/your-topic
 
-# or Telegram
+# ή Telegram
 FLORINA_ALERT_WEBHOOK=telegram
 FLORINA_TELEGRAM_TOKEN=123:abc
 FLORINA_TELEGRAM_CHAT=42
 ```
 
-The same alert is suppressed for `FLORINA_WEBHOOK_MIN_INTERVAL` seconds
-(six hours by default), because the frost card stays lit for days once a cold
-snap is in the forecast — without that, every request would send it again. An
-*escalation* is never suppressed: going from `frost` to `severe` always gets
-through.
+Η ίδια ειδοποίηση καταστέλλεται για `FLORINA_WEBHOOK_MIN_INTERVAL` δευτερόλεπτα
+(έξι ώρες από προεπιλογή), γιατί η κάρτα παγετού μένει αναμμένη για μέρες όταν
+μπει κρύο στην πρόγνωση — χωρίς αυτό, θα ερχόταν σε κάθε request. Μια
+*κλιμάκωση* δεν καταστέλλεται ποτέ: το πέρασμα από `frost` σε `severe` περνά
+πάντα.
 
-Alert state lives in memory unless `FLORINA_WEBHOOK_STATE_PATH` names a writable
-file, in which case it survives a restart. Both are tested, including the
-read-only case.
+Η κατάσταση των ειδοποιήσεων μένει στη μνήμη, εκτός αν το
+`FLORINA_WEBHOOK_STATE_PATH` δείξει σε εγγράψιμο αρχείο, οπότε επιβιώνει από
+επανεκκίνηση. Και οι δύο περιπτώσεις είναι δοκιμασμένες, μαζί με την περίπτωση
+read-only.
 
-ntfy is published through its JSON body form rather than headers: header values
-must be latin-1, and a Greek title sent as one arrives mangled.
+Το ntfy στέλνεται μέσω της μορφής JSON και όχι headers: οι τιμές των headers
+πρέπει να είναι latin-1, και ένα ελληνικό title περνά αλλοιωμένο.
 
 ---
 
@@ -213,39 +219,43 @@ must be latin-1, and a Greek title sent as one arrives mangled.
 python -m unittest discover -s tests -t .
 ```
 
-All 382 tests run offline: upstream responses are replaced by fixtures, and the
-HTTP tests start a real server on an ephemeral port with an injected opener.
+Και τα 382 tests τρέχουν offline: οι απαντήσεις των πηγών αντικαθίστανται από
+fixtures, και τα HTTP tests ξεκινούν πραγματικό server σε προσωρινή θύρα με
+injected opener.
 
-## Greek wording
+## Ελληνικές διατυπώσεις
 
-A few labels were deliberately chosen over the obvious alternative:
+Μερικές ετικέτες επιλέχθηκαν σκόπιμα αντί της προφανούς εναλλακτικής:
 
-| Label | Why |
+| Ετικέτα | Γιατί |
 |-------|-----|
-| **Ριπές ανέμου** | a *gust* is a ριπή ανέμου. "Ροή ανέμου" would be a wind **flow** — a different quantity, and not what the card shows |
-| **Αίσθηση** | the card label is a noun phrase ("feels like"); "Αίσθητη" alone is a dangling adjective |
-| **Υετός** | the card totals rain + showers + **snow**, so "Βροχή" would be wrong whenever it snows. Υετός is the term EMY uses |
-| **Μπφ** | the conventional Greek abbreviation for μποφόρ |
+| **Ριπές ανέμου** | το gust είναι ριπή ανέμου. Το «Ροή ανέμου» θα ήταν ροή — άλλο μέγεθος, και όχι αυτό που δείχνει η κάρτα |
+| **Αίσθηση** | η ετικέτα είναι ουσιαστικό («feels like»)· το «Αίσθητη» σκέτο είναι εκκρεμές επίθετο |
+| **Υετός** | η κάρτα αθροίζει βροχή + μπόρες + **χιόνι**, οπότε το «Βροχή» θα ήταν λάθος όποτε χιονίζει. Υετός είναι ο όρος που χρησιμοποιεί η ΕΜΥ |
+| **Μπφ** | η καθιερωμένη ελληνική συντομογραφία για τα μποφόρ |
 
 ---
 
-## Notes
+## Σημειώσεις
 
-Design decisions, traps and the reasoning behind them live in
+Οι σχεδιαστικές αποφάσεις, οι παγίδες και το σκεπτικό πίσω από αυτές είναι στο
 [`docs/DESIGN.md`](docs/DESIGN.md).
 
+## Δεδομένα
 
-## Data
+Δεδομένα καιρού και ποιότητας αέρα από το [Open-Meteo](https://open-meteo.com) —
+δωρεάν, χωρίς κλειδί. Οι προειδοποιήσεις καιρού από την επίσημη ροή CAP του
+[Meteoalarm](https://www.meteoalarm.org), όπως τις εκδίδει η ΕΜΥ.
 
-Weather and air-quality data from [Open-Meteo](https://open-meteo.com) — free,
-no API key. Weather warnings from the official
-[Meteoalarm](https://www.meteoalarm.org) CAP feed, as issued by EMY.
+Οι μετρήσεις των σταθμών έρχονται από το [data.gov.gr](https://data.gov.gr) και
+από το δίκτυο σταθμών του Εθνικού Αστεροσκοπείου Αθηνών / meteo.gr, υπό άδεια
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
-## Deferred
+## Εκκρεμότητες
 
-Known but unbuilt work, with its blockers, is in
+Ό,τι είναι γνωστό αλλά άφτιαχτο, μαζί με τα εμπόδιά του, είναι στο
 [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-## Licence
+## Άδεια
 
 [MIT](LICENSE) © 2026 oxezz.

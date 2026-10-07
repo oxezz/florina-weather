@@ -1,5 +1,3 @@
-name: uptime
-
 # A ping that fails loudly. Wasmer Edge serves the app, and a deploy that
 # silently breaks TLS or an upstream that starts refusing us looks exactly like
 # a quiet day from the outside. A red run is the difference.

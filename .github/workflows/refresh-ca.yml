@@ -1,5 +1,3 @@
-name: refresh CA bundle
-
 # cacert.pem is committed so the app can reach upstream on hosts with no trust
 # store of their own - Wasmer Edge loaded zero certificates, which broke every
 # HTTPS call until the bundle was shipped. Roots do expire and new ones appear,
