@@ -15,8 +15,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.9 is the documented floor (zoneinfo); 3.13 is what most hosts run.
-        python-version: ["3.9", "3.12", "3.13"]
+        # 3.10 is the documented floor: 3.9 is end-of-life and gets no further
+        # security fixes. 3.13 is what the host runs; 3.14 is current.
+        python-version: ["3.10", "3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4

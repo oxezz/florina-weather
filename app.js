@@ -437,6 +437,24 @@
       if (Number(hour.temp) > Number(hours[maxIndex].temp)) maxIndex = index;
       if (Number(hour.temp) < Number(hours[minIndex].temp)) minIndex = index;
     });
+
+    // A screen reader gets the shape of the data, not just the axis labels.
+    // Without this the chart announced "temperature and rain probability" and
+    // nothing about the numbers, which is the entire content.
+    var wettest = hours.reduce(function (best, hour) {
+      return Number(hour.precip_prob) > Number(best.precip_prob) ? hour : best;
+    }, hours[0]);
+    var summary = "Από " + num(hours[minIndex].temp, 1) + "°C στις " +
+      hours[minIndex].time + " έως " + num(hours[maxIndex].temp, 1) +
+      "°C στις " + hours[maxIndex].time + ".";
+    summary += Number(wettest.precip_prob) > 0
+      ? " Μέγιστη πιθανότητα βροχής " + num(wettest.precip_prob) + "% στις " +
+        wettest.time + "."
+      : " Χωρίς βροχή σε όλο το διάστημα.";
+    var desc = svg("desc");
+    desc.textContent = summary;
+    node.insertBefore(desc, node.firstChild);
+
     [[maxIndex, -12], [minIndex, 18]].forEach(function (pair) {
       var index = pair[0];
       if (!isFinite(Number(hours[index].temp))) return;

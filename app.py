@@ -34,7 +34,7 @@ import greek
 import report as report_mod
 import sources
 
-__version__ = "2.9.1"
+__version__ = "2.9.2"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(BASE_DIR, "template.html")
@@ -107,6 +107,9 @@ class ShellCache:
             "REFRESH": str(config.refresh),
             "REFRESH_TEXT": greek.format_interval(config.refresh),
             "VERSION": __version__,
+            # The inversion hint names the place and the comparison point, so
+            # both have to follow the configuration rather than be typed in.
+            "SLOPE_NAME": config.slope_name,
         }
         for key, value in values.items():
             text = text.replace("{{%s}}" % key, html.escape(str(value)))

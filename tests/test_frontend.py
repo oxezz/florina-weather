@@ -25,7 +25,8 @@ def read(name):
 
 
 # Placeholders app.py knows how to substitute.
-KNOWN_PLACEHOLDERS = {"TITLE", "PLACE", "REGION", "REFRESH", "REFRESH_TEXT", "VERSION"}
+KNOWN_PLACEHOLDERS = {"TITLE", "PLACE", "REGION", "REFRESH", "REFRESH_TEXT",
+                      "VERSION", "SLOPE_NAME"}
 
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
@@ -46,6 +47,17 @@ class TemplateTests(unittest.TestCase):
         self.assertNotIn("{{", rendered)
         self.assertIn("Φλώρινα", rendered)
         self.assertIn("Δυτική Μακεδονία", rendered)
+
+    def test_the_inversion_hint_follows_the_configuration(self):
+        """The hint used to name Florina and 1.073 m in prose, so running the
+        page for another town left the explanation describing the old one."""
+        config = sources.Config(place="Καστοριά", slope_name="κορυφή 1400 μ.")
+        rendered = app.ShellCache(app.TEMPLATE).render(config)
+        hint = rendered.split('id="hint-inversion"')[1].split("</p>")[0]
+        self.assertIn("Καστοριά", hint)
+        self.assertIn("κορυφή 1400 μ.", hint)
+        self.assertNotIn("Φλώρινα", hint)
+        self.assertNotIn("1.073", hint)
 
     def test_placeholders_are_html_escaped(self):
         config = sources.Config(place='<script>alert("x")</script>')
@@ -545,6 +557,46 @@ class ExtrasTests(unittest.TestCase):
     def test_outfit_items_are_escaped_as_text(self):
         # Built through setText, never innerHTML.
         self.assertIn("setText(chip, item.emoji", self.js)
+
+
+class AccessibilityTests(unittest.TestCase):
+    """Preferences the interface has to honour, not merely tolerate."""
+
+    def setUp(self):
+        self.css = read("style.css")
+        self.js = read("app.js")
+        self.template = read("template.html")
+
+    def test_reduced_transparency_drops_the_blur(self):
+        block = self.css.split("@media (prefers-reduced-transparency: reduce)")[1]
+        block = block.split("@media")[0]
+        self.assertIn("backdrop-filter: none", block)
+        # And the surfaces become opaque, or the text sits on the weather.
+        self.assertIn("background-color: var(--b2)", block)
+
+    def test_increased_contrast_strengthens_the_dim_text(self):
+        block = self.css.split("@media (prefers-contrast: more)")[1]
+        block = block.split("@media")[0]
+        self.assertIn("--text-dim: var(--text)", block)
+        self.assertIn("--text-faint: var(--text)", block)
+
+    def test_the_contrast_block_lands_after_the_pointer_block(self):
+        """Otherwise the desktop blur rules win on source order and the
+        preference is quietly ignored."""
+        self.assertLess(self.css.index("@media (hover: hover)"),
+                        self.css.index("@media (prefers-contrast: more)"))
+        self.assertLess(self.css.index("@media (hover: hover)"),
+                        self.css.index("@media (prefers-reduced-transparency"))
+
+    def test_the_chart_describes_its_own_data(self):
+        """An aria-label alone announced the topic and none of the numbers."""
+        self.assertIn('svg("desc")', self.js)
+        self.assertIn("Χωρίς βροχή σε όλο το διάστημα", self.js)
+        self.assertIn("Μέγιστη πιθανότητα βροχής", self.js)
+
+    def test_the_chart_keeps_its_role_and_label(self):
+        self.assertIn('role="img"', self.template)
+        self.assertIn('aria-label', self.template)
 
 
 class StylesheetTests(unittest.TestCase):

@@ -95,8 +95,7 @@ ALERTS_URL = "https://feeds.meteoalarm.org/api/v1/warnings/feeds-{country}"
 FORECAST_CURRENT = (
     "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,"
     "precipitation,rain,showers,snowfall,weather_code,cloud_cover,"
-    "pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,"
-    "wind_gusts_10m"
+    "pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m"
 )
 
 FORECAST_HOURLY = (
@@ -198,7 +197,7 @@ class Config:
     force_min_interval: float = 45.0
     forecast_days: int = 7
     forecast_hours: int = 48
-    history_days: int = 45      # enough to cover any month-to-date window
+    history_days: int = 35      # covers any month-to-date window (31 days + margin)
 
     # Terrain comparison point for the inversion index: high ground close enough
     # to share the valley's weather. 1073 m, about 3 km south-west of town.

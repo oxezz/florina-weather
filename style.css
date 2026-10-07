@@ -874,6 +874,60 @@ footer { margin-top: 28px; font-size: .8rem; color: var(--text-faint); }
   .skel { opacity: .5 !important; }
 }
 
+/* ==========================================================================
+   Accessibility preferences.
+   These come after the pointer block so they win on source order.
+   ========================================================================== */
+
+/* "Reduce transparency" is a real setting on iOS, macOS and Windows. Without
+   this the interface ignored it and kept stacking translucent panels. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .hero,
+  .card,
+  .backdrop {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background-image: none !important;
+  }
+  /* Solid enough that text never reads against the weather behind it. */
+  .glass { background-color: var(--b2); }
+  .card { background-color: var(--b2); }
+  .backdrop { opacity: .5; }
+  .moon-verdict,
+  .ocard-item { background: var(--b2); }
+}
+
+/* "Increase contrast": firmer edges, no translucency, brighter secondary
+   text. Contrast ratios are the reason --text-dim and --text-faint exist, so
+   collapsing them onto --text is the point rather than a shortcut. */
+@media (prefers-contrast: more) {
+  :root,
+  html.mode-light,
+  html.mode-dark {
+    --text-dim: var(--text);
+    --text-faint: var(--text);
+    --glass-border-soft: var(--glass-border);
+    --glass-inner: var(--b2);
+  }
+  .glass,
+  .card,
+  .backdrop {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background-image: none !important;
+  }
+  .glass,
+  .card { background-color: var(--b2); border: 1px solid var(--glass-border); }
+  .chip,
+  .moon-verdict,
+  .ocard-item { border-color: var(--text-dim); }
+  /* The coloured hairline carries meaning, so thicken it rather than drop it. */
+  .local-card,
+  .alert { box-shadow: inset 4px 0 0 var(--tone, transparent); }
+  .skel { opacity: .35 !important; }
+}
+
 @media print {
   body { background: #fff; color: #111; }
   .backdrop, .hero-actions, .hourly { display: none; }
