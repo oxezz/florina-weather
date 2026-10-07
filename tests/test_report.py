@@ -462,17 +462,31 @@ class InversionTests(unittest.TestCase):
 
     def test_a_warm_slope_over_a_cold_valley_is_an_inversion(self):
         # The fixture: 10.3 C at 1073 m against 8.4 C at 662 m. A standard
-        # atmosphere would put the slope 2.67 C colder, so this is a strong one.
+        # atmosphere would put the slope 2.67 C colder, so this is a strong
+        # one - and the anomaly carries the measured night-bias correction.
         inversion = self._with_terrain()["local"]["inversion"]
         self.assertIsNotNone(inversion)
         self.assertEqual(inversion["level"], "strong")
         self.assertAlmostEqual(inversion["delta"], 1.9, places=1)
-        self.assertAlmostEqual(inversion["anomaly"], 4.6, places=1)
+        self.assertAlmostEqual(inversion["anomaly"], 4.6 + report.INVERSION_BIAS,
+                               places=1)
         self.assertGreater(inversion["lapse"], 0)      # rising with height
         self.assertEqual(inversion["valley_elev"], 662)
         self.assertEqual(inversion["slope_elev"], 1073)
         self.assertEqual(inversion["models"], 4)
         self.assertTrue(inversion["confident"])   # the fixture models agree
+
+    def test_the_night_bias_is_applied_and_reported(self):
+        """The index is a difference of two modelled temperatures, so a bias
+        that is not common to both lands in it. Corrected, and the figure is
+        exposed rather than baked in silently."""
+        inversion = self._with_terrain()["local"]["inversion"]
+        self.assertEqual(inversion["bias"], report.INVERSION_BIAS)
+        self.assertGreater(report.INVERSION_BIAS, 0)      # understated, not over
+        self.assertLess(report.INVERSION_BIAS_RANGE, report.INVERSION_BIAS)
+        # The raw pair is still shown, so the correction can be undone by eye.
+        self.assertAlmostEqual(inversion["valley_raw"] - inversion["bias"],
+                               inversion["valley_temp"], places=1)
 
     def test_disagreement_bigger_than_the_signal_reads_as_uncertain(self):
         """If the models straddle the anomaly by more than the anomaly itself,
@@ -492,11 +506,22 @@ class InversionTests(unittest.TestCase):
         self.assertIsNone((data["local"] or {}).get("inversion"))
 
     def test_a_weaker_than_standard_lapse_crosses_the_band(self):
-        # 1.5 C drop where standard predicts 2.67 is still not enough; 1.0 is.
-        data = self._with_terrain(valley_temp=10.0, slope_temp=8.5)
+        # 2.0 C drop where standard predicts 2.67 is not enough even after the
+        # correction; 1.0 is comfortably over.
+        data = self._with_terrain(valley_temp=10.0, slope_temp=8.0)
         self.assertIsNone((data["local"] or {}).get("inversion"))
         data = self._with_terrain(valley_temp=10.0, slope_temp=9.0)
         self.assertEqual(data["local"]["inversion"]["level"], "inversion")
+
+    def test_a_case_the_correction_moves_says_possible_not_certain(self):
+        """The correction is 0.73 with an uncertainty near 0.4, so where it
+        pushes a reading across a band edge the card must not claim a definite
+        inversion. Without this the threshold silently drops from 1.5 to 0.8."""
+        data = self._with_terrain(valley_temp=10.0, slope_temp=8.5)
+        inversion = (data["local"] or {}).get("inversion")
+        self.assertIsNotNone(inversion)
+        self.assertEqual(inversion["level"], "uncertain")
+        self.assertFalse(inversion["confident"])
 
     def test_a_higher_slope_than_the_valley_never_triggers(self):
         data = self._with_terrain(valley_z=1200.0, slope_z=800.0)

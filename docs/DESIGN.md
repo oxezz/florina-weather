@@ -380,6 +380,34 @@ the reasoning and the traps, most of which were found the hard way.
   depresses both eras equally and so largely cancels from the comparison, the
   part that matters.
 
+* **The inversion index carried a measurable night bias, and now does not.**
+  The index is a difference between two modelled temperatures, so a bias that
+  is not common to both legs lands in it. Measured over **21 837 paired hours
+  across nine years** against Florina's own station
+  (
+esearch/forecast_bias.py): the forecast runs **-1.65 °C at night**
+  and **+0.02 °C by day** — which is what makes it a night effect and
+  not a calibration error. The ridge leg measures about -1.33 °C over the
+  same nights, so the valley being the more wrong of the two understates the
+  difference by **0.73 °C**, which 
+eport.py now applies.
+
+  Two things about that are worth keeping. It **shifts the threshold**: the
+  band edge sits at 1.5 and a free correction would drop it to about 0.8, so
+  every marginal night would read as a definite inversion. Where the
+  correction moves a reading across an edge the card therefore says
+  «Πιθανή αναστροφή» instead of claiming — the correction is 0.73 with an
+  uncertainty near 0.4, so it cannot settle a boundary case. And the raw
+  valley temperature is exposed as alley_raw beside the corrected one, so
+  the correction can be undone by eye rather than trusted blindly.
+
+  **The same clock bug caught this twice.** The first run of the measurement
+  showed a 10 °C swing between morning and evening, which is a shift
+  signature and not physics: ISD timestamps are UTC while the forecast was
+  requested in Europe/Athens. Correcting it dropped the mean absolute error
+  from 3.58 to 2.00 °C. The app had the identical bug in its station card
+  months earlier. A timestamp with no zone is not a timestamp.
+
 * **Headless Chrome reports `prefers-reduced-transparency: reduce` by default.**
   Any screenshot taken through CDP is therefore the *no-blur* variant unless the
   preference is explicitly emulated back to `no-preference`. It is a real

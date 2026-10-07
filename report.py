@@ -295,6 +295,26 @@ SMOG_CALM_KMH = 12.0     # above this the valley ventilates itself
 
 STANDARD_LAPSE = 0.65    # °C lost per 100 m of ascent, standard atmosphere
 
+# The inversion index is a difference between two modelled temperatures, so it
+# inherits whatever bias is not common to both — and it is built from the two
+# altitudes where the model is weakest.
+#
+# Measured, not assumed. Over 21 837 paired hours across nine years the
+# forecast runs 2.06 °C warm on night-time valley temperatures in the warm
+# months, and EMY's station on the Vitsi ridge runs about 1.33 °C warm over
+# the same nights. The valley is the more wrong of the two, so the difference
+# is understated by about 0.73 °C.
+#
+# The valley leg is solid: nine years, and unbiased by day, which is what
+# makes it a night effect rather than a calibration error. The ridge leg is
+# weaker — Vitsi publishes no coordinates, so the model point was chosen by
+# its barometer, and its record covers one warm season rather than nine years.
+# Hence the range below, which matters more than the figure.
+#
+# Regenerate with `python research/forecast_bias.py`.
+INVERSION_BIAS = 0.73
+INVERSION_BIAS_RANGE = 0.4
+
 
 def _model_series(block, prefix):
     """``{model: [values]}`` from an Open-Meteo block with suffixed keys.
@@ -397,7 +417,10 @@ def build_inversion(terrain, config, now_local):
     if not shared:
         return None
 
-    anomalies = [high[m] - low[m] + expected for m in shared]
+    # Corrected for the measured night bias before judging the level: the raw
+    # difference understates inversions because the valley is the more-biased
+    # of the two legs. Reported alongside, so the number stays inspectable.
+    anomalies = [high[m] - low[m] + expected + INVERSION_BIAS for m in shared]
     mean_anomaly = sum(anomalies) / len(anomalies)
     spread = max(anomalies) - min(anomalies)
     level = greek.inversion_level(mean_anomaly)
@@ -411,6 +434,16 @@ def build_inversion(terrain, config, now_local):
     if not confident:
         key, label, colour = greek.UNCERTAIN_INVERSION
 
+    # The bias correction is +0.73 with an uncertainty of about 0.4, so where
+    # it moves the answer across a band edge the honest verdict is "possible"
+    # rather than a confident one. Without this the correction silently lowers
+    # the threshold from 1.5 to about 0.8 and every marginal night reads as a
+    # definite inversion.
+    raw_level = greek.inversion_level(mean_anomaly - INVERSION_BIAS)
+    if (raw_level or (None,))[0] != key:
+        confident = False
+        key, label, colour = greek.UNCERTAIN_INVERSION
+
     valley_temp = sum(low[m] for m in shared) / len(shared)
     slope_temp = sum(high[m] for m in shared) / len(shared)
     delta = slope_temp - valley_temp
@@ -421,9 +454,12 @@ def build_inversion(terrain, config, now_local):
         "confident": confident,
         "delta": round(delta, 1),
         "anomaly": round(mean_anomaly, 1),
+        "bias": INVERSION_BIAS,
+        "bias_range": INVERSION_BIAS_RANGE,
         "peak_anomaly": round(max(anomalies), 1),
         "lapse": round(delta / rise * 100.0, 2),
         "valley_temp": round(valley_temp, 1),
+        "valley_raw": round(valley_temp + INVERSION_BIAS, 1),
         "slope_temp": round(slope_temp, 1),
         "valley_elev": round(z_low),
         "slope_elev": round(z_high),

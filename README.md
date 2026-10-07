@@ -124,7 +124,7 @@ context, οπότε κάθε κλήση HTTPS αποτυγχάνει με `CERTI
 | `cacert.pem` | CA bundle της Mozilla, για hosts χωρίς trust store |
 | `tools/` | Scripts που φτιάχνουν στατικά αρχεία, όπως τη μοιραζόμενη εικόνα |
 | `research/` | Scripts που παράγουν νούμερα τα οποία στον κώδικα είναι σταθερές |
-| `tests/` | 382 tests, όλα offline |
+| `tests/` | 384 tests, όλα offline |
 
 ### API
 
@@ -219,7 +219,7 @@ read-only.
 python -m unittest discover -s tests -t .
 ```
 
-Και τα 382 tests τρέχουν offline: οι απαντήσεις των πηγών αντικαθίστανται από
+Και τα 384 tests τρέχουν offline: οι απαντήσεις των πηγών αντικαθίστανται από
 fixtures, και τα HTTP tests ξεκινούν πραγματικό server σε προσωρινή θύρα με
 injected opener.
 

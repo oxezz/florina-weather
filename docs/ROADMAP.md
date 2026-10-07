@@ -7,53 +7,45 @@ it can be picked up without re-deriving the reasoning.
 > token this project does not have; the headings below are written so each one
 > can be pasted straight into an issue.
 
-**A rain-radar layer, waiting on rain.** A [RainViewer](https://www.rainviewer.com)
-overlay was considered and is parked until it can actually be checked. The
-blocker is not the map, it is the data:
-
-- RainViewer returned **13 past frames and 0 nowcast frames**, so it shows where
-  rain is, never where it is going.
-- **Greek coverage is unverified.** At z=5 the tile covering Florina is 2496
-  bytes against Athens' 531, so it holds *something* — but that tile spans
-  longitude 11.25°–22.5°, so the content may be rain over Italy. On a dry day
-  there is no way to tell "no rain over Greece" from "no radar over Greece".
-  Shipping it blind risks a blank rectangle that looks like a working feature.
-
-**How to check it, on the first wet day.** Pick a city where Open-Meteo
-forecasts rain, fetch its RainViewer tile, and compare against Florina's. If the
-wet city's tile is large and Florina's is still ~300 bytes during forecast rain,
-there is no Greek coverage and the idea is dead.
-
-**If it does check out**, the lightweight shape is one regional tile served
-*through our own server* as a plain `<img>`, with the town marked by a CSS dot at
-a computed pixel offset. No Leaflet (144 KB — 2.4× this whole app), no CSP
-change, no third-party requests from the browser, cached like every other
-source, and roughly 2.5 KB dry. The 13-frame loop would be about 30 KB.
-
-**A frost alert webhook** — built, not merely planned. Both ntfy and Telegram
+**A frost alert webhook** — built and verified end to end against a real
+HTTP sink, not just against an injected opener: delivery, the Greek title
+surviving the wire, suppression inside the window, and an escalation getting
+through regardless. Nothing left but the environment variables. Both ntfy and Telegram
 are implemented in `notify.py`, selected by `FLORINA_ALERT_WEBHOOK`; see the
 README's *Frost alerts* section. Nothing is sent until a transport is chosen
 and given somewhere to send to, which is the only remaining step and is a
 configuration change rather than code.
 
-**Correct the inversion index for its night bias.** Measured, not suspected: the
-archived forecast runs **1.6 °C too warm at night** in the valley against
-Florina's own observations (WMO 16613, 472 paired hours, January and July 2024),
-which makes the index **understate** inversions. See
-[`DESIGN.md`](DESIGN.md) for the table.
+**Correct the inversion index for its night bias.** Done, with a caveat that
+matters more than the number.
 
-Not applied, deliberately. A correction on a one-year, two-month sample would be
-a fudge dressed as calibration, and the archive grid is 728 m against the
-station's 662 m, so the honest bias is nearer 2 °C, not smaller. What it needs
-before anyone should trust a number:
+The blocker named here was sample size — an earlier check rested on 472 hours
+of one year. The archived-forecast API reaches back to 2017, so the valley leg
+is now measured over **21 837 paired hours across nine years**:
+python research/forecast_bias.py.
 
-1. **Several years**, not two months, from ISD-Lite — the files are there for
-   2024 and 2025 but 2026 is not yet published.
-2. **Both legs of the comparison.** Only the valley leg is checkable today.
-   Vitsi is the obvious slope station and its barometer puts it near 1800 m, but
-   it publishes no coordinates and no WMO number, so its position is inference.
-   EMY's own open-data register lists station coordinates as available on
-   request — that document would settle it.
+| | bias | n |
+|---|---|---|
+| night (21:00-06:00) | **-1.65 C** | 9 824 |
+| cold-month night | -1.25 C | 3 423 |
+| day (09:00-18:00) | **+0.02 C** | 9 720 |
+
+The forecast runs warm at night and is unbiased by day, which is what makes it
+a night effect rather than a calibration error. The ridge leg is weaker — Vitsi
+publishes no coordinates and its record covers one warm season — and measures
+about -1.33 C over the same nights. The valley being the more wrong of the two
+understates the difference by about **0.73 C**, which 
+eport.py now applies.
+
+The caveat: 0.73 carries an uncertainty near 0.4, so where the correction moves
+a reading across a band edge the card says **«Πιθανή αναστροφή»** rather than
+claiming a definite inversion. Without that the correction would silently drop
+the threshold from 1.5 to about 0.8 and every marginal night would read as
+fact. The raw valley temperature is exposed alongside the corrected one.
+
+Still open, and now the only thing left: **Vitsi's coordinates.** EMY lists
+them as available on request. That would turn the ridge leg from an inference
+into a measurement and let the correction shrink toward its own uncertainty.
 
 **A real station reading next to the forecast.** Built, with a correction. There
 is no EMY station **in the open-data portal** for Florina, but there is one in
