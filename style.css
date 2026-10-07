@@ -532,6 +532,16 @@ a:hover { text-decoration: underline; }
 
 /* ------------------------------------------------------ snow climate ---- */
 
+/* The time and the explainer button as one right-hand group. The button
+   cannot live inside the <h2>: .info is display:grid, so there it becomes a
+   block and drops onto its own line under the title. */
+.radar-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
 /* Always visible, unlike every other seasonal card: a climatology means
    something in July. The two-tone bars are the point — the pale track is the
    old share and the fill is today's, so the shrink is what you see. */

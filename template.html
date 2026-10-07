@@ -217,11 +217,12 @@
 
 <section class="card glass panel" id="radar-panel" hidden>
   <div class="panel-head">
-    <h2>Ραντάρ βροχής
+    <h2>Ραντάρ βροχής</h2>
+    <span class="radar-meta">
+      <span class="chip muted" id="radar-time"></span>
       <button class="info" type="button" aria-expanded="false"
               aria-controls="hint-radar" aria-label="Τι σημαίνει;">?</button>
-    </h2>
-    <span class="chip muted" id="radar-time"></span>
+    </span>
   </div>
   <div class="radar-wrap">
     <canvas id="radar-cv" role="img"
@@ -229,7 +230,7 @@
     <button type="button" class="radar-play" id="radar-play" aria-label="Παύση" hidden>&#10074;&#10074;</button>
   </div>
   <p class="sub" id="radar-note" aria-live="polite"></p>
-  <p class="hint" id="hint-radar" hidden>
+  <p class="hint panel-hint" id="hint-radar" hidden>
     Οι δύο τελευταίες ώρες, καρέ-καρέ κάθε δέκα λεπτά. Οι ακτίνες είναι στα
     30, 60 και 90 χλμ. από τη Φλώρινα και οι κουκκίδες είναι γύρω πόλεις,
     ώστε να φαίνεται από πού έρχεται η βροχή. Δεν υπάρχει χάρτης: η γκρι

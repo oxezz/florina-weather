@@ -38,7 +38,7 @@ import radar
 import report as report_mod
 import sources
 
-__version__ = "3.13.0"
+__version__ = "3.13.1"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(BASE_DIR, "template.html")
