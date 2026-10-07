@@ -55,8 +55,8 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add cacert.pem
-          git commit -m "Refresh the bundled CA certificates
-
-Fetched from curl.se, which packages Mozilla's list. Only the changed
-trust store is committed; the monthly run is a no-op otherwise."
+          # Two -m flags rather than a multi-line string: an unindented
+          # continuation line ends the run block and breaks the whole file.
+          git commit -m "Refresh the bundled CA certificates" \
+                     -m "Fetched from curl.se, which packages Mozilla's trust list. Only a changed bundle is committed, so the monthly run is a no-op otherwise."
           git push
