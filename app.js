@@ -1364,9 +1364,36 @@
     });
   }
 
+  /* ------------------------------------------------------- reduced effects */
+
+  /* theme.js owns the preference and applies the class before the first paint;
+     this only wires the button and keeps its label honest. */
+  function initEffects() {
+    var theme = window.FlorinaTheme;
+    var button = $("fx-toggle");
+    if (!button || !theme || !theme.setFx) return;
+
+    function sync() {
+      var reduced = theme.fx() === "reduced";
+      button.setAttribute("aria-pressed", reduced ? "true" : "false");
+      button.title = reduced
+        ? "Ενεργοποίηση εφέ και θολούρας"
+        : "Λιγότερη θόλωση και κίνηση, για πιο ομαλό κύλισμα";
+    }
+
+    button.addEventListener("click", function () {
+      theme.setFx(theme.fx() === "reduced" ? "full" : "reduced");
+      sync();
+    });
+
+    document.addEventListener("florina:fx", sync);
+    sync();
+  }
+
   /* ------------------------------------------------------------------ boot */
 
   initModes();
+  initEffects();
   initGlassHighlight();
   initHourlyFade();
   initServiceWorker();

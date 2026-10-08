@@ -323,6 +323,42 @@ class ClientTests(unittest.TestCase):
         for name in ("--sun-x", "--sun-y", "--sun-warmth"):
             self.assertIn(name, root)
 
+
+    def test_the_reduced_effects_switch_is_wired(self):
+        """Verified in a browser: the OS preference sets the default, clicking
+        the button drops blur and animation, and the choice survives a reload."""
+        self.assertIn('id="fx-toggle"', read("template.html"))
+        self.assertIn("function initEffects()", self.js)
+        self.assertIn("theme.setFx", self.js)
+        self.assertIn("florina.fx", read("theme.js"))
+        self.assertIn("api.setFx", read("theme.js"))
+
+    def test_the_switch_defaults_to_the_system_setting(self):
+        """Someone who has already told their phone they want less motion
+        should not have to say it twice, and until they choose here the system
+        setting stays the system's - nothing is written to storage."""
+        theme = read("theme.js")
+        self.assertIn("prefers-reduced-motion: reduce", theme)
+        self.assertIn('fxMedia.matches ? "reduced" : "full"', theme)
+        # Stored only in setFx, never by the default.
+        default = theme[theme.index("function fxPreferred"):theme.index("function applyFx")]
+        self.assertNotIn("setItem", default)
+
+    def test_reduced_effects_drops_blur_and_motion_only(self):
+        """Not the reduced-transparency treatment: the translucent fills, rims
+        and colours are what make the page look like itself and none of them
+        cost anything to draw, so they stay."""
+        css = read("style.css")
+        block = css[css.index("html.reduce-fx .glass"):css.index("/* --- motion")]
+        self.assertIn("backdrop-filter: none !important", block)
+        self.assertIn("animation: none !important", block)
+        self.assertIn("transition: none !important", block)
+        # The skeletons are visible only through the pulse; without it they sit
+        # at opacity 0 forever.
+        self.assertIn("html.reduce-fx .skel", block)
+        # View transition pseudo-elements are not elements.
+        self.assertIn("::view-transition-old(backdrop)", block)
+
 class ThemeBootstrapTests(unittest.TestCase):
 
     def setUp(self):

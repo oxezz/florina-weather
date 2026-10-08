@@ -1104,6 +1104,25 @@ a:hover { text-decoration: underline; }
 footer { margin-top: 28px; font-size: .8rem; color: var(--text-faint); }
 .foot-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; text-align: center; }
 .foot-row.muted { margin-top: 8px; font-size: .74rem; opacity: .85; }
+
+/* The reduced-effects switch. Reads as the footer text around it rather than as
+   a control, because that is the size of the thing it does - but it is a real
+   button, and it says whether it is on. */
+#fx-toggle {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--glass-border);
+}
+#fx-toggle:hover { text-decoration-color: currentColor; }
+#fx-toggle:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; border-radius: 4px; }
+#fx-toggle[aria-pressed="true"] { text-decoration-color: currentColor; opacity: 1; }
+#fx-toggle[aria-pressed="true"]::after { content: " \2713"; }
 .warn { color: var(--warn-text); }
 
 /* --- loading skeletons -------------------------------------------------- */
@@ -1134,6 +1153,45 @@ footer { margin-top: 28px; font-size: .8rem; color: var(--text-faint); }
    page jumps when the data lands. Measured: .h is 165px, .day is 259px. */
 .h-skel   { min-height: 165px; border-radius: var(--radius-md); border-color: transparent; }
 .day-skel { min-height: 259px; border-radius: var(--radius-md); border-color: transparent; }
+
+/* ==========================================================================
+   Reduced effects, chosen by the reader.
+
+   The OS preference is honoured below, but a phone that struggles with blur
+   has no way to say so through it - and a phone is where this costs most. The
+   switch in the footer sets html.reduce-fx, which theme.js applies before the
+   first paint so nothing flashes.
+
+   Deliberately drops blur and motion and nothing else. The translucent fills,
+   the rims and the colour are what make the page look like itself, and none of
+   them cost anything to draw - so this is not the reduced-transparency
+   treatment, which deliberately makes the surfaces opaque.
+   ========================================================================== */
+html.reduce-fx .glass,
+html.reduce-fx .hero,
+html.reduce-fx .card,
+html.reduce-fx .backdrop,
+html.reduce-fx .radar-play,
+html.reduce-fx .modes {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html.reduce-fx *,
+html.reduce-fx *::before,
+html.reduce-fx *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* The skeletons get their visibility from the pulse animation, so without it
+   they would sit at opacity 0 forever. Same reason as the reduce block. */
+html.reduce-fx .skel { opacity: .5 !important; }
+
+/* View transition pseudo-elements are not elements, so the rule above reaches
+   none of them. */
+html.reduce-fx ::view-transition-old(backdrop),
+html.reduce-fx ::view-transition-new(backdrop) { animation: none !important; }
 
 /* --- motion ------------------------------------------------------------- */
 
