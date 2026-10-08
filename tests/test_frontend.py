@@ -359,6 +359,27 @@ class ClientTests(unittest.TestCase):
         # View transition pseudo-elements are not elements.
         self.assertIn("::view-transition-old(backdrop)", block)
 
+
+    def test_the_switch_label_carries_its_state(self):
+        """Reported from a phone: pressing it looked like nothing happened. On
+        touch that is partly true - blur is already off there by the hover
+        media query - so a reader has no other way to tell whether it took."""
+        self.assertIn('id="fx-state"', read("template.html"))
+        self.assertIn('$("fx-state")', self.js)
+        self.assertIn("ενεργός", self.js)
+        self.assertIn("ανενεργός", self.js)
+
+    def test_blur_is_already_off_on_touch(self):
+        """Which is why the switch barely shows on a handset. Pinned so that
+        removing this media query - and quietly making every phone pay for
+        thirteen blur surfaces - is a deliberate act."""
+        css = read("style.css")
+        index = css.index(".glass {")
+        # The first .glass rule with a backdrop-filter must sit inside the
+        # hover block, not at the top level.
+        hover = css.index("@media (hover: hover) and (pointer: fine)")
+        self.assertLess(hover, css.index("backdrop-filter: var(--blur)"))
+
 class ThemeBootstrapTests(unittest.TestCase):
 
     def setUp(self):

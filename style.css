@@ -1122,7 +1122,9 @@ footer { margin-top: 28px; font-size: .8rem; color: var(--text-faint); }
 #fx-toggle:hover { text-decoration-color: currentColor; }
 #fx-toggle:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; border-radius: 4px; }
 #fx-toggle[aria-pressed="true"] { text-decoration-color: currentColor; opacity: 1; }
-#fx-toggle[aria-pressed="true"]::after { content: " \2713"; }
+#fx-toggle[aria-pressed="true"] { text-decoration-color: currentColor; }
+#fx-toggle #fx-state { text-decoration: none; }
+#fx-toggle:not([aria-pressed="true"]) #fx-state { opacity: .75; }
 .warn { color: var(--warn-text); }
 
 /* --- loading skeletons -------------------------------------------------- */

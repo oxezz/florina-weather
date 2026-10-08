@@ -1373,11 +1373,17 @@
     var button = $("fx-toggle");
     if (!button || !theme || !theme.setFx) return;
 
+    /* The state goes in the label as well as in aria-pressed. On a phone this
+       switch changes almost nothing on screen - blur is already off there by
+       the hover media query - so a reader pressing it has no other way to tell
+       whether it took. Reported from a real handset, and it was right. */
     function sync() {
       var reduced = theme.fx() === "reduced";
+      var state = $("fx-state");
       button.setAttribute("aria-pressed", reduced ? "true" : "false");
+      if (state) state.textContent = reduced ? ": ενεργός" : ": ανενεργός";
       button.title = reduced
-        ? "Ενεργοποίηση εφέ και θολούρας"
+        ? "Επαναφορά εφέ, θολούρας και κίνησης"
         : "Λιγότερη θόλωση και κίνηση, για πιο ομαλό κύλισμα";
     }
 
