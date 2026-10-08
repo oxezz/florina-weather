@@ -14,6 +14,7 @@ import ssl
 import sys
 import threading
 import unittest
+import io
 import urllib.error
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -471,5 +472,107 @@ class TlsTests(unittest.TestCase):
         self.assertIn("west macedonia", config.alert_areas)
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
+
+class StaticShrinkTests(unittest.TestCase):
+    """The comment stripper, which is the one piece here that could silently
+    change what the browser runs."""
+
+    def test_the_real_stylesheet_survives_a_strip(self):
+        """The strongest check available in Python: same significant tokens."""
+        text = io.open(os.path.join(app.BASE_DIR, "style.css"), encoding="utf-8").read()
+        self.assertEqual(app._css_tokens(app._strip_css(text)),
+                         app._css_tokens(text))
+
+    def test_a_comment_sequence_inside_a_string_survives(self):
+        """A naive /*...*/ removal truncates this to content: "". Walking
+        strings and comments together is what stops it."""
+        text = 'a { content: "/* not a comment */"; }\n'
+        self.assertIn('"/* not a comment */"', app._strip_css(text))
+
+    def test_a_comment_sequence_in_single_quotes_survives(self):
+        text = "a { content: '/* keep me */'; }\n"
+        self.assertIn("'/* keep me */'", app._strip_css(text))
+
+    def test_a_real_comment_still_goes(self):
+        self.assertNotIn("gone", app._strip_css("/* gone */\n.x { color: red; }\n"))
+
+    def test_css_keeps_every_selector_and_value(self):
+        stripped = app._strip_css("/* gone */\n.x { color: red; }\n\n.y{z-index:1}\n")
+        self.assertIn(".x { color: red; }", stripped)
+        self.assertIn(".y{z-index:1}", stripped)
+        self.assertNotIn("gone", stripped)
+
+    def test_js_drops_whole_line_comments_and_indentation(self):
+        stripped = app._strip_js("// gone\n    var x = 1;\n")
+        self.assertNotIn("gone", stripped)
+        self.assertIn("var x = 1;", stripped)
+        self.assertNotIn("    var", stripped)
+
+    def test_js_keeps_a_trailing_comment(self):
+        """Deliberately conservative: a "//" after code could be inside a
+        string, and only a parser could tell."""
+        stripped = app._strip_js('var u = "http://x/"; // kept\n')
+        self.assertIn('"http://x/"', stripped)
+        self.assertIn("// kept", stripped)
+
+    def test_js_keeps_the_url_in_a_string(self):
+        stripped = app._strip_js('    var u = "https://example.invalid/a";\n')
+        self.assertIn("https://example.invalid/a", stripped)
+
+    def test_newlines_survive_because_semicolons_depend_on_them(self):
+        """Automatic semicolon insertion is newline-driven, so indentation may
+        go and line breaks may not."""
+        source = "var a = 1\nvar b = 2\nreturn a\n"
+        stripped = app._strip_js(source)
+        self.assertEqual(stripped.count("\n"), source.count("\n"))
+
+    def test_every_served_script_and_stylesheet_shrinks(self):
+        cache = app.StaticCache()
+        for path in ("/style.css", "/app.js", "/theme.js", "/radar.js"):
+            source = io.open(os.path.join(app.BASE_DIR, app.STATIC_FILES[path][0]),
+                             "rb").read()
+            _, body, packed = cache.get(path)
+            self.assertLess(len(body), len(source), path)
+            self.assertIsNotNone(packed, path)
+            self.assertLess(len(packed), len(body), path)
+
+    def test_the_worker_gets_the_version_filled_in(self):
+        cache = app.StaticCache()
+        _, body, _ = cache.get("/sw.js")
+        self.assertNotIn(b"{{VERSION}}", body)
+        self.assertIn(app.__version__.encode(), body)
+
+    def test_the_cache_is_reused_until_the_file_changes(self):
+        cache = app.StaticCache()
+        first = cache.get("/app.js")
+        second = cache.get("/app.js")
+        # Same object, not merely equal: it was not rebuilt.
+        self.assertIs(first, second)
+
+    def test_an_icon_is_not_gzipped_twice_over(self):
+        """PNG is already compressed; re-gzipping it costs CPU to save nothing."""
+        cache = app.StaticCache()
+        _, _, packed = cache.get("/icon-192.png")
+        self.assertIsNone(packed)
+
+    def test_a_versioned_url_may_be_kept_for_a_year(self):
+        control = app._cache_control("/app.js", {"v": [app.__version__]})
+        self.assertIn("immutable", control)
+
+    def test_a_versioned_url_from_an_older_release_does_not(self):
+        """The whole point is that the URL names one release's bytes. A v=
+        that does not match this build must revalidate."""
+        control = app._cache_control("/app.js", {"v": ["0.0.1"]})
+        self.assertNotIn("immutable", control)
+
+    def test_an_unversioned_url_may_not_be_kept_for_a_year(self):
+        control = app._cache_control("/app.js", {})
+        self.assertNotIn("immutable", control)
+
+    def test_the_worker_and_manifest_always_revalidate(self):
+        for path in ("/sw.js", "/manifest.webmanifest"):
+            self.assertEqual(app._cache_control(path, {}), "no-cache")
+
+    def test_an_icon_is_cached_but_not_forever(self):
+        self.assertEqual(app._cache_control("/icon-192.png", {}),
+                         "public, max-age=300")

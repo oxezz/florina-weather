@@ -346,9 +346,32 @@ class PwaTests(unittest.TestCase):
     def test_worker_never_serves_stale_weather_from_cache_first(self):
         # Weather goes network-first; only the shell is allowed to come from
         # cache immediately.
-        self.assertIn('networkFirst(request, url.origin + "/api/weather")', self.sw)
         self.assertIn('url.pathname === "/api/weather"', self.sw)
+        self.assertIn('networkFirst(request, url.origin + "/api/weather"', self.sw)
         self.assertIn("staleWhileRevalidate", self.sw)
+
+    def test_the_api_gets_a_longer_timeout_than_the_shell(self):
+        """The server allows a cold upstream fetch 15 s. A 4 s ceiling here
+        would time out on a bad day and show the previous page while the fresh
+        answer was still on its way."""
+        api = int(re.search(r"var API_TIMEOUT = (\d+)", self.sw).group(1))
+        shell = int(re.search(r"var NETWORK_TIMEOUT = (\d+)", self.sw).group(1))
+        self.assertGreater(api, shell)
+        self.assertIn("timeout || NETWORK_TIMEOUT", self.sw)
+        self.assertIn("API_TIMEOUT)", self.sw)
+
+    def test_versioned_assets_skip_the_network(self):
+        """Their URL names bytes that cannot change, so revalidating them is
+        one request per asset per visit for nothing."""
+        self.assertIn('url.search.indexOf("?v=") === 0', self.sw)
+        self.assertIn("function cacheFirst", self.sw)
+
+    def test_the_shell_precaches_what_the_page_actually_requests(self):
+        """A cache is keyed by the whole URL. Listing "/app.js" here while the
+        page asks for "/app.js?v=<release>" left those entries unused."""
+        for asset in ("/style.css", "/app.js", "/theme.js", "/radar.js"):
+            self.assertIn('"%s?v={{VERSION}}"' % asset, self.sw)
+        self.assertIn('var CACHE_VERSION = "florina-{{VERSION}}"', self.sw)
     def test_worker_only_touches_same_origin_get_requests(self):
         self.assertIn('request.method !== "GET"', self.sw)
         self.assertIn("url.origin !== self.location.origin", self.sw)

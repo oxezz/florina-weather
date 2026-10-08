@@ -668,7 +668,6 @@ a:hover { text-decoration: underline; }
   text-align: left;
 }
 /* The one the page leans on gets the accent hairline, as elsewhere. */
-.ref-main { box-shadow: inset 3px 0 0 var(--accent); }
 .ref-name { font-weight: 650; min-width: 86px; }
 .ref-temp { font-size: 1.12rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .ref-range, .ref-age {

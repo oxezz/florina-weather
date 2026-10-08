@@ -20,15 +20,23 @@
    Anything served from the cache is tagged with X-SW-Source, so the page can
    say so rather than passing old numbers off as current.
 
-   Bump CACHE_VERSION on releases that change the shell.
+   The cache name carries the release version, so a new release starts with an
+   empty cache and drops the old one on activate. There is no constant to
+   remember to bump.
    ========================================================================== */
 "use strict";
 
-var CACHE_VERSION = "florina-v2";
+/* {{VERSION}} is filled in by the server, which is also why the versioned URLs
+   below match what the page actually asks for. */
+var CACHE_VERSION = "florina-{{VERSION}}";
 /* How long a network-first request waits before giving up and using the cache.
    Without a ceiling, a connection that hangs leaves the user staring at
    nothing while a perfectly good cached copy sits unread. */
 var NETWORK_TIMEOUT = 4000;
+/* The weather API gets longer. The server is allowed 15 s for a cold upstream
+   fetch, so 4 s would time out on a bad day and show yesterday's page while
+   the fresh answer was on its way. */
+var API_TIMEOUT = 9000;
 
 var SHELL = [
   "/",
@@ -39,13 +47,15 @@ var SHELL = [
   "/icon-maskable-512.png",
   "/icon-180.png",
   // The page shell also needs the scripts and the stylesheet, or an offline
-  // launch renders unstyled and says nothing. The radar grid is deliberately
-  // NOT here: it is stale within minutes, and a cached grid would draw weather
+  // launch renders unstyled and says nothing. These must carry the same ?v= the
+  // page asks for: a cache is keyed by the whole URL, so a bare "/app.js" here
+  // would sit unused beside every real request. The radar grid is deliberately
+  // NOT here - it is stale within minutes, and a cached grid would draw weather
   // that has already fallen.
-  "/style.css",
-  "/app.js",
-  "/theme.js",
-  "/radar.js"
+  "/style.css?v={{VERSION}}",
+  "/app.js?v={{VERSION}}",
+  "/theme.js?v={{VERSION}}",
+  "/radar.js?v={{VERSION}}"
 ];
 
 self.addEventListener("install", function (event) {
@@ -80,7 +90,8 @@ self.addEventListener("fetch", function (event) {
   if (url.origin !== self.location.origin) return;
 
   if (url.pathname === "/api/weather") {
-    event.respondWith(networkFirst(request, url.origin + "/api/weather"));
+    event.respondWith(networkFirst(request, url.origin + "/api/weather",
+                                   API_TIMEOUT));
     return;
   }
   if (request.mode === "navigate") {
@@ -88,6 +99,13 @@ self.addEventListener("fetch", function (event) {
     // /?mode=dark, /?mode=light and / each kept their own copy of the same
     // page, and the cache grew with every theme the user tried.
     event.respondWith(networkFirst(request, "/"));
+    return;
+  }
+  // A URL carrying ?v=<release> names bytes that can never change, so there is
+  // nothing to revalidate: answer from the cache and skip the network. Before
+  // this, every visit made a pointless background request per asset.
+  if (url.search.indexOf("?v=") === 0) {
+    event.respondWith(cacheFirst(request));
     return;
   }
   event.respondWith(staleWhileRevalidate(request));
@@ -124,7 +142,7 @@ function tagAsCached(response) {
   });
 }
 
-function networkFirst(request, cacheKey) {
+function networkFirst(request, cacheKey, timeout) {
   var key = cacheKey || request;
   var network = fetch(request);
 
@@ -134,7 +152,7 @@ function networkFirst(request, cacheKey) {
     store(key, response);
   }).catch(function () { /* offline: the catch below handles it */ });
 
-  return withTimeout(network, NETWORK_TIMEOUT).catch(function () {
+  return withTimeout(network, timeout || NETWORK_TIMEOUT).catch(function () {
     return caches.match(key).then(function (cached) {
       if (cached) return tagAsCached(cached);
       // Last resort for a navigation with nothing cached.
@@ -145,6 +163,18 @@ function networkFirst(request, cacheKey) {
         status: 503,
         headers: { "Content-Type": "application/json" }
       });
+    });
+  });
+}
+
+/* For a URL that can never change: the cache is the answer, and the network is
+   only touched on a miss. */
+function cacheFirst(request) {
+  return caches.match(request).then(function (cached) {
+    if (cached) return cached;
+    return fetch(request).then(function (response) {
+      store(request, response);
+      return response;
     });
   });
 }

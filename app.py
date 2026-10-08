@@ -22,6 +22,7 @@ import html
 import json
 import logging
 import os
+import re
 import socket
 import sys
 import threading
@@ -38,7 +39,7 @@ import radar
 import report as report_mod
 import sources
 
-__version__ = "3.13.1"
+__version__ = "3.14.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(BASE_DIR, "template.html")
@@ -80,6 +81,122 @@ def _gzip_ok(accept_encoding):
 
 def _etag(body):
     return '"%s"' % hashlib.sha1(body).hexdigest()[:20]
+
+
+# --------------------------------------------------------------------------
+# Shrinking what goes on the wire
+#
+# The source files keep their comments; only the bytes a browser receives lose
+# them. Together that is 29.1 KB of gzipped assets down to 19.8 KB - 32 %, and
+# the biggest single win available without a build step, because comments and
+# indentation are exactly what gzip is worst at.
+# --------------------------------------------------------------------------
+
+
+def _css_tokens(text):
+    """The significant token sequence of a stylesheet, comments removed."""
+    text = _CSS_STRING_OR_COMMENT.sub(
+        lambda m: "" if m.group(0).startswith("/*") else m.group(0), text)
+    return re.findall(r"[{};:]|[^;{}:\s]+", text)
+
+
+# A quoted string, or a comment. Matching them in one alternation is the point:
+# the scanner steps over a string whole, so a "/*" inside quotes can never be
+# mistaken for the start of a comment.
+_CSS_STRING_OR_COMMENT = re.compile(
+    r'"(?:[^"\\]|\\.)*"'      # "..."
+    r"|'(?:[^'\\]|\\.)*'"     # '...'
+    r"|/\*.*?\*/",            # /* ... */
+    re.S)
+
+
+def _strip_css(text):
+    """Drop comments and indentation, leaving quoted strings intact.
+
+    Removing every ``/*...*/`` outright is the obvious version and it is wrong:
+    ``content: "/*"`` would lose most of its value. Walking strings and
+    comments together avoids the question rather than checking for it
+    afterwards.
+    """
+    text = _CSS_STRING_OR_COMMENT.sub(
+        lambda match: "" if match.group(0).startswith("/*") else match.group(0),
+        text)
+    text = re.sub(r"(?m)^[ \t]+|[ \t]+$", "", text)
+    return re.sub(r"\n{2,}", "\n", text)
+
+
+def _strip_js(text):
+    """Drop whole-line comments and indentation; trailing comments stay.
+
+    Deliberately conservative, with no tokeniser, so a "//" inside a string or
+    a regex can never be mistaken for a comment. Every rule here is anchored to
+    the start of a line and removes only whitespace or a whole-line comment,
+    which cannot change meaning: JavaScript's automatic semicolon insertion
+    depends on newlines, and these stay.
+    """
+    text = re.sub(r"(?ms)^[ \t]*/\*.*?\*/[ \t]*\n", "", text)
+    text = re.sub(r"(?m)^[ \t]*//.*\n", "", text)
+    text = re.sub(r"(?m)^[ \t]+", "", text)
+    return re.sub(r"\n{2,}", "\n", text)
+
+
+# What gets shrunk before it is cached and sent.
+_STRIPPERS = {"/style.css": _strip_css, "/app.js": _strip_js,
+              "/theme.js": _strip_js, "/radar.js": _strip_js}
+
+# Served under a ?v=<release> URL, so the bytes behind any given URL are fixed.
+_VERSIONED = ("/style.css", "/app.js", "/theme.js", "/radar.js")
+
+
+def _cache_control(path, query):
+    """How long a static file may be kept, and whether it may be revalidated.
+
+    The page asks for ``/app.js?v=<release>``, and those bytes cannot change
+    under that URL, so it may be kept for a year. Everything else - the worker,
+    the manifest, the icons, an unversioned request - revalidates as before.
+    """
+    if path in _VERSIONED and query.get("v") == [__version__]:
+        return "public, max-age=31536000, immutable"
+    if path in UNCACHED_STATIC:
+        return "no-cache"
+    return "public, max-age=300"
+
+
+class StaticCache:
+    """Reads, shrinks and gzips each static file once, then only when it changes.
+
+    Without this every request re-read the file from disk, re-hashed it for the
+    ETag and re-compressed it.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._items = {}
+
+    def get(self, path):
+        """``(etag, body, gzipped_or_None)``; raises OSError if the file is gone."""
+        filename, content_type = STATIC_FILES[path]
+        full = os.path.join(BASE_DIR, filename)
+        stamp = os.stat(full).st_mtime_ns
+        with self._lock:
+            item = self._items.get(path)
+            if item and item[0] == stamp:
+                return item[1]
+        with open(full, "rb") as handle:
+            body = handle.read()
+        if path == "/sw.js":
+            # The worker's cache name and shell URLs follow the release, so a
+            # deploy can no longer forget to bump a constant by hand.
+            body = body.replace(b"{{VERSION}}", __version__.encode())
+        elif path in _STRIPPERS:
+            body = _STRIPPERS[path](body.decode("utf-8")).encode("utf-8")
+        gz = None
+        if len(body) >= MIN_GZIP_BYTES and not content_type.startswith("image/"):
+            gz = gzip.compress(body, 9)
+        entry = (_etag(body), body, gz)
+        with self._lock:
+            self._items[path] = (stamp, entry)
+        return entry
 
 
 class ShellCache:
@@ -170,6 +287,7 @@ class Handler(BaseHTTPRequestHandler):
     # populated by create_server()
     service: sources.WeatherService = None
     shell: ShellCache = None
+    statics = None
     config: sources.Config = None
     radar = None
 
@@ -313,14 +431,20 @@ class Handler(BaseHTTPRequestHandler):
 
         Runs off ordinary traffic rather than a scheduler, which is why the
         suppression window matters: without it every request during a cold snap
-        would send the same warning again. Never allowed to fail the request.
+        would send the same warning again. Never allowed to fail the request,
+        and sent from its own thread so that a slow ntfy or Telegram cannot
+        delay the page of whoever happened to trigger it.
         """
         if not notify.configured(self.config):
             return
-        try:
-            notify.notify_frost(self.config, payload, datetime.now(timezone.utc))
-        except Exception as exc:  # noqa: BLE001 - an alert is not worth a 500
-            log.warning("frost alert failed: %s", exc)
+
+        def send():
+            try:
+                notify.notify_frost(self.config, payload, datetime.now(timezone.utc))
+            except Exception as exc:  # noqa: BLE001 - an alert is not worth a 500
+                log.warning("frost alert failed: %s", exc)
+
+        threading.Thread(target=send, name="frost-alert", daemon=True).start()
 
     def _serve_weather(self, force=False):
         try:
@@ -378,26 +502,34 @@ class Handler(BaseHTTPRequestHandler):
                                   "Cache-Control": "public, max-age=86400"})
 
     def _serve_static(self, path):
-        filename, content_type = STATIC_FILES[path]
-        full = os.path.join(BASE_DIR, filename)
+        _, content_type = STATIC_FILES[path]
         try:
-            with open(full, "rb") as handle:
-                body = handle.read()
+            tag, body, packed = self.statics.get(path)
         except OSError:
             self._not_found()
             return
-        tag = _etag(body)
+
+        # The page asks for /app.js?v=<release>, so that exact URL can never
+        # change and the browser may keep it for good. Everything else - the
+        # worker, the manifest, the icons, an unversioned request - revalidates
+        # as before.
+        query = parse_qs(urlsplit(self.path).query)
+        cache_control = _cache_control(path, query)
+
+        headers = {"ETag": tag, "Cache-Control": cache_control}
+        if packed is not None:
+            headers["Vary"] = "Accept-Encoding"
         if self.headers.get("If-None-Match") == tag:
             self.send_response(HTTPStatus.NOT_MODIFIED)
-            self.send_header("ETag", tag)
+            for key, value in headers.items():
+                self.send_header(key, value)
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        self._send(HTTPStatus.OK, body, content_type, {
-            "ETag": tag,
-            "Cache-Control": ("no-cache" if path in UNCACHED_STATIC
-                              else "public, max-age=300"),
-        })
+        if packed is not None and _gzip_ok(self.headers.get("Accept-Encoding")):
+            body = packed
+            headers["Content-Encoding"] = "gzip"
+        self._send(HTTPStatus.OK, body, content_type, headers, compress=False)
 
     def _not_found(self):
         self._fail(HTTPStatus.NOT_FOUND, "Η σελίδα δεν βρέθηκε.",
@@ -424,6 +556,7 @@ def create_server(config, service=None, radar_instance=None):
     handler = type("BoundHandler", (Handler,), {
         "service": service or sources.WeatherService(config),
         "shell": ShellCache(TEMPLATE),
+        "statics": StaticCache(),
         "config": config,
         "radar": radar_instance,
     })
