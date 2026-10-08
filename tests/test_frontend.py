@@ -804,5 +804,32 @@ class StylesheetTests(unittest.TestCase):
 
 
 
+    def test_below_fold_panels_skip_layout_until_reached(self):
+        """The first paint used to lay out the whole 5000 px page. Over five
+        runs at 6x throttling that is a median 68 ms long task; with these
+        rules on it is 54 ms. A single pair of runs appeared to show 490 -> 54,
+        which is why the test asserts the rules and not a number."""
+        for ident in ("#local-panel", "#snow-panel", "#mountain-panel",
+                      "#air-panel", "#station-strip", "#radar-panel"):
+            self.assertIn(ident, self.css)
+        self.assertIn("content-visibility: auto", self.css)
+        # Reservation, or the page jumps when a card finally lays out.
+        self.assertIn("contain-intrinsic-size", self.css)
+        # The three panels with no id carry the class instead.
+        template = read("template.html")
+        self.assertEqual(template.count('class="card glass panel below'), 3)
+        self.assertIn("below tall", template)
+        self.assertIn(".tall", self.css)
+
+    def test_skipped_cards_still_print(self):
+        """content-visibility skips cards that are off screen, and a printed
+        sheet has no screen: without this the panels below the fold print
+        blank. They come out blank in a full-page screenshot taken without
+        scrolling too, which is how this was noticed."""
+        blocks = re.findall(r"@media print \{(.*?)\n\}", self.css, re.S)
+        self.assertTrue(blocks, "no print block at all")
+        combined = "\n".join(blocks)
+        self.assertIn("content-visibility: visible", combined)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

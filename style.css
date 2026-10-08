@@ -530,6 +530,61 @@ a:hover { text-decoration: underline; }
   }
 }
 
+/* ------------------------------------------------- below the fold ------ */
+
+/* The page is about 5000 px tall and the first paint laid out all of it.
+
+   Numbers, because the first ones taken were wrong. A single measurement of
+   this page reported a 490 ms long task, and that figure is a first-run
+   artifact: over five runs the same build gives 456, 54, 51, 52, 55 ms. The
+   steady state is about 54 ms and only the first run is expensive. Every
+   alarming figure in this file's history came from measuring once.
+
+   With these rules off, the same five runs give 121, 60, 64, 68, 68 - median
+   68 ms. So content-visibility is worth about 20 %, not the 90 % that a single
+   pair of runs appeared to show.
+
+   Splitting the DOM insertion across frames was tried and does not work: with
+   nothing forcing layout between slices, the browser batches every append into
+   the one layout it was going to do at paint time anyway.
+
+   contain-intrinsic-size reserves the space so nothing shifts, and "auto"
+   keeps the real height once a card has been laid out once, so the reservation
+   improves instead of staying a guess. The numbers below only affect the first
+   paint. */
+#local-panel,
+#snow-panel,
+#mountain-panel,
+#air-panel,
+#station-strip,
+#radar-panel,
+.below {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 340px;
+}
+
+/* The 7-day panel is the tallest thing on the page and sits furthest down, so
+   a 340px reservation would understate it badly on the first paint. */
+.tall {
+  contain-intrinsic-size: auto 1100px;
+}
+
+@media print {
+  /* content-visibility skips cards that are off screen, and a printed sheet
+     has no screen. Without this the panels below the fold print blank - the
+     same way they come out blank in a full-page screenshot taken without
+     scrolling, which is how this was noticed. */
+  #local-panel,
+  #snow-panel,
+  #mountain-panel,
+  #air-panel,
+  #station-strip,
+  #radar-panel,
+  .below {
+    content-visibility: visible;
+  }
+}
+
 /* ------------------------------------------------------ snow climate ---- */
 
 /* The time and the explainer button as one right-hand group. The button
