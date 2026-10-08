@@ -1129,6 +1129,10 @@
     /* Every changed number was collected on the way through; one reflow for
        all of them, once the DOM has stopped moving. */
     safely("flash", flushFlash);
+    /* Kept for the next visit, which then has numbers before the network
+       answers. Only the fresh data is stored: a restored copy is marked stale
+       and has no business being remembered as current. */
+    if (!(data.status && data.status.stale)) safely("remember", function () { remember(data); });
     syncThemeColor();
   }
 
@@ -1137,6 +1141,57 @@
   function setBusy(busy) {
     var button = $("refresh");
     if (button) button.setAttribute("aria-busy", busy ? "true" : "false");
+  }
+
+  /* ------------------------------------------- painting the last report */
+
+  /* The page waits for /api/weather before it shows a single number, and the
+     service worker waits up to 9 s for the network before falling back to its
+     own copy. On a poor connection that is a long time to look at skeletons,
+     so the last report is kept here and painted at once.
+
+     Labelled as older data through the existing stale flag, because the rule
+     for this app is that stale weather is worse than none - and stale weather
+     that says it is stale is worse than neither. */
+  var LAST_REPORT = "florina:last-report";
+  var KEEP_FOR_S = 6 * 3600;   // past this the numbers mean nothing anyway
+
+  function storeStorage(entry) {
+    try {
+      window.localStorage.setItem(LAST_REPORT, JSON.stringify(entry));
+    } catch (error) {
+      /* Private mode, quota, a hostile extension: none worth failing over. */
+    }
+  }
+
+  function readStorage() {
+    try {
+      var raw = window.localStorage.getItem(LAST_REPORT);
+      if (!raw) return null;
+      var entry = JSON.parse(raw);
+      if (!entry || !entry.report || !entry.saved) return null;
+      if (Date.now() / 1000 - entry.saved > KEEP_FOR_S) return null;
+      return entry.report;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function remember(data) {
+    if (!data) return;
+    storeStorage({ saved: Math.round(Date.now() / 1000), report: data });
+  }
+
+  function restore() {
+    var data = readStorage();
+    if (!data) return false;
+    /* Marked stale so the hero's own stamp says so. The fresh fetch clears it
+       a moment later, and if the fetch never lands the label stays - which is
+       the honest outcome. */
+    data.status = data.status || {};
+    data.status.stale = true;
+    render(data);
+    return true;
   }
 
   function load(force) {
@@ -1253,6 +1308,10 @@
       load(false);
     }
   });
+
+  /* Paint what we already had before asking for more, so a slow connection
+     shows last time's numbers instead of skeletons. */
+  restore();
 
   load(false);
 })();

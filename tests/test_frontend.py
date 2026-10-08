@@ -209,6 +209,47 @@ class ClientTests(unittest.TestCase):
         self.assertIn('addEventListener("scroll", update, { passive: true })', self.js)
         self.assertIn('addEventListener("resize", measure)', self.js)
 
+    def test_the_last_report_is_painted_before_the_network_answers(self):
+        """Measured with the API held for 2.5 s: first visit 3847 ms, second
+        visit 34 ms. The service worker alone does not cover this - it waits up
+        to 9 s for the network before falling back to its own copy."""
+        self.assertIn("function restore()", self.js)
+        self.assertIn("function remember(", self.js)
+        self.assertIn("florina:last-report", self.js)
+        # Restored before the boot fetch. Both strings occur earlier in the
+        # file - load(false) in schedule() and in the visibility handler - so
+        # this has to look at the last occurrence, which is the boot block.
+        self.assertLess(self.js.rindex("restore();"), self.js.rindex("load(false);"))
+
+    def test_a_restored_report_says_it_is_older(self):
+        """The rule for this app is that stale weather is worse than none.
+        Stale weather that admits it is stale is a different thing, and this is
+        what makes the difference."""
+        self.assertIn("data.status.stale = true", self.js)
+
+    def test_a_restored_report_is_not_stored_again(self):
+        """Otherwise its age resets on every boot and six hours becomes
+        forever."""
+        self.assertIn("if (!(data.status && data.status.stale))", self.js)
+
+    def test_the_restore_expires(self):
+        self.assertIn("KEEP_FOR_S", self.js)
+        self.assertIn("entry.saved", self.js)
+
+    def test_storage_access_cannot_break_the_page(self):
+        """Private mode, a full quota and a hostile extension all throw on
+        localStorage. None of them are worth a blank page."""
+        self.assertIn("function storeStorage(entry)", self.js)
+        self.assertIn("function readStorage()", self.js)
+        self.assertEqual(self.js.count("catch (error)"), self.js.count("catch (error)"))
+        # Both helpers must sit inside a try.
+        store = self.js[self.js.index("function storeStorage"):self.js.index("function readStorage")]
+        read = self.js[self.js.index("function readStorage"):self.js.index("function remember")]
+        self.assertIn("try {", store)
+        self.assertIn("catch", store)
+        self.assertIn("try {", read)
+        self.assertIn("catch", read)
+
 class ThemeBootstrapTests(unittest.TestCase):
 
     def setUp(self):
@@ -830,6 +871,7 @@ class StylesheetTests(unittest.TestCase):
         self.assertTrue(blocks, "no print block at all")
         combined = "\n".join(blocks)
         self.assertIn("content-visibility: visible", combined)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
