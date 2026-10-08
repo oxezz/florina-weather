@@ -57,6 +57,13 @@
   --g1: #2b5fa5;
   --g2: #1580a8;
 
+  /* Where the sun is. app.js overwrites these from the Florina clock and the
+     day's sunrise and sunset; these defaults are what a page with no script
+     draws, which is no glow at all. */
+  --sun-x: 50%;
+  --sun-y: 34%;
+  --sun-warmth: 0;
+
   /* type */
   --text: #f2f7ff;
   --text-dim: rgba(242, 247, 255, .74);
@@ -193,6 +200,15 @@ body.wrap { max-width: 1180px; margin: 0 auto; }
   pointer-events: none;
   background-color: var(--b1);
   background-image:
+    /* A glow that follows the sun. Driven by three custom properties the page
+       sets from the Florina clock and the day's sunrise and sunset, so dawn,
+       noon and dusk move it. Kept as a separate layer so the seven weather
+       themes above it stay exactly as written - a time of day is not a
+       weather condition and the two should not have to know about each other.
+       The defaults draw nothing, which is what a missing payload gets. */
+    radial-gradient(760px 560px at var(--sun-x, 50%) var(--sun-y, 34%),
+                    rgba(255, 208, 140, var(--sun-warmth, 0)) 0%,
+                    rgba(255, 190, 130, 0) 62%),
     radial-gradient(1200px 820px at 12% 6%, var(--g1) 0%, transparent 55%),
     radial-gradient(1000px 900px at 88% 16%, var(--g2) 0%, transparent 60%),
     linear-gradient(158deg, var(--b1) 0%, var(--b2) 48%, var(--b3) 100%);

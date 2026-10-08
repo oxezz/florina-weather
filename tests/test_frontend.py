@@ -282,6 +282,47 @@ class ClientTests(unittest.TestCase):
         combined = "\n".join(reduce_blocks)
         self.assertIn("::view-transition-old(backdrop)", combined)
 
+
+    def test_the_sky_follows_the_sun(self):
+        """Verified in a browser across a day: dawn rgba(255,208,140,0.55) at
+        12% 34%, noon the same colour at alpha 0 overhead, dusk 0.55 at 88%
+        34%, and nothing at all after sunset."""
+        self.assertIn("function applySunSky(", self.js)
+        self.assertIn("--sun-x", self.js)
+        self.assertIn("--sun-y", self.js)
+        self.assertIn("--sun-warmth", self.js)
+        self.assertIn('safely("sunsky"', self.js)
+
+    def test_the_sun_clock_is_florina_time_not_the_browser_clock(self):
+        """The payload's current.time is already Florina local. Reading the
+        browser clock would put the sky in the wrong place for anyone looking
+        from another country, and would be a silent bug rather than a visible
+        one."""
+        block = self.js[self.js.index("function applySunSky"):]
+        block = block[:block.index("function applyWeatherTheme")]
+        self.assertIn("(data.current || {}).time", block)
+        self.assertNotIn("new Date(", block)
+        self.assertNotIn("Date.now(", block)
+
+    def test_a_page_with_no_sun_draws_no_glow(self):
+        """Before sunrise and after sunset the glow must vanish rather than
+        sit somewhere arbitrary."""
+        block = self.js[self.js.index("function applySunSky"):]
+        block = block[:block.index("function applyWeatherTheme")]
+        self.assertIn("now < rise || now > set", block)
+        self.assertIn('setProperty("--sun-warmth", "0")', block)
+
+    def test_the_sun_variables_have_css_defaults(self):
+        """app.js sets them at runtime, so without a definition in the sheet a
+        page whose script never runs would be drawing a gradient from nothing.
+        The stylesheet test that every used custom property is defined is what
+        caught this."""
+        css = read("style.css")
+        root = css[css.index(":root"):]
+        root = root[:root.index("}")]
+        for name in ("--sun-x", "--sun-y", "--sun-warmth"):
+            self.assertIn(name, root)
+
 class ThemeBootstrapTests(unittest.TestCase):
 
     def setUp(self):

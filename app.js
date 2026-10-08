@@ -163,6 +163,52 @@
     return "cloud";
   }
 
+  /* ------------------------------------------------------------- the sky */
+
+  /* A glow that follows the sun, so the backdrop reads as a time of day
+     rather than only a weather condition.
+
+     The list this came from said the app "already computes solar position".
+     It does not: there is a daily solar *energy* total and a sunrise and
+     sunset, and no azimuth or elevation anywhere. So the arc is approximated -
+     the sun's height is taken as a sine across the daylight window, which is
+     what a gradient needs and is not worth real ephemeris maths for.
+
+     The clock used is current.time from the payload, which is already Florina
+     local time. Reading the browser clock would put the sky in the wrong place
+     for anyone looking from another country, and would be a silent bug. */
+  function minutesOf(stamp) {
+    var parts = String(stamp || "").split(":");
+    if (parts.length !== 2) return null;
+    var hours = parseInt(parts[0], 10);
+    var minutes = parseInt(parts[1], 10);
+    if (isNaN(hours) || isNaN(minutes)) return null;
+    return hours * 60 + minutes;
+  }
+
+  function applySunSky(data) {
+    var root = document.documentElement;
+    var today = data.today || {};
+    var now = minutesOf((data.current || {}).time);
+    var rise = minutesOf(today.sunrise);
+    var set = minutesOf(today.sunset);
+
+    /* No sun, or nothing to go on: leave the defaults, which draw no glow. */
+    if (now === null || rise === null || set === null || set <= rise ||
+        now < rise || now > set) {
+      root.style.setProperty("--sun-warmth", "0");
+      return;
+    }
+
+    var arc = (now - rise) / (set - rise);
+    var height = Math.sin(Math.PI * arc);          // 0 at the horizon, 1 at noon
+
+    root.style.setProperty("--sun-x", (12 + arc * 76).toFixed(1) + "%");
+    root.style.setProperty("--sun-y", (34 - height * 30).toFixed(1) + "%");
+    /* Warmest at the edges of the day, neutral overhead. */
+    root.style.setProperty("--sun-warmth", ((1 - height) * 0.55).toFixed(3));
+  }
+
   function applyWeatherTheme(current) {
     var root = document.documentElement;
     var next = "theme-" + weatherThemeFor(current);
@@ -1126,6 +1172,7 @@
   function render(data) {
     state.lastGenerated = data.generated_at;
     safely("theme", function () { applyWeatherTheme(data.current || {}); });
+    safely("sunsky", function () { applySunSky(data); });
     safely("alerts", function () { renderAlerts(data.alerts); });
     safely("hero", function () { renderHero(data); });
     safely("greeting", function () { renderGreeting(data.greeting); });
