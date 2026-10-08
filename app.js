@@ -1382,9 +1382,15 @@
       var state = $("fx-state");
       button.setAttribute("aria-pressed", reduced ? "true" : "false");
       if (state) state.textContent = reduced ? ": βασικά" : ": πλήρη";
+      /* The label says which it is; the tooltip says what pressing will do,
+         because a toggle that only states its condition makes the reader work
+         out the direction themselves. */
+      button.setAttribute("aria-label", reduced
+        ? "Εφέ: βασικά. Πατήστε για πλήρη εφέ με θολούρα."
+        : "Εφέ: πλήρη. Πατήστε για βασικά εφέ, χωρίς θολούρα.");
       button.title = reduced
-        ? "Ενεργοποίηση θολούρας, σκιών και κίνησης"
-        : "Λιγότερη θόλωση και κίνηση, για πιο ομαλό κύλισμα";
+        ? "Ενεργοποίηση θολούρας και κίνησης"
+        : "Απενεργοποίηση θολούρας και κίνησης";
     }
 
     button.addEventListener("click", function () {
