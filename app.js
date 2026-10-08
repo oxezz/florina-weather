@@ -1381,9 +1381,9 @@
       var reduced = theme.fx() === "reduced";
       var state = $("fx-state");
       button.setAttribute("aria-pressed", reduced ? "true" : "false");
-      if (state) state.textContent = reduced ? ": ενεργός" : ": ανενεργός";
+      if (state) state.textContent = reduced ? ": βασικά" : ": πλήρη";
       button.title = reduced
-        ? "Επαναφορά εφέ, θολούρας και κίνησης"
+        ? "Ενεργοποίηση θολούρας, σκιών και κίνησης"
         : "Λιγότερη θόλωση και κίνηση, για πιο ομαλό κύλισμα";
     }
 

@@ -333,31 +333,52 @@ class ClientTests(unittest.TestCase):
         self.assertIn("florina.fx", read("theme.js"))
         self.assertIn("api.setFx", read("theme.js"))
 
-    def test_the_switch_defaults_to_the_system_setting(self):
-        """Someone who has already told their phone they want less motion
-        should not have to say it twice, and until they choose here the system
-        setting stays the system's - nothing is written to storage."""
+    def test_the_switch_defaults_to_what_the_device_already_renders(self):
+        """A touch device starts reduced, because the hover media query was
+        already leaving blur off there - so the label says what is true, and
+        the switch means "give me the full thing anyway". Nothing is written to
+        storage until the reader actually chooses."""
         theme = read("theme.js")
         self.assertIn("prefers-reduced-motion: reduce", theme)
-        self.assertIn('fxMedia.matches ? "reduced" : "full"', theme)
-        # Stored only in setFx, never by the default.
-        default = theme[theme.index("function fxPreferred"):theme.index("function applyFx")]
-        self.assertNotIn("setItem", default)
+        self.assertIn("(hover: hover) and (pointer: fine)", theme)
+        self.assertIn('return hoverMedia.matches ? "full" : "reduced"', theme)
+        # Stored only in setFx, never by the derived default.
+        derived = theme[theme.index("function fxDefault"):theme.index("function fxPreferred")]
+        self.assertNotIn("setItem", derived)
+
+    def test_effects_can_be_forced_on_as_well_as_off(self):
+        """The hover media query is a guess about what a touch device can
+        afford. fx-full overrides it, which is the only way "let the device
+        have the goodies" means anything on a phone."""
+        css = read("style.css")
+        on = css[css.index("html.fx-full .glass"):css.index("html.fx-reduced .glass")]
+        self.assertIn("backdrop-filter: var(--blur)", on)
+        # No !important: this has to be able to lose to nothing, and the
+        # specificity of the media query block is comparable.
+        self.assertNotIn("none", on)
 
     def test_reduced_effects_drops_blur_and_motion_only(self):
         """Not the reduced-transparency treatment: the translucent fills, rims
         and colours are what make the page look like itself and none of them
         cost anything to draw, so they stay."""
         css = read("style.css")
-        block = css[css.index("html.reduce-fx .glass"):css.index("/* --- motion")]
+        block = css[css.index("html.fx-reduced .glass"):css.index("/* --- motion")]
         self.assertIn("backdrop-filter: none !important", block)
         self.assertIn("animation: none !important", block)
         self.assertIn("transition: none !important", block)
         # The skeletons are visible only through the pulse; without it they sit
         # at opacity 0 forever.
-        self.assertIn("html.reduce-fx .skel", block)
+        self.assertIn("html.fx-reduced .skel", block)
         # View transition pseudo-elements are not elements.
         self.assertIn("::view-transition-old(backdrop)", block)
+
+    def test_effects_are_not_tied_to_a_theme(self):
+        """Light and dark and all seven weather backdrops set colours. The
+        material is not theirs to decide, so no theme rule mentions fx."""
+        css = read("style.css")
+        for line in css.split("\n"):
+            if line.startswith("html.theme-") or line.startswith("html.mode-"):
+                self.assertNotIn("fx-", line)
 
 
     def test_the_switch_label_carries_its_state(self):
@@ -366,8 +387,8 @@ class ClientTests(unittest.TestCase):
         media query - so a reader has no other way to tell whether it took."""
         self.assertIn('id="fx-state"', read("template.html"))
         self.assertIn('$("fx-state")', self.js)
-        self.assertIn("ενεργός", self.js)
-        self.assertIn("ανενεργός", self.js)
+        self.assertIn("βασικά", self.js)
+        self.assertIn("πλήρη", self.js)
 
     def test_blur_is_already_off_on_touch(self):
         """Which is why the switch barely shows on a handset. Pinned so that

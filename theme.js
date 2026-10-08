@@ -84,16 +84,20 @@
 
   /* ------------------------------------------------------------ effects */
 
-  /* A visible switch for reduced effects, rather than only honouring the OS
-     setting. Blur is the most expensive thing on this page and the backdrop is
-     most of it, so a phone that struggles has no way to say so otherwise.
+  /* A visible switch for the expensive visuals, in both directions.
 
-     Defaults to whatever the system asks for. Someone who has already told
-     their phone they want less motion should not have to say it twice, but
-     they can still override it here - which is why the choice is stored
-     separately from the system setting rather than assumed to match it. */
+     The hover media query is a guess about what a touch device can afford.
+     Usually right; the reader is the one who knows when it is wrong, so this
+     can hand blur back as well as take it away.
+
+     Two inputs, and they are not the same kind of thing. The OS preference is
+     a *preference* and is followed. Whether the device has a fine pointer is a
+     *capability*, and the honest starting value for a touch device is reduced,
+     because that is already what it renders - the switch then means "give me
+     the full thing anyway", which is the point of it. */
   var FX_KEY = "florina.fx";
   var fxMedia = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var hoverMedia = window.matchMedia("(hover: hover) and (pointer: fine)");
 
   function fxStored() {
     try {
@@ -104,18 +108,25 @@
     }
   }
 
-  /* "?fx=reduced" overrides for one visit without saving, like ?mode=. */
+  /* "?fx=full" overrides for one visit without saving, like ?mode=. */
   function fxFromQuery() {
     var match = /[?&]fx=(full|reduced)(?:&|$)/.exec(window.location.search);
     return match ? match[1] : null;
   }
 
+  function fxDefault() {
+    if (fxMedia.matches) return "reduced";
+    return hoverMedia.matches ? "full" : "reduced";
+  }
+
   function fxPreferred() {
-    return fxFromQuery() || fxStored() || (fxMedia.matches ? "reduced" : "full");
+    return fxFromQuery() || fxStored() || fxDefault();
   }
 
   function applyFx(value) {
-    root.classList.toggle("reduce-fx", value === "reduced");
+    var reduced = value === "reduced";
+    root.classList.toggle("fx-reduced", reduced);
+    root.classList.toggle("fx-full", !reduced);
     root.setAttribute("data-fx", value);
     document.dispatchEvent(new CustomEvent("florina:fx", {
       detail: { fx: value }
@@ -123,14 +134,23 @@
   }
 
   api.fx = fxPreferred;
+  api.fxDefault = fxDefault;
   api.setFx = function (value) {
-    if (value !== "full" && value !== "reduced") value = "full";
+    if (value !== "full" && value !== "reduced") value = fxDefault();
     try { window.localStorage.setItem(FX_KEY, value); } catch (error) { /* ignore */ }
     applyFx(value);
     return value;
   };
 
   applyFx(fxPreferred());
+
+  /* A device that gains or loses a fine pointer mid-session - a tablet with a
+     trackpad attached - should re-derive, unless the reader has chosen. */
+  var onHoverChange = function () {
+    if (!fxStored() && !fxFromQuery()) applyFx(fxDefault());
+  };
+  if (hoverMedia.addEventListener) hoverMedia.addEventListener("change", onHoverChange);
+  else if (hoverMedia.addListener) hoverMedia.addListener(onHoverChange);
 
   window.FlorinaTheme = api;
 })();

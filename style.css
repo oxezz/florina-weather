@@ -1157,43 +1157,57 @@ footer { margin-top: 28px; font-size: .8rem; color: var(--text-faint); }
 .day-skel { min-height: 259px; border-radius: var(--radius-md); border-color: transparent; }
 
 /* ==========================================================================
-   Reduced effects, chosen by the reader.
+   Effects, chosen by the reader - in both directions.
 
-   The OS preference is honoured below, but a phone that struggles with blur
-   has no way to say so through it - and a phone is where this costs most. The
-   switch in the footer sets html.reduce-fx, which theme.js applies before the
-   first paint so nothing flashes.
+   The hover media query further down is a guess: it assumes a touch device
+   cannot afford thirteen blur surfaces. Usually right, and the reader is the
+   one who knows when it is wrong. So the switch takes effects away *and* hands
+   them back, which is the only reading of "let the device have the goodies"
+   that means anything on a phone.
 
-   Deliberately drops blur and motion and nothing else. The translucent fills,
-   the rims and the colour are what make the page look like itself, and none of
-   them cost anything to draw - so this is not the reduced-transparency
-   treatment, which deliberately makes the surfaces opaque.
+     html.fx-full     force them on, whatever the media query says
+     html.fx-reduced  force them off
+     neither          the media query and the OS preference decide
+
+   theme.js applies one of the two before the first paint so nothing flashes,
+   and derives the starting value from the device: a touch device starts
+   reduced, because that is honestly what it was already rendering.
+
+   Applies to every theme. Light and dark and all seven weather backdrops set
+   colours and nothing else - the material is not theirs to decide.
    ========================================================================== */
-html.reduce-fx .glass,
-html.reduce-fx .hero,
-html.reduce-fx .card,
-html.reduce-fx .backdrop,
-html.reduce-fx .radar-play,
-html.reduce-fx .modes {
+html.fx-full .glass,
+html.fx-full .radar-play,
+html.fx-full .modes {
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+}
+
+html.fx-reduced .glass,
+html.fx-reduced .hero,
+html.fx-reduced .card,
+html.fx-reduced .backdrop,
+html.fx-reduced .radar-play,
+html.fx-reduced .modes {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
 
-html.reduce-fx *,
-html.reduce-fx *::before,
-html.reduce-fx *::after {
+html.fx-reduced *,
+html.fx-reduced *::before,
+html.fx-reduced *::after {
   animation: none !important;
   transition: none !important;
 }
 
 /* The skeletons get their visibility from the pulse animation, so without it
    they would sit at opacity 0 forever. Same reason as the reduce block. */
-html.reduce-fx .skel { opacity: .5 !important; }
+html.fx-reduced .skel { opacity: .5 !important; }
 
 /* View transition pseudo-elements are not elements, so the rule above reaches
    none of them. */
-html.reduce-fx ::view-transition-old(backdrop),
-html.reduce-fx ::view-transition-new(backdrop) { animation: none !important; }
+html.fx-reduced ::view-transition-old(backdrop),
+html.fx-reduced ::view-transition-new(backdrop) { animation: none !important; }
 
 /* --- motion ------------------------------------------------------------- */
 
