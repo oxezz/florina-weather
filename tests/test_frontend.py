@@ -401,6 +401,66 @@ class ClientTests(unittest.TestCase):
         hover = css.index("@media (hover: hover) and (pointer: fine)")
         self.assertLess(hover, css.index("backdrop-filter: var(--blur)"))
 
+
+    def test_every_card_shares_one_material(self):
+        """Verified in a browser: eight distinct card types, all on
+        rgba(255,255,255,0.086) at 30px, all blurring.
+
+        .alert used to set --glass-bg-hover, the *hover* fill, so every warning
+        sat a third lighter than the cards beside it and the weather hue
+        stopped reading through it - which looked like the theme not applying
+        rather than like one wrong variable."""
+        css = read("style.css")
+        alert = css[css.index(".alert {"):css.index(".alert::before")]
+        self.assertNotIn("background-color", alert)
+        self.assertNotIn("border-radius", alert)
+        # The alert card must carry the class; the all-clear one is not a card.
+        self.assertIn('el("div", "alert glass")', read("app.js"))
+
+    def test_the_alert_colour_bar_is_clipped_by_the_card(self):
+        """The bar is an absolutely positioned rectangle filling the card's
+        height. Without overflow it pokes out of the 30px rounded corner - it
+        was the only unrounded decoration in the whole stylesheet."""
+        css = read("style.css")
+        glass = css[css.index(".glass {"):css.index(".glass::before")]
+        self.assertIn("overflow: hidden", glass)
+        # And the alert relies on that rather than carrying its own radius.
+        alert = css[css.index(".alert {"):css.index(".alert::before")]
+        self.assertNotIn("border-radius", alert)
+
+    def test_the_nested_fill_stays_darker_on_purpose(self):
+        """--glass-inner is used in nineteen places: it is the fill for a card
+        inside a card, and it has to be darker because the fills compound. The
+        local cards keep it. Reading it as a bug and "fixing" it to match the
+        outer fill makes every nested card lighter than the panel it sits in."""
+        css = read("style.css")
+        self.assertIn("--glass-inner", css)
+        inner = css[css.index(".local-card {"):]
+        inner = inner[:inner.index("}")]
+        self.assertIn("--glass-inner", inner)
+        # But it does join the effects switch, which is what was missing.
+        self.assertIn("local-card glass", read("template.html"))
+
+    def test_no_absolutely_positioned_decoration_is_left_unclipped(self):
+        """The bar was the only one. Every decoration that is absolutely
+        positioned should either fill its parent (inset: 0, so the parent's
+        radius clips it), carry its own radius, or be a listed exception whose
+        parent is a clipped .glass card.
+
+        The alert bar is that exception: it spans the height on purpose, and
+        .alert now carries .glass, so .glass's overflow hides the corners."""
+        KNOWN = {".alert::before"}
+        css = read("style.css")
+        blocks = re.findall(r"(\.[\w-]+::(?:before|after)\s*\{[^}]*\})", css)
+        for block in blocks:
+            if "position: absolute" not in block:
+                continue
+            selector = block.split("{")[0].strip()
+            if selector in KNOWN:
+                continue
+            self.assertTrue("inset: 0" in block or "border-radius" in block,
+                            "unclipped decoration: " + block[:60])
+
 class ThemeBootstrapTests(unittest.TestCase):
 
     def setUp(self):

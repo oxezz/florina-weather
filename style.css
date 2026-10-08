@@ -278,10 +278,13 @@ a:hover { text-decoration: underline; }
   display: grid;
   grid-template-columns: 46px 1fr;
   gap: 14px;
+  /* Left padding clears the colour bar. */
   padding: 16px 18px 16px 22px;
-  border-radius: var(--radius-lg);
-  background-color: var(--glass-bg-hover);
-  border: 1px solid var(--glass-border);
+  /* Fill, radius and overflow come from .glass, which this now carries. It
+     used to set its own: the *hover* fill, so every warning sat a third
+     lighter than the cards around it and the weather hue stopped reading; and
+     no overflow, which is why the colour bar below poked out of the corners
+     it was sitting inside. */
   box-shadow: var(--shadow), inset 0 1px 0 var(--rim-top);
 }
 .alert::before {

@@ -324,7 +324,9 @@
 
     host.hidden = false;
     alerts.forEach(function (alert) {
-      var card = el("div", "alert");
+      /* glass, so it gets the one material - and its overflow: hidden,
+         which clips the colour bar to the rounded corner. */
+      var card = el("div", "alert glass");
       card.style.setProperty("--level", alert.color || "#facc15");
       card.appendChild(el("div", "alert-icon", alert.icon || "\u26a0\ufe0f"));
 
