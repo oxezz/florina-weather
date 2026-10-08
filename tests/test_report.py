@@ -468,8 +468,11 @@ class InversionTests(unittest.TestCase):
         self.assertIsNotNone(inversion)
         self.assertEqual(inversion["level"], "strong")
         self.assertAlmostEqual(inversion["delta"], 1.9, places=1)
+        # Displayed rounded to one decimal, so compare with a tolerance rather
+        # than at one place: 4.6 + 1.76 is 6.36, which prints as 6.4 and can
+        # land on 6.3 depending on the fixture's own rounding.
         self.assertAlmostEqual(inversion["anomaly"], 4.6 + report.INVERSION_BIAS,
-                               places=1)
+                               delta=0.1)
         self.assertGreater(inversion["lapse"], 0)      # rising with height
         self.assertEqual(inversion["valley_elev"], 662)
         self.assertEqual(inversion["slope_elev"], 1073)
@@ -506,22 +509,36 @@ class InversionTests(unittest.TestCase):
         self.assertIsNone((data["local"] or {}).get("inversion"))
 
     def test_a_weaker_than_standard_lapse_crosses_the_band(self):
-        # 2.0 C drop where standard predicts 2.67 is not enough even after the
-        # correction; 1.0 is comfortably over.
+        # Bands are on the raw scale, so a 2.0 C drop (raw anomaly about 0.6)
+        # is not enough and a 0.5 C drop (raw about 2.1) is.
         data = self._with_terrain(valley_temp=10.0, slope_temp=8.0)
         self.assertIsNone((data["local"] or {}).get("inversion"))
-        data = self._with_terrain(valley_temp=10.0, slope_temp=9.0)
+        data = self._with_terrain(valley_temp=10.0, slope_temp=9.5)
         self.assertEqual(data["local"]["inversion"]["level"], "inversion")
+        self.assertTrue(data["local"]["inversion"]["confident"])
 
-    def test_a_case_the_correction_moves_says_possible_not_certain(self):
-        """The correction is 0.73 with an uncertainty near 0.4, so where it
-        pushes a reading across a band edge the card must not claim a definite
-        inversion. Without this the threshold silently drops from 1.5 to 0.8."""
-        data = self._with_terrain(valley_temp=10.0, slope_temp=8.5)
+    def test_a_reading_whose_range_straddles_an_edge_says_possible(self):
+        """The correction carries a range of about 0.5. Where the pessimistic
+        and optimistic ends land in different bands the card must not claim a
+        definite inversion.
+
+        Slope 9.0 gives a corrected anomaly of 3.4, so a raw one of 1.64 -
+        just over the 1.5 edge, which is exactly the marginal case."""
+        data = self._with_terrain(valley_temp=10.0, slope_temp=9.0)
         inversion = (data["local"] or {}).get("inversion")
         self.assertIsNotNone(inversion)
         self.assertEqual(inversion["level"], "uncertain")
         self.assertFalse(inversion["confident"])
+
+    def test_a_neutral_night_shows_no_card_at_all(self):
+        """The correction is larger than the lowest band edge, so judging the
+        corrected value against bands tuned on the raw scale would lift every
+        night by nearly two degrees and put a card on a night with no inversion
+        at all. Bands are looked up on the raw scale for that reason."""
+        for slope in (8.0, 8.5):
+            data = self._with_terrain(valley_temp=10.0, slope_temp=slope)
+            self.assertIsNone((data["local"] or {}).get("inversion"),
+                              "slope %s should show nothing" % slope)
 
     def test_a_higher_slope_than_the_valley_never_triggers(self):
         data = self._with_terrain(valley_z=1200.0, slope_z=800.0)

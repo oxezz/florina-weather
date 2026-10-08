@@ -296,24 +296,33 @@ SMOG_CALM_KMH = 12.0     # above this the valley ventilates itself
 STANDARD_LAPSE = 0.65    # °C lost per 100 m of ascent, standard atmosphere
 
 # The inversion index is a difference between two modelled temperatures, so it
-# inherits whatever bias is not common to both — and it is built from the two
-# altitudes where the model is weakest.
+# inherits whatever bias is not common to both.
 #
-# Measured, not assumed. Over 21 837 paired hours across nine years the
-# forecast runs 2.06 °C warm on night-time valley temperatures in the warm
-# months, and EMY's station on the Vitsi ridge runs about 1.33 °C warm over
-# the same nights. The valley is the more wrong of the two, so the difference
-# is understated by about 0.73 °C.
+# Measured, not assumed, and both legs are now measured at the right places.
 #
-# The valley leg is solid: nine years, and unbiased by day, which is what
-# makes it a night effect rather than a calibration error. The ridge leg is
-# weaker — Vitsi publishes no coordinates, so the model point was chosen by
-# its barometer, and its record covers one warm season rather than nine years.
-# Hence the range below, which matters more than the figure.
+# Valley: Florina's own station, WMO 16613, 21 837 paired hours across nine
+# years. Night-time bias is -2.06 °C in the warm months and unbiased by day,
+# which is what makes it a night effect rather than a calibration error.
 #
-# Regenerate with `python research/forecast_bias.py`.
-INVERSION_BIAS = 0.73
-INVERSION_BIAS_RANGE = 0.4
+# Ridge: EMY's VITSI, dataset emy-station-230, at 40.6417 N 21.3833 E, ~1875 m
+# on the 1st AK E radar site. Night-time bias -0.30 °C over the same months.
+# The coordinates matter more than anything else here: the first attempt at
+# this leg picked its forecast point by matching the station's barometer and
+# landed ~800 m low, which is ~5 °C of lapse rate, so what it measured was the
+# height difference and not a bias at all.
+#
+# Ridge minus valley is therefore +1.76 °C, which is how much the raw
+# difference understates the inversion by.
+#
+# The honest limitation: Vitsi's record covers April to October only, so this
+# is a warm-season figure applied to a year-round index. In the cold months the
+# valley leg is smaller (-1.25 °C) and there is no ridge figure to pair with
+# it. The range below is that season gap more than it is sampling error.
+#
+# Regenerate with `python research/vitsi_ridge.py`, which needs the ISD cache
+# that `research/snow_climatology.py` writes.
+INVERSION_BIAS = 1.76
+INVERSION_BIAS_RANGE = 0.5
 
 
 def _model_series(block, prefix):
@@ -423,7 +432,17 @@ def build_inversion(terrain, config, now_local):
     anomalies = [high[m] - low[m] + expected + INVERSION_BIAS for m in shared]
     mean_anomaly = sum(anomalies) / len(anomalies)
     spread = max(anomalies) - min(anomalies)
-    level = greek.inversion_level(mean_anomaly)
+    # Judged on the raw scale, reported on the corrected one.
+    #
+    # The bands (1.5 and 3.5) were tuned by eye against the uncorrected index,
+    # so they are thresholds on that scale. Applying a +1.76 correction and
+    # then comparing against them would move every night up by nearly two
+    # degrees - a neutral night would read as a possible inversion, which is
+    # how this was noticed. Subtracting the correction back before the lookup
+    # keeps the verdicts that were tuned and lets the displayed number be the
+    # accurate one, which is the whole point of measuring the bias.
+    raw_anomaly = mean_anomaly - INVERSION_BIAS
+    level = greek.inversion_level(raw_anomaly)
     if level is None:
         return None
     key, label, colour = level
@@ -434,14 +453,18 @@ def build_inversion(terrain, config, now_local):
     if not confident:
         key, label, colour = greek.UNCERTAIN_INVERSION
 
-    # The bias correction is +0.73 with an uncertainty of about 0.4, so where
-    # it moves the answer across a band edge the honest verdict is "possible"
-    # rather than a confident one. Without this the correction silently lowers
-    # the threshold from 1.5 to about 0.8 and every marginal night reads as a
-    # definite inversion.
-    raw_level = greek.inversion_level(mean_anomaly - INVERSION_BIAS)
-    if (raw_level or (None,))[0] != key:
+    # The correction carries a range of about 0.5. If the pessimistic and
+    # optimistic ends fall in different bands, the verdict does not survive its
+    # own uncertainty and the card says «Πιθανή αναστροφή» instead.
+    #
+    # Not named low/high: those are already the valley and slope readings a few
+    # lines up, and shadowing them here cost 91 broken tests.
+    worst = raw_anomaly - INVERSION_BIAS_RANGE
+    best = raw_anomaly + INVERSION_BIAS_RANGE
+    if (greek.inversion_level(worst) or (None,))[0] != \
+            (greek.inversion_level(best) or (None,))[0]:
         confident = False
+        key, label, colour = greek.UNCERTAIN_INVERSION
         key, label, colour = greek.UNCERTAIN_INVERSION
 
     valley_temp = sum(low[m] for m in shared) / len(shared)
