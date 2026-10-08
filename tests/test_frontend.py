@@ -250,6 +250,38 @@ class ClientTests(unittest.TestCase):
         self.assertIn("try {", read)
         self.assertIn("catch", read)
 
+
+    def test_a_weather_change_crossfades_the_backdrop(self):
+        """Gradients do not interpolate, so the sky used to snap from clear to
+        rain. Verified in a browser: no transition on the first paint, exactly
+        one when the weather changes."""
+        css = read("style.css")
+        self.assertIn("document.startViewTransition", self.js)
+        self.assertIn("view-transition-name: backdrop", css)
+        # The root snapshot must not fade: the numbers would go with it.
+        self.assertIn("::view-transition-old(root)", css)
+        root_block = css[css.index("::view-transition-old(root)"):]
+        self.assertIn("animation: none", root_block[:160])
+
+    def test_the_first_paint_does_not_crossfade(self):
+        """A transition on the first application would fade the whole page in
+        on every load, which is not a weather change."""
+        self.assertIn("var first = !state.weatherTheme", self.js)
+        self.assertIn("var changed = state.weatherTheme &&", self.js)
+        self.assertIn("!first && changed", self.js)
+
+    def test_reduced_motion_suppresses_the_crossfade(self):
+        """View transition pseudo-elements are not elements, so the global
+        reduce block reaches none of them. Verified: 0 transitions on a change
+        when the preference is set."""
+        self.assertIn("function prefersReducedMotion()", self.js)
+        self.assertIn("prefers-reduced-motion: reduce", self.js)
+        css = read("style.css")
+        reduce_blocks = re.findall(
+            r"@media \(prefers-reduced-motion: reduce\) \{(.*?)\n\}", css, re.S)
+        combined = "\n".join(reduce_blocks)
+        self.assertIn("::view-transition-old(backdrop)", combined)
+
 class ThemeBootstrapTests(unittest.TestCase):
 
     def setUp(self):

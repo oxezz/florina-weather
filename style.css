@@ -198,6 +198,24 @@ body.wrap { max-width: 1180px; margin: 0 auto; }
     linear-gradient(158deg, var(--b1) 0%, var(--b2) 48%, var(--b3) 100%);
   /* Promote it once; it then never repaints while the page scrolls. */
   transform: translateZ(0);
+  /* Named so a view transition can crossfade the sky on its own. The gradient
+     is built from custom properties and gradients do not interpolate, so
+     without this the backdrop snaps from clear to rain. */
+  view-transition-name: backdrop;
+}
+
+/* A weather change crossfades the sky and nothing else. The root snapshot is
+   switched off on purpose: fading every number along with the backdrop reads
+   as a page reload rather than as the weather turning. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-old(backdrop),
+::view-transition-new(backdrop) {
+  animation-duration: .55s;
+  animation-timing-function: var(--ease);
 }
 
 a { color: var(--accent); text-decoration: none; }
@@ -1220,6 +1238,10 @@ section:nth-of-type(n+7) { animation-delay: 180ms; }
   /* The skeletons get their visibility from the pulse animation, so without
      it they would sit at opacity 0 forever. */
   .skel { opacity: .5 !important; }
+  /* View transition pseudo-elements are not elements, so the rule above
+     reaches none of them. The backdrop crossfade needs saying twice. */
+  ::view-transition-old(backdrop),
+  ::view-transition-new(backdrop) { animation: none !important; }
 }
 
 /* ==========================================================================

@@ -16,8 +16,18 @@
     lastGenerated: null,
     error: null,
     signature: null,
-    skeletonsDropped: false
+    skeletonsDropped: false,
+    /* The last weather theme applied, so a change can be told from the first
+       application - only a change should crossfade. */
+    weatherTheme: null
   };
+
+  /* Asked live rather than cached: a reader can change the setting without
+     reloading, and the transition should respect that immediately. */
+  function prefersReducedMotion() {
+    return window.matchMedia
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
 
   function $(id) { return document.getElementById(id); }
 
@@ -156,11 +166,32 @@
   function applyWeatherTheme(current) {
     var root = document.documentElement;
     var next = "theme-" + weatherThemeFor(current);
-    var classes = root.className.split(/\s+/).filter(function (name) {
-      return name && name.indexOf("theme-") !== 0;
-    });
-    classes.push(next);
-    root.className = classes.join(" ");
+
+    /* The backdrop gradient is built from CSS variables, and gradients do not
+       interpolate - so the sky used to snap from clear to rain. A view
+       transition can crossfade it, scoped to the backdrop by name so the
+       numbers underneath do not fade too (see the view-transition rules).
+
+       Not on the first application: that would crossfade the page in on every
+       load, which is not a weather change. Unsupported browsers and
+       reduced-motion just get the class, which is what they had before. */
+    var first = !state.weatherTheme;
+    var changed = state.weatherTheme && state.weatherTheme !== next;
+    state.weatherTheme = next;
+
+    function swap() {
+      var classes = root.className.split(/\s+/).filter(function (name) {
+        return name && name.indexOf("theme-") !== 0;
+      });
+      classes.push(next);
+      root.className = classes.join(" ");
+    }
+
+    if (!first && changed && document.startViewTransition && !prefersReducedMotion()) {
+      document.startViewTransition(swap);
+    } else {
+      swap();
+    }
   }
 
   /* Keep the browser chrome (iOS status bar, Android toolbar) in step. */
