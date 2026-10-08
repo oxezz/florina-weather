@@ -1102,6 +1102,34 @@ footer { margin-top: 28px; font-size: .8rem; color: var(--text-faint); }
 .day-skel { min-height: 259px; border-radius: var(--radius-md); border-color: transparent; }
 
 /* --- motion ------------------------------------------------------------- */
+
+/* Cards arrive instead of appearing.
+
+   No JavaScript: an element going from display:none to rendered restarts its
+   animations, so the rise fires exactly when a panel is unhidden and never
+   again. That also means it does not re-run on the ten-minute refresh, which
+   is the trap with animating anything rebuilt - the hourly tiles and day cards
+   are deliberately left out for that reason.
+
+   The stagger is by document position, not by which panel happens to have data:
+   the seasonal cards unhide in their own time and each should still arrive
+   after the one above it. prefers-reduced-motion already switches all of this
+   off, further down the file. */
+section,
+.ocard,
+.local-card {
+  animation: rise .42s var(--ease) both;
+}
+.ocard { animation-duration: .36s; }
+.ocard:nth-of-type(2) { animation-delay: 40ms; }
+
+section:nth-of-type(2) { animation-delay: 30ms; }
+section:nth-of-type(3) { animation-delay: 60ms; }
+section:nth-of-type(4) { animation-delay: 90ms; }
+section:nth-of-type(5) { animation-delay: 120ms; }
+section:nth-of-type(6) { animation-delay: 150ms; }
+section:nth-of-type(n+7) { animation-delay: 180ms; }
+
 @keyframes rise {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
