@@ -36,15 +36,52 @@
     if (node.textContent !== next) node.textContent = next;
   }
 
+  /* Restarting a CSS animation needs the browser to notice the class leave and
+     come back, and the usual way to force that is to read offsetWidth - which
+     forces a synchronous layout. Doing it once per value meant eighteen
+     reflows in a single render: the browser's own metrics put 352 ms in this
+     function at 6x CPU throttling, and the profile showed almost no script in
+     the long task at all, because the cost was the layout it triggered.
+     Collect the nodes and pay for one reflow instead of eighteen. */
+  var flashQueue = [];
+
+  function flash(node) {
+    flashQueue.push(node);
+  }
+
+  function flushFlash() {
+    var nodes = flashQueue;
+    flashQueue = [];
+    if (!nodes.length) return;
+    var i;
+    for (i = 0; i < nodes.length; i++) nodes[i].classList.remove("flash");
+    /* Two frames rather than a forced reflow. The browser has to notice the
+       class gone before it can see it back, and letting it notice on its own
+       schedule costs nothing and blocks nothing - where reading offsetWidth
+       made the whole page wait for a layout. */
+    requestAnimationFrame(function () {
+      for (var j = 0; j < nodes.length; j++) nodes[j].classList.add("flash");
+    });
+  }
+
   function setBig(id, value) {
     var node = $(id);
     if (!node) return;
     var next = value === null || value === undefined ? "–" : String(value);
     if (node.textContent === next) return;
     node.textContent = next;
-    node.classList.remove("flash");
-    void node.offsetWidth; /* restart the animation */
-    node.classList.add("flash");
+    flash(node);
+  }
+
+  /* The hero's temperature is the one value big enough to flash on its own,
+     and it used to carry its own copy of the reflow trick. */
+  function setFlashed(id, value) {
+    var node = $(id);
+    if (!node) return;
+    var next = String(value);
+    if (node.textContent === next) return;
+    node.textContent = next;
+    flash(node);
   }
 
   function clear(node) {
@@ -490,16 +527,7 @@
   function renderHero(data) {
     var cur = data.current || {};
     setText($("sym"), cur.emoji || "\u2601\ufe0f");
-    var tempNode = $("temp");
-    if (tempNode) {
-      var next = num(cur.temp, 1);
-      if (tempNode.textContent !== next) {
-        tempNode.textContent = next;
-        tempNode.classList.remove("flash");
-        void tempNode.offsetWidth;
-        tempNode.classList.add("flash");
-      }
-    }
+    setFlashed("temp", num(cur.temp, 1));
     setText($("code"), cur.text || "");
     setText($("summary"), data.summary || "");
 
@@ -777,16 +805,29 @@
   function initHourlyFade() {
     var strip = $("hourly");
     if (!strip) return;
+    var max = 0;
+
+    /* Only scrollLeft changes while scrolling. Reading scrollWidth and
+       clientWidth forces a layout, and the first read after 48 tiles are
+       appended pays for laying all of them out - 492 ms at 6x throttling,
+       which is the single longest task on the page. Defer it to its own frame:
+       the layout the browser was going to do anyway then happens on its own
+       schedule instead of being charged to the render. */
+    function measure() {
+      requestAnimationFrame(function () {
+        max = strip.scrollWidth - strip.clientWidth;
+        update();
+      });
+    }
 
     function update() {
-      var max = strip.scrollWidth - strip.clientWidth;
       strip.classList.toggle("can-left", strip.scrollLeft > 4);
       strip.classList.toggle("can-right", max > 4 && strip.scrollLeft < max - 4);
     }
 
     strip.addEventListener("scroll", update, { passive: true });
-    window.addEventListener("resize", update);
-    state.syncHourlyFade = update;
+    window.addEventListener("resize", measure);
+    state.syncHourlyFade = measure;
   }
 
   /* ---------------------------------------------------------------- daily */
@@ -1066,6 +1107,9 @@
     safely("status", function () { renderStatus(data); });
     safely("title", function () { document.title = "Καιρός · " + data.place; });
     safely("skeletons", dropSkeletons);
+    /* Every changed number was collected on the way through; one reflow for
+       all of them, once the DOM has stopped moving. */
+    safely("flash", flushFlash);
     syncThemeColor();
   }
 

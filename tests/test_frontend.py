@@ -178,6 +178,37 @@ class ClientTests(unittest.TestCase):
         self.assertIn("scrollWidth", self.js)
 
 
+    def test_no_forced_layout_per_value(self):
+        """Reading offsetWidth restarts a CSS animation, and every read forces
+        a synchronous layout. Doing it once per value meant eighteen reflows in
+        one render: the CPU profile put 352 ms in setBig alone at 6x
+        throttling, and the long task contained almost no script, because the
+        cost was the layout it triggered.
+
+        The restart is now two frames, which the browser notices on its own."""
+        # Strip comments first: this very explanation says offsetWidth, and a
+        # test that cannot tell code from prose is not testing anything.
+        code = re.sub(r"/\*.*?\*/", "", self.js, flags=re.S)
+        code = re.sub(r"(?m)^\s*//.*$", "", code)
+        self.assertNotIn("offsetWidth", code)
+        self.assertIn("requestAnimationFrame", code)
+
+    def test_the_flash_is_batched_not_repeated(self):
+        """One queue, one flush, rather than a reflow per changed number."""
+        self.assertIn("function flash(node)", self.js)
+        self.assertIn("function flushFlash()", self.js)
+        self.assertEqual(self.js.count("flushFlash"), 2)   # definition + one call
+        self.assertIn("safely(\"flash\", flushFlash)", self.js)
+
+    def test_the_hourly_strip_does_not_measure_while_scrolling(self):
+        """scrollWidth and clientWidth force layout. The scroll handler must
+        only read scrollLeft; measuring happens on resize and after a rebuild,
+        and in its own frame, because the first read after 48 tiles are
+        appended pays for laying all of them out."""
+        self.assertIn("function measure()", self.js)
+        self.assertIn('addEventListener("scroll", update, { passive: true })', self.js)
+        self.assertIn('addEventListener("resize", measure)', self.js)
+
 class ThemeBootstrapTests(unittest.TestCase):
 
     def setUp(self):
@@ -770,6 +801,7 @@ class StylesheetTests(unittest.TestCase):
         for token in ("--text", "--glass-bg", "--glass-border", "--rim-top", "--shadow"):
             self.assertIn(token, light, "%s not overridden for light mode" % token)
             self.assertIn(token, dark, "%s missing from the dark defaults" % token)
+
 
 
 if __name__ == "__main__":
