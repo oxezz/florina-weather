@@ -568,6 +568,52 @@ a:hover { text-decoration: underline; }
 /* The scale lives on the icon, not the button. The button carries a
    backdrop-filter, so transforming it re-rasterises the blur on every frame;
    the icon has no blur, so this keeps the press affordance for free. */
+/* The radar scrubber. Native range styling is wildly inconsistent between
+   engines, so both the WebKit and the Gecko pseudo-elements are set and the
+   control is drawn from scratch. */
+.radar-scrub {
+  display: block;
+  width: 100%;
+  height: 22px;
+  margin-top: 10px;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  cursor: pointer;
+}
+.radar-scrub::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--track);
+}
+.radar-scrub::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--track);
+}
+.radar-scrub::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.radar-scrub::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.radar-scrub:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
 .radar-play:hover svg { transform: scale(1.06); }
 .radar-play:active svg { transform: scale(0.96); }
 .radar-play svg { transition: transform .18s var(--ease); }

@@ -29,6 +29,7 @@
   var timeEl = document.getElementById("radar-time");
   var noteEl = document.getElementById("radar-note");
   var playBtn = document.getElementById("radar-play");
+  var scrub = document.getElementById("radar-scrub");
 
   var SIZE = 320;                      /* logical px */
   var REFRESH_MS = 600000;             /* matches the server's 10-minute step */
@@ -95,6 +96,11 @@
         canvas.hidden = playBtn.hidden = !wet;
         timeEl.hidden = !wet;
         noteEl.textContent = wet ? "" : "Δεν εντοπίζεται βροχή σε ακτίνα " + json.km + " χλμ.";
+        if (scrub) {
+          /* One frame is not a timeline, and neither is a dry hour. */
+          scrub.hidden = !wet || frames.length < 2;
+          scrub.max = String(Math.max(0, frames.length - 1));
+        }
         if (wet) { current = frames.length - 1; draw(); play(!reduceMotion); }
         else { stop(); }
         /* Redraw when the outlines land, so a dry card still has context. */
@@ -195,6 +201,8 @@
     ctx.fillText(PLACE, SIZE / 2 + 7, SIZE / 2 + 4);
 
     timeEl.textContent = clock.format(new Date(data.t[current] * 1000));
+    /* Keep the handle with the playhead; tick() calls this too. */
+    if (scrub && !scrub.hidden) scrub.value = String(current);
   }
 
   /* ---- loop ------------------------------------------------------------ */
@@ -219,6 +227,18 @@
     if (want && current === frames.length - 1) current = -1;
     play(want);
   });
+
+  if (scrub) {
+    scrub.addEventListener("input", function () {
+      /* Dragging pauses playback: a scrub is an explicit take-control, and a
+         playhead advancing under the pointer would fight it. play(false) also
+         clears the stored intent, so the loop does not silently restart when
+         the card scrolls back into view. */
+      play(false);
+      current = Number(scrub.value) || 0;
+      draw();
+    });
+  }
 
   /* ---- lifecycle: only work while the card is on screen ----------------- */
 
