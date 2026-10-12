@@ -461,6 +461,44 @@ class ClientTests(unittest.TestCase):
             self.assertTrue("inset: 0" in block or "border-radius" in block,
                             "unclipped decoration: " + block[:60])
 
+
+    def test_the_readers_choice_beats_the_visual_system_preferences(self):
+        """Reported from a real Chrome: the effects switch did almost nothing,
+        while Firefox was fine.
+
+        Cause: prefers-reduced-transparency is Chromium-only, and the block
+        that honours it used !important and sat after the fx rules, so fx-full
+        could never bring the blur back. Verified in a browser - with the
+        preference set to reduce, fx-full now yields blur(16px) saturate(1.6)
+        where before it yielded none."""
+        css = read("style.css")
+        block = css[css.index("@media (prefers-reduced-transparency: reduce)"):]
+        block = block[:block.index("\n}")]
+        self.assertIn("html:not(.fx-full)", block)
+        motion = css[css.index("@media (prefers-reduced-motion: reduce)"):]
+        motion = motion[:motion.index("\n}")]
+        self.assertIn("html:not(.fx-full)", motion)
+
+    def test_increased_contrast_is_not_overridable(self):
+        """The one exception, and deliberately so. Transparency and motion are
+        preferences about how the page looks; contrast is about being able to
+        read it, and a switch labelled "full effects" must not be able to take
+        that away."""
+        css = read("style.css")
+        block = css[css.index("@media (prefers-contrast: more)"):]
+        block = block[:block.index("\n}")]
+        self.assertNotIn("fx-full", block)
+        self.assertIn("backdrop-filter: none !important", block)
+
+    def test_the_default_admits_when_the_system_asks_for_less(self):
+        """Otherwise the label claims "full" on a machine whose operating
+        system has already turned translucency off - which was literally the
+        state of affairs before this: the switch said full and showed none."""
+        theme = read("theme.js")
+        self.assertIn("prefers-reduced-transparency", theme)
+        derived = theme[theme.index("function fxDefault"):theme.index("function fxPreferred")]
+        self.assertIn("fxTransparency.matches", derived)
+
 class ThemeBootstrapTests(unittest.TestCase):
 
     def setUp(self):

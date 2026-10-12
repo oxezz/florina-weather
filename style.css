@@ -1327,7 +1327,13 @@ section:nth-of-type(n+7) { animation-delay: 180ms; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
+  /* :not(.fx-full) so the reader's explicit "full effects" wins. The system
+     setting decides the default - theme.js reads it too - but a deliberate
+     choice outranks a default. Compare the contrast block below, which is
+     about legibility and is deliberately not overridable. */
+  html:not(.fx-full) *,
+  html:not(.fx-full) *::before,
+  html:not(.fx-full) *::after { animation: none !important; transition: none !important; }
   /* The skeletons get their visibility from the pulse animation, so without
      it they would sit at opacity 0 forever. */
   .skel { opacity: .5 !important; }
@@ -1345,26 +1351,35 @@ section:nth-of-type(n+7) { animation-delay: 180ms; }
 /* "Reduce transparency" is a real setting on iOS, macOS and Windows. Without
    this the interface ignored it and kept stacking translucent panels. */
 @media (prefers-reduced-transparency: reduce) {
-  .glass,
-  .hero,
-  .card,
-  .backdrop {
+  /* Overridable, for the same reason. This one is Chromium-only, which is why
+     the effects switch used to appear to do nothing in Chrome and work in
+     Firefox: with the OS setting on, fx-full could not bring the blur back. */
+  html:not(.fx-full) .glass,
+  html:not(.fx-full) .hero,
+  html:not(.fx-full) .card,
+  html:not(.fx-full) .backdrop {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
     background-image: none !important;
   }
   /* Solid enough that text never reads against the weather behind it. */
-  .glass { background-color: var(--b2); }
-  .card { background-color: var(--b2); }
-  .radar-play { background-color: var(--b2); }
-  .backdrop { opacity: .5; }
-  .moon-verdict,
-  .ocard-item { background: var(--b2); }
+  html:not(.fx-full) .glass { background-color: var(--b2); }
+  html:not(.fx-full) .card { background-color: var(--b2); }
+  html:not(.fx-full) .radar-play { background-color: var(--b2); }
+  html:not(.fx-full) .backdrop { opacity: .5; }
+  html:not(.fx-full) .moon-verdict,
+  html:not(.fx-full) .ocard-item { background: var(--b2); }
 }
 
 /* "Increase contrast": firmer edges, no translucency, brighter secondary
    text. Contrast ratios are the reason --text-dim and --text-faint exist, so
-   collapsing them onto --text is the point rather than a shortcut. */
+   collapsing them onto --text is the point rather than a shortcut.
+
+   Deliberately NOT overridable by fx-full. Transparency and motion are
+   preferences about how the page looks; contrast is about being able to read
+   it, and a switch labelled "full effects" should not be able to take that
+   away. */
+
 @media (prefers-contrast: more) {
   :root,
   html.mode-light,

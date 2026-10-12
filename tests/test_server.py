@@ -23,6 +23,7 @@ sys.path.insert(0, HERE)
 
 import app  # noqa: E402
 import fixtures  # noqa: E402
+import greek  # noqa: E402
 import sources  # noqa: E402
 
 
@@ -64,7 +65,14 @@ def recording_opener(counter):
             counter["terrain"] = counter.get("terrain", 0) + 1
             return fixtures.dumps(fixtures.terrain())
         counter["forecast"] = counter.get("forecast", 0) + 1
-        return fixtures.dumps(fixtures.forecast())
+        # Anchored to the real clock, like the alerts above. The fixture is
+        # otherwise absolute-dated, and this opener feeds the live HTTP server,
+        # so the 48-hour window silently runs off the end of the data and the
+        # assertion starts failing on a date. Midnight today guarantees a full
+        # window in front of "now" whatever hour the suite runs at.
+        today = datetime.datetime.now().replace(
+            hour=0, minute=0, second=0, microsecond=0)
+        return fixtures.dumps(fixtures.forecast(start=today))
     return opener
 
 
@@ -149,7 +157,12 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertTrue(headers["Content-Type"].startswith("application/json"))
             self.assertEqual(data["place"], "Φλώρινα")
-            self.assertEqual(data["current"]["text"], "Καθαρός")
+            # Derived rather than literal. The hourly series is clear except
+            # 10:00-14:00, which made a hardcoded string a trap waiting for a
+            # future edit; current.text comes from the fixture's own current
+            # block, which does not vary with the hour.
+            expected = greek.describe(fixtures.forecast()["current"]["weather_code"])
+            self.assertEqual(data["current"]["text"], expected)
             self.assertEqual(len(data["hourly"]), 48)
             self.assertEqual(len(data["daily"]), 7)
             self.assertEqual(len(data["alerts"]), 1)

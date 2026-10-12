@@ -97,6 +97,11 @@
      the full thing anyway", which is the point of it. */
   var FX_KEY = "florina.fx";
   var fxMedia = window.matchMedia("(prefers-reduced-motion: reduce)");
+  /* Chromium-only, and ignored by Firefox. Without it in here the switch would
+     claim "full" on a machine whose operating system had already turned
+     translucency off - and, before the stylesheet change that goes with this,
+     the claim was simply false because nothing could turn the blur back on. */
+  var fxTransparency = window.matchMedia("(prefers-reduced-transparency: reduce)");
   var hoverMedia = window.matchMedia("(hover: hover) and (pointer: fine)");
 
   function fxStored() {
@@ -115,7 +120,7 @@
   }
 
   function fxDefault() {
-    if (fxMedia.matches) return "reduced";
+    if (fxMedia.matches || fxTransparency.matches) return "reduced";
     return hoverMedia.matches ? "full" : "reduced";
   }
 
