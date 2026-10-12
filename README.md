@@ -1,6 +1,6 @@
 # Καιρός · Φλώρινα
 
-[![tests](https://github.com/oxezz/florina-weather/actions/workflows/tests.yml/badge.svg)](https://github.com/oxezz/florina-weather/actions/workflows/tests.yml)
+[![tests](https://github.com/oxezz/florina-weather/actions/workflows/checks.yml/badge.svg?label=tests)](https://github.com/oxezz/florina-weather/actions/workflows/checks.yml)
 
 Μια μικρή σελίδα καιρού για τη **Φλώρινα, Δυτική Μακεδονία**, στα ελληνικά.
 Μόνο η βασική βιβλιοθήκη της Python — χωρίς `pip install`, χωρίς κλειδί API,
@@ -36,7 +36,7 @@ repo.
 σερβίρουν αρχεία, ενώ αυτό είναι server που κατεβάζει και κρατά δεδομένα.
 
 Το CI τρέχει όλα τα tests σε κάθε push, σε Python 3.10, 3.12, 3.13 και 3.14
-([`.github/workflows/tests.yml`](.github/workflows/tests.yml)).
+([`.github/workflows/checks.yml`](.github/workflows/checks.yml)).
 
 ### Πιστοποιητικά TLS
 

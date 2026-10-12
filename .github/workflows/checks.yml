@@ -1,0 +1,168 @@
+# One workflow, three jobs.
+
+# There were three files, none of them named, so the sidebar listed three full
+# paths: ".github/workflows/tests.yml" and so on. The uptime check also fired
+# every six hours - about a hundred and twenty runs a month, all green, all
+# crowding the Actions tab until a real failure was hard to spot.
+#
+# Now there is one entry with a name. The jobs are gated on the event, because
+# merging the triggers means every job would otherwise run on every trigger: a
+# push would re-fetch the CA bundle and a monthly cron would run the suite
+# against an unchanged commit.
+name: Checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * *"        # daily, off the hour: is the site up
+    - cron: "23 4 1 * *"        # the first of the month: refresh the CA bundle
+
+permissions:
+  contents: read
+
+jobs:
+  # ------------------------------------------------------------------ tests
+  tests:
+    name: Tests
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 is the documented floor: 3.9 is end-of-life and gets no further
+        # security fixes. 3.13 is what the host runs; 3.14 is current.
+        python-version: ["3.10", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run the test suite
+        # No install step: the project has no dependencies.
+        run: python -m unittest discover -s tests -t . -v
+
+      - name: Check the modules import cleanly
+        run: python -c "import app, greek, report, sources; print('version', app.__version__)"
+
+  # ----------------------------------------------------------------- uptime
+  # A ping that fails loudly. Wasmer Edge serves the app, and a deploy that
+  # silently breaks TLS or an upstream that starts refusing us looks exactly
+  # like a quiet day from the outside. A red run is the difference.
+  #
+  # Daily rather than every six hours: the extra runs were ninety percent of
+  # this repository's Actions history and none of them ever failed. A day is
+  # soon enough to notice, and the noise was hiding the signal.
+  uptime:
+    name: Uptime
+    if: >-
+      github.event_name == 'schedule' &&
+      github.event.schedule == '17 6 * * *' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check /api/health
+        env:
+          BASE_URL: ${{ vars.FLORINA_BASE_URL || 'https://florina-weather.wasmer.app' }}
+        run: |
+          set -eu
+          body=$(curl -sS --max-time 30 --retry 2 --retry-delay 5 "$BASE_URL/api/health")
+          echo "health: $body"
+          echo "$body" | python3 -c '
+          import json, sys
+          payload = json.load(sys.stdin)
+          if not payload.get("ok"):
+              raise SystemExit("health reported not ok: %r" % payload)
+          tls = payload.get("tls") or "unknown"
+          print("ok, tls trust store:", tls)
+          '
+
+      - name: Check the page itself
+        env:
+          BASE_URL: ${{ vars.FLORINA_BASE_URL || 'https://florina-weather.wasmer.app' }}
+        run: |
+          set -eu
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$BASE_URL/")
+          echo "GET / -> $code"
+          test "$code" = "200"
+
+      - name: Check the API answers with usable data
+        env:
+          BASE_URL: ${{ vars.FLORINA_BASE_URL || 'https://florina-weather.wasmer.app' }}
+        run: |
+          set -eu
+          curl -sS --max-time 45 "$BASE_URL/api/weather" | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          if not data.get("hourly"):
+              raise SystemExit("no hourly data in the payload")
+          degraded = (data.get("status") or {}).get("degraded") or []
+          print("hourly points:", len(data["hourly"]), "| degraded:", degraded or "none")
+          if len(degraded) >= 4:
+              raise SystemExit("too many sources down: %r" % degraded)
+          '
+
+  # ----------------------------------------------------------- certificates
+  # cacert.pem is committed so the app can reach upstream on hosts with no trust
+  # store of their own - Wasmer Edge loaded zero certificates, which broke every
+  # HTTPS call until the bundle was shipped. Roots do expire and new ones appear,
+  # so the copy is re-fetched monthly rather than left to rot.
+  certificates:
+    name: CA bundle
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '23 4 1 * *'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # the only job that pushes
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the current Mozilla bundle
+        run: |
+          set -eu
+          curl -sS --fail --max-time 90 -o cacert.new https://curl.se/ca/cacert.pem
+          test -s cacert.new
+          # Refuse anything that is not plausibly a CA bundle, so a captive
+          # portal or an error page can never be committed as our trust store.
+          count=$(grep -c 'BEGIN CERTIFICATE' cacert.new || true)
+          echo "certificates: $count"
+          test "$count" -gt 100
+          grep -q 'BEGIN CERTIFICATE' cacert.new
+          tail -c 40 cacert.new | grep -q 'END CERTIFICATE'
+
+      - name: Keep it only if it changed
+        id: diff
+        run: |
+          if cmp -s cacert.pem cacert.new; then
+            echo "unchanged since last month"
+            rm cacert.new
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            mv cacert.new cacert.pem
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Confirm the app still starts with the new bundle
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          python3 -c "import sources; print('tls store:', sources.tls_source())"
+
+      - name: Commit
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          set -eu
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cacert.pem
+          # Two -m flags rather than a multi-line string: an unindented
+          # continuation line ends the run block and breaks the whole file.
+          git commit -m "Refresh the bundled CA certificates" \
+                     -m "Fetched from curl.se, which packages Mozilla's trust list. Only a changed bundle is committed, so the monthly run is a no-op otherwise."
+          git push
