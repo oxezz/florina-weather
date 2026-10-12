@@ -282,13 +282,25 @@
     }
   }
 
-  /* Keep the browser chrome (iOS status bar, Android toolbar) in step. */
+  /* Keep the browser chrome (iOS status bar, Android toolbar) in step.
+
+     getComputedStyle().getPropertyValue() forces style resolution - about
+     14 ms per load at 4x CPU throttle - and this used to run on every render
+     for a value decided entirely by the class the code had just set. Cached
+     against that class string: one read per theme change, not per render. */
+  var themeColor = { key: null, value: "" };
+
   function syncThemeColor() {
     var meta = document.querySelector('meta[name="theme-color"]');
     if (!meta) return;
-    var value = getComputedStyle(document.documentElement)
-      .getPropertyValue("--b1").trim();
-    if (value) meta.setAttribute("content", value);
+    var root = document.documentElement;
+    if (themeColor.key !== root.className) {
+      themeColor.key = root.className;
+      themeColor.value = getComputedStyle(root).getPropertyValue("--b1").trim();
+    }
+    if (themeColor.value && meta.getAttribute("content") !== themeColor.value) {
+      meta.setAttribute("content", themeColor.value);
+    }
   }
 
   /* ------------------------------------------------------- appearance UI */

@@ -661,6 +661,27 @@ class ClientTests(unittest.TestCase):
         self.assertIn("applyAnimated(mode);", theme)
         self.assertIn("  apply(preferred());", theme)
 
+
+    def test_the_theme_colour_is_not_re_read_every_render(self):
+        """getComputedStyle().getPropertyValue() forces style resolution, about
+        15 ms per load at 4x CPU throttle, and this ran on every render for a
+        value decided entirely by the class the code had just set.
+
+        Honest limit, measured: the cache does NOT show in a load profile,
+        because during boot the root class genuinely changes more than once -
+        theme.js sets it, then render() applies the weather theme - and each
+        distinct class needs its own read. What it removes is the read from
+        every render after that, which is the ten-minute refresh."""
+        js = re.sub(r"/\*.*?\*/", "", self.js, flags=re.S)
+        block = js[js.index("function syncThemeColor"):]
+        block = block[:block.index("function initModes")]
+        self.assertIn("themeColor.key", block)
+        # The read must sit behind the key check, not before it.
+        self.assertLess(block.index("themeColor.key !=="),
+                        block.index("getPropertyValue"))
+        # And it must not write the attribute when nothing changed.
+        self.assertIn("meta.getAttribute", block)
+
 class ThemeBootstrapTests(unittest.TestCase):
 
     def setUp(self):
