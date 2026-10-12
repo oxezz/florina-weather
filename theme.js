@@ -61,6 +61,29 @@
     }));
   }
 
+  /* A view transition for the switch, unless the reader asked for less motion.
+
+     Deliberately not used for the first application: that happens before the
+     first paint, so there is nothing to crossfade from and the browser would
+     snapshot a blank page.
+
+     Only when effects are full. Someone who chose "βασικά" has asked for no
+     motion, and a half-second crossfade is motion. */
+  function applyAnimated(mode) {
+    if (!document.startViewTransition || root.classList.contains("fx-reduced")) {
+      apply(mode);
+      return;
+    }
+    /* The stylesheet switches the root view-transition animation off, because
+       the weather crossfade has to fade the backdrop alone and a root fade
+       would take the numbers with it. This class says which case we are in. */
+    root.classList.add("vt-theme");
+    var vt = document.startViewTransition(function () { apply(mode); });
+    var done = function () { root.classList.remove("vt-theme"); };
+    if (vt && vt.finished) vt.finished.then(done, done);
+    else setTimeout(done, 600);
+  }
+
   var api = {
     modes: MODES.slice(),
     get: preferred,
@@ -68,7 +91,7 @@
     set: function (mode) {
       if (MODES.indexOf(mode) < 0) mode = "auto";
       persist(mode);
-      apply(mode);
+      applyAnimated(mode);
       return mode;
     }
   };

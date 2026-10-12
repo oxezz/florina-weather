@@ -599,6 +599,68 @@ class ClientTests(unittest.TestCase):
         block = block[:block.index("}")]
         self.assertIn("transition: transform", block)
 
+
+    def test_no_transform_is_applied_to_a_blurred_element(self):
+        """A transform on an element carrying backdrop-filter forces the blurred
+        backdrop to be re-rasterised for every frame of the transform. On the
+        stats grid that is twenty-odd cards firing as the pointer crosses them.
+
+        Transforms on descendants are fine - the blur belongs to the ancestor
+        and the ancestor's geometry is not what moves - which is why the radar
+        button's press scale lives on its icon."""
+        css = re.sub(r"/\*.*?\*/", "", read("style.css"), flags=re.S)
+        # Elements the sheet ever gives a backdrop-filter to.
+        blurred = set()
+        for m in re.finditer(r"([^{}]+)\{([^}]*backdrop-filter[^}]*)\}", css):
+            for sel in m.group(1).split(","):
+                sel = sel.strip().split()[-1] if sel.strip() else ""
+                if sel and "fx-" not in sel and sel.startswith((".", "#")):
+                    blurred.add(sel)
+        for m in re.finditer(r"([^{}]+)\{([^}]*transform:[^}]*)\}", css):
+            for sel in m.group(1).split(","):
+                sel = sel.strip()
+                # .backdrop is exempt: translateZ(0) there is a deliberate
+                # promotion so it never repaints while the page scrolls, it
+                # never actually carries a blur, and it is a sibling of the
+                # cards rather than an ancestor of them.
+                if not sel or ".backdrop" in sel:
+                    continue
+                # Only the subject of the selector matters, and a descendant
+                # combinator means the transform lands on the child.
+                subject = sel.split()[-1]
+                self.assertNotIn(subject, blurred,
+                                 "transform on a blurred element: " + sel)
+
+
+    def test_the_theme_switch_crossfades(self):
+        """The weather backdrop crossfades via a view transition scoped to the
+        backdrop by name, so the numbers underneath do not fade with it. The
+        light/dark switch is a whole-page material change and wants the opposite
+        - a root fade - but the stylesheet switches the root animation off for
+        the backdrop case. A class applied for the duration tells them apart.
+
+        Verified in a browser: one transition fires, the marker class is present
+        during it and gone afterwards, and the mode changes."""
+        theme = read("theme.js")
+        self.assertIn("function applyAnimated(", theme)
+        self.assertIn("startViewTransition", theme)
+        self.assertIn("vt-theme", theme)
+        self.assertIn("vt.finished", theme)
+        css = read("style.css")
+        self.assertIn("html.vt-theme::view-transition-old(root)", css)
+
+    def test_the_switch_does_not_crossfade_when_effects_are_reduced(self):
+        """Someone who chose "βασικά" asked for no motion, and a half-second
+        crossfade is motion. The first application is skipped too - it happens
+        before the first paint, so there is nothing to fade from."""
+        theme = read("theme.js")
+        block = theme[theme.index("function applyAnimated"):]
+        block = block[:block.index("function api") if "function api" in block else len(block)]
+        self.assertIn("fx-reduced", block)
+        # Only api.set animates; the initial apply() does not.
+        self.assertIn("applyAnimated(mode);", theme)
+        self.assertIn("  apply(preferred());", theme)
+
 class ThemeBootstrapTests(unittest.TestCase):
 
     def setUp(self):

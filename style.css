@@ -234,6 +234,16 @@ body.wrap { max-width: 1180px; margin: 0 auto; }
   animation-timing-function: var(--ease);
 }
 
+/* The light/dark switch, which is a whole-page material change: here the root
+   snapshot *should* fade, so theme.js marks the transition for its duration.
+   Higher specificity than the animation: none above, which is what the weather
+   crossfade needs. */
+html.vt-theme::view-transition-old(root),
+html.vt-theme::view-transition-new(root) {
+  animation-duration: .35s;
+  animation-timing-function: var(--ease);
+}
+
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
@@ -555,8 +565,12 @@ a:hover { text-decoration: underline; }
   cursor: pointer;
   transition: transform 120ms ease, background 120ms ease;
 }
-.radar-play:hover { transform: scale(1.06); }
-.radar-play:active { transform: scale(0.96); }
+/* The scale lives on the icon, not the button. The button carries a
+   backdrop-filter, so transforming it re-rasterises the blur on every frame;
+   the icon has no blur, so this keeps the press affordance for free. */
+.radar-play:hover svg { transform: scale(1.06); }
+.radar-play:active svg { transform: scale(0.96); }
+.radar-play svg { transition: transform .18s var(--ease); }
 .radar-play:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 
 /* Blur only where there is a pointer to hover with, as everywhere else. */
@@ -1315,7 +1329,11 @@ html.fx-reduced ::view-transition-new(backdrop) { animation: none !important; }
   .glass:hover { --hl: 1; box-shadow: var(--shadow-lift), inset 0 1px 0 var(--rim-top); }
   .glass:hover::before { opacity: 1; }
 
-  .grid .card:hover { transform: translateY(-3px); background-color: var(--glass-bg-hover); }
+  .grid .card:hover { background-color: var(--glass-bg-hover); }
+/* No transform here on purpose: these cards carry backdrop-filter, and
+   transforming one forces its blurred backdrop to be re-rasterised.
+   Twenty of them fire as the pointer crosses the grid. The fill change
+   above is what signals the hover. */
   .h:hover { background: var(--glass-inner-hover); transform: translateY(-2px); }
   .day:hover { background: var(--glass-inner-hover); transform: translateY(-2px); }
   .refresh:hover { background: var(--glass-inner-hover); }
