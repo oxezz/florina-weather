@@ -793,6 +793,20 @@ a:hover { text-decoration: underline; }
 .big small { font-size: .85rem; font-weight: 400; color: var(--text-dim); }
 .sub { display: block; margin-top: 5px; font-size: .76rem; color: var(--text-faint); }
 
+/* The wind arrow, pointing where the wind blows towards. Drawn pointing up, so
+   a bearing of 0 rotates it 180 degrees. The rotation is animated and the
+   client always takes the short way round, or a veer from 350 to 10 would spin
+   it almost the whole circle. */
+.wind-arrow {
+  width: .78em;
+  height: .78em;
+  margin-right: .32em;
+  vertical-align: -.05em;
+  fill: currentColor;
+  transition: transform .6s var(--ease);
+  transform-origin: 50% 50%;
+}
+
 /* --- panel -------------------------------------------------------------- */
 .panel { padding: 22px 24px 24px; margin-bottom: 20px; }
 .panel-head {

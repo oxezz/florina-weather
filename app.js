@@ -19,7 +19,10 @@
     skeletonsDropped: false,
     /* The last weather theme applied, so a change can be told from the first
        application - only a change should crossfade. */
-    weatherTheme: null
+    weatherTheme: null,
+    /* The wind arrow's current rotation, accumulated rather than set outright,
+       so a veer across north turns the short way instead of unwinding. */
+    windAngle: null
   };
 
   /* Asked live rather than cached: a reader can change the setting without
@@ -207,6 +210,45 @@
     root.style.setProperty("--sun-y", (34 - height * 30).toFixed(1) + "%");
     /* Warmest at the edges of the day, neutral overhead. */
     root.style.setProperty("--sun-warmth", ((1 - height) * 0.55).toFixed(3));
+  }
+
+  /* Point the arrow where the wind is going.
+
+     greek.wind_arrow gives an eight-way glyph, so a north-north-east wind and a
+     north one drew identically. The payload has the exact bearing, so use it.
+
+     The rotation accumulates into a running total rather than being set from
+     the bearing directly. Setting it outright makes the CSS transition travel
+     the long way whenever the wind crosses north - 350 to 10 would unwind 340
+     degrees - so each step is clamped to +/-180 and added to where the arrow
+     already is. */
+  function setWindArrow(bearing) {
+    var arrow = $("s-wind-arrow");
+    if (!arrow) return;
+    if (bearing === null || bearing === undefined) {
+      arrow.style.visibility = "hidden";
+      return;
+    }
+    arrow.style.visibility = "";
+    var target = (Number(bearing) + 180) % 360;
+    if (target < 0) target += 360;
+
+    if (state.windAngle === null) {
+      /* First paint: place it without a transition, or it spins in from zero.
+         Two rAFs would be the usual way to do that, but they are throttled
+         when nothing is being painted - which is exactly when this runs - so
+         the transition can be left switched off for good. A timeout is not
+         throttled. */
+      state.windAngle = target;
+      arrow.style.transition = "none";
+      arrow.style.transform = "rotate(" + target + "deg)";
+      setTimeout(function () { arrow.style.transition = ""; }, 0);
+      return;
+    }
+
+    var delta = ((target - state.windAngle + 540) % 360) - 180;
+    state.windAngle += delta;
+    arrow.style.transform = "rotate(" + state.windAngle + "deg)";
   }
 
   function applyWeatherTheme(current) {
@@ -636,8 +678,9 @@
     setBig("s-apparent", num(cur.apparent, 1) + "°");
     setBig("s-humidity", num(cur.humidity) + "%");
     setBig("s-wind", num(cur.wind, 1));
-    setText($("s-wind-sub"),
-      (cur.wind_dir_text ? cur.wind_dir_text + " " + (cur.wind_arrow || "") + " · " : "") +
+    setWindArrow(cur.wind_dir);
+    setText($("s-wind-label"),
+      (cur.wind_dir_text ? cur.wind_dir_text + " · " : "") +
       cur.beaufort + " Μπφ (" + cur.beaufort_text + ")");
 
     setBig("s-gusts", num(cur.gusts, 1));

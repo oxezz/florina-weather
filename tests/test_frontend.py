@@ -560,6 +560,45 @@ class ClientTests(unittest.TestCase):
         spin = spin[:spin.index("}")]
         self.assertIn("transform", spin)
 
+
+    def test_the_wind_arrow_uses_the_exact_bearing(self):
+        """greek.wind_arrow gives an eight-way glyph, so a north-north-east wind
+        and a north one drew identically. The payload carries the exact bearing,
+        so the arrow is an SVG rotated from it.
+
+        Points where the wind blows *towards*, matching the glyph it replaced
+        and the convention the report documents: bearing + 180."""
+        self.assertIn('id="s-wind-arrow"', read("template.html"))
+        self.assertIn("function setWindArrow(", self.js)
+        block = self.js[self.js.index("function setWindArrow"):]
+        block = block[:block.index("function applyWeatherTheme")]
+        self.assertIn("+ 180", block)
+        self.assertIn("cur.wind_dir", self.js)
+        # The glyph must be gone from the sub-line it used to fill. Comments
+        # are stripped first: the helper's own docstring names it.
+        code = re.sub(r"/\\*.*?\\*/", "", self.js, flags=re.S)
+        self.assertNotIn("wind_arrow", code)
+
+    def test_the_arrow_takes_the_short_way_round(self):
+        """Setting the rotation from the bearing outright makes the transition
+        unwind the long way whenever the wind crosses north - 350 to 10 would
+        travel 340 degrees. The rotation accumulates, and each step is clamped
+        to +/-180 first."""
+        block = self.js[self.js.index("function setWindArrow"):]
+        block = block[:block.index("function applyWeatherTheme")]
+        self.assertIn("windAngle", block)
+        self.assertIn("540", block)   # the ((-d + 540) % 360) - 180 idiom
+        self.assertIn("state.windAngle +=", block)
+
+    def test_the_arrow_can_animate_but_respects_the_switch(self):
+        """The transition lives in CSS, so html.fx-reduced turns it off with
+        everything else - which is why a first paint under reduced effects
+        shows transition: none, and that is correct rather than broken."""
+        css = read("style.css")
+        block = css[css.index(".wind-arrow {"):]
+        block = block[:block.index("}")]
+        self.assertIn("transition: transform", block)
+
 class ThemeBootstrapTests(unittest.TestCase):
 
     def setUp(self):
