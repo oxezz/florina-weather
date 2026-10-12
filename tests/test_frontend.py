@@ -522,6 +522,31 @@ class ClientTests(unittest.TestCase):
         self.assertNotIn("transform", block)
         self.assertIn("opacity", block)
 
+    def test_containers_are_not_animated(self):
+        """The rule the stats row was failing.
+
+        A live animation with fill-mode `both` keeps a compositing layer on the
+        element, and a layer acts as a backdrop root. Glass on that element
+        still works - an element's own paint is not cut off from its own
+        backdrop, which is why the hero and the panels always responded. Glass
+        on its children does not, and the stats row is the one place glass sits
+        on children of a plain <section>.
+
+        Measured on that row before and after: 16.27% of pixels changed between
+        effects reduced and full, then 94.90%, against the hero's 97.13%.
+
+        Only the two self-contained cards below may animate; neither holds glass
+        of its own."""
+        css = re.sub(r"/\*.*?\*/", "", read("style.css"), flags=re.S)
+        self.assertNotIn("section:nth-of-type", css)
+        at = css.index("animation: rise .42s")
+        # The selector list is whatever directly precedes the declaration; with
+        # comments stripped there is nothing else between them.
+        selectors = css[max(0, at - 120):at]
+        self.assertNotIn("section", selectors)
+        self.assertIn(".ocard", selectors)
+        self.assertIn(".local-card", selectors)
+
     def test_nothing_else_parks_a_transform_on_a_container(self):
         """The same trap in another keyframe would be just as invisible. spin
         is fine - it runs on an icon inside a button and is infinite, so it
