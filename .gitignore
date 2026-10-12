@@ -11,6 +11,11 @@ venv/
 /_*.mjs
 /_*.log
 /_*.json
+# Screenshots and captures from the verification harness. Missing these is how
+# a folder of PNGs ends up in a commit: they were staged by a plain `git add -A`
+# the first time the harness wrote images after this list was written.
+/_*.png
+/_*.jpg
 
 # Runtime state, if a deployment points the alert webhook at a file.
 _florina_state*.json

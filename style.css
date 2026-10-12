@@ -1214,11 +1214,11 @@ html.fx-reduced ::view-transition-new(backdrop) { animation: none !important; }
 
 /* --- motion ------------------------------------------------------------- */
 
-/* Cards arrive instead of appearing.
+/* Cards fade in instead of appearing.
 
    No JavaScript: an element going from display:none to rendered restarts its
-   animations, so the rise fires exactly when a panel is unhidden and never
-   again. That also means it does not re-run on the ten-minute refresh, which
+   animations, so the fade fires exactly when a panel is unhidden and never
+   again. It is a fade and not a slide because of the backdrop root above. That also means it does not re-run on the ten-minute refresh, which
    is the trap with animating anything rebuilt - the hourly tiles and day cards
    are deliberately left out for that reason.
 
@@ -1242,8 +1242,31 @@ section:nth-of-type(6) { animation-delay: 150ms; }
 section:nth-of-type(n+7) { animation-delay: 180ms; }
 
 @keyframes rise {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
+  /* Opacity only - no transform, and that is not a stylistic choice.
+
+     `both` keeps the final keyframe applied for the life of the page, so an
+     animated transform persists as an identity matrix. A transform on an
+     ancestor makes that ancestor a backdrop root: the boundary past which
+     backdrop-filter cannot sample. Every <section> was therefore cutting the
+     glass cards inside it off from the sky behind them, which is why the stats
+     row - the one <section> holding glass cards as children - was the single
+     thing that did not respond to the effects switch, on Chromium.
+
+     A blur over a locally smooth gradient is close to a no-op, so this was
+     measured rather than reasoned about. Same card, same position, only the
+     containment differs:
+
+       a glass card on the body              97.92% of pixels changed
+       the real stats row, inside <section>  16.27%, max channel delta 15
+
+     The hero was never affected because its blur lives on the transformed
+     element itself, and an element's own transform does not cut it off from
+     its own backdrop.
+
+     Ending on `transform: none` does not help - the animation still resolves
+     to an identity matrix - so the transform is gone from the keyframes. */
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse {

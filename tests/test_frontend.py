@@ -499,6 +499,42 @@ class ClientTests(unittest.TestCase):
         derived = theme[theme.index("function fxDefault"):theme.index("function fxPreferred")]
         self.assertIn("fxTransparency.matches", derived)
 
+
+    def test_the_arrival_animation_does_not_animate_transform(self):
+        """A transform on an ancestor makes that ancestor a backdrop root - the
+        boundary past which backdrop-filter cannot sample. animation-fill-mode
+        `both` keeps the final keyframe applied for the life of the page, so an
+        animated transform persists as an identity matrix and keeps cutting the
+        cards off.
+
+        Measured: the stats row, the one <section> holding glass cards as
+        children, was the only part of the page that did not respond to the
+        effects switch. The hero was never affected because its blur sits on
+        the transformed element itself, and an element's own transform does not
+        cut it off from its own backdrop.
+
+        Ending on `transform: none` does not help - the animation still
+        resolves to an identity matrix - so the transform must not be in the
+        keyframes at all."""
+        css = re.sub(r"/\*.*?\*/", "", read("style.css"), flags=re.S)
+        block = css[css.index("@keyframes rise"):]
+        block = block[:block.index("}")]
+        self.assertNotIn("transform", block)
+        self.assertIn("opacity", block)
+
+    def test_nothing_else_parks_a_transform_on_a_container(self):
+        """The same trap in another keyframe would be just as invisible. spin
+        is fine - it runs on an icon inside a button and is infinite, so it
+        never leaves a frozen identity transform on a container."""
+        css = re.sub(r"/\*.*?\*/", "", read("style.css"), flags=re.S)
+        block = css[css.index("@keyframes rise"):]
+        block = block[:block.index("}")]
+        self.assertNotIn("transform", block)
+        # spin is allowed to: it is infinite and never freezes.
+        spin = css[css.index("@keyframes spin"):]
+        spin = spin[:spin.index("}")]
+        self.assertIn("transform", spin)
+
 class ThemeBootstrapTests(unittest.TestCase):
 
     def setUp(self):
