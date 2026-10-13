@@ -1241,13 +1241,21 @@ class StylesheetTests(unittest.TestCase):
         self.assertNotIn("body.theme-", self.css)
         self.assertIn("html.theme-clear-day", self.css)
 
-    def test_root_canvas_keeps_the_weather_gradient_for_mobile_overscroll(self):
-        root = re.search(r"(?m)^html\s*\{([^}]*)\}", self.css)
-        self.assertIsNotNone(root)
-        self.assertIn(
-            "background: linear-gradient(158deg, var(--b1) 0%, var(--b2) 48%, var(--b3) 100%);",
-            root.group(1),
-        )
+    def test_root_canvas_paints_the_same_sky_as_the_backdrop(self):
+        """If Chrome Android fails to draw part of the fixed backdrop during
+        fast scrolling, the canvas behind it must look identical."""
+        shared = re.search(r"(?m)^html,\s*\n\.backdrop\s*\{([^}]*)\}", self.css)
+        self.assertIsNotNone(shared)
+        self.assertIn("background-image:", shared.group(1))
+        self.assertNotIn("transform", shared.group(1))
+        self.assertNotIn("view-transition-name", shared.group(1))
+        root = re.search(r"(?m)^html\s*\{([^}]*)\}", self.css).group(1)
+        self.assertIn("background-attachment: fixed", root)
+
+    def test_backdrop_outgrows_the_viewport_for_mobile_url_bar_resize(self):
+        block = re.search(r"(?m)^\.backdrop\s*\{([^}]*)\}", self.css).group(1)
+        self.assertIn("calc(100lvh + 160px)", block)
+        self.assertNotIn("inset: 0", block)
 
     def test_backdrop_outgrows_the_viewport_for_mobile_url_bar_resize(self):
         block = re.search(r"(?m)^\.backdrop\s*\{([^}]*)\}", self.css).group(1)
