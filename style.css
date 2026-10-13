@@ -174,10 +174,15 @@ html.mode-light.theme-fog         { --g1: #b6bfc6; --g2: #c4ccd2; --b1: #f3f5f6;
    right base colour, and it is what the browser uses for the canvas and the
    overscroll area. */
 html {
-  /* Keep the weather palette visible if mobile overscroll briefly exposes
-     the root canvas instead of the fixed .backdrop layer. */
-  background: linear-gradient(158deg, var(--b1) 0%, var(--b2) 48%, var(--b3) 100%);
   scrollbar-color: var(--track) transparent;
+  /* The canvas paints the same sky as .backdrop, pinned to the viewport.
+     Android Chrome sometimes fails to draw part of the fixed .backdrop layer
+     while the URL bar moves during fast scrolling; whatever is behind it then
+     shows through. When that was a different gradient it read as a stray band
+     across the page. Now the canvas is identical, so a missed region is
+     invisible. The root canvas is the one surface the compositor never leaves
+     undrawn. */
+  background-attachment: fixed;
 }
 
 body {
@@ -207,6 +212,12 @@ body.wrap { max-width: 1180px; margin: 0 auto; }
   height: calc(100lvh + 160px);
   z-index: -1;
   pointer-events: none;
+}
+
+/* The sky itself, shared by the fixed layer and the root canvas so the two can
+   never disagree. */
+html,
+.backdrop {
   background-color: var(--b1);
   background-image:
     /* A glow that follows the sun. Driven by three custom properties the page
@@ -221,6 +232,9 @@ body.wrap { max-width: 1180px; margin: 0 auto; }
     radial-gradient(1200px 820px at 12% 6%, var(--g1) 0%, transparent 55%),
     radial-gradient(1000px 900px at 88% 16%, var(--g2) 0%, transparent 60%),
     linear-gradient(158deg, var(--b1) 0%, var(--b2) 48%, var(--b3) 100%);
+}
+
+.backdrop {
   /* Promote it once; it then never repaints while the page scrolls. */
   transform: translateZ(0);
   /* Named so a view transition can crossfade the sky on its own. The gradient
@@ -1464,6 +1478,7 @@ html.fx-reduced ::view-transition-new(backdrop) { animation: none !important; }
   /* Overridable, for the same reason. This one is Chromium-only, which is why
      the effects switch used to appear to do nothing in Chrome and work in
      Firefox: with the OS setting on, fx-full could not bring the blur back. */
+  html:not(.fx-full),
   html:not(.fx-full) .glass,
   html:not(.fx-full) .hero,
   html:not(.fx-full) .card,
@@ -1499,6 +1514,7 @@ html.fx-reduced ::view-transition-new(backdrop) { animation: none !important; }
     --glass-border-soft: var(--glass-border);
     --glass-inner: var(--b2);
   }
+  html,
   .glass,
   .card,
   .backdrop {
