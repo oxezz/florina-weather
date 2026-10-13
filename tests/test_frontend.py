@@ -1254,6 +1254,16 @@ class StylesheetTests(unittest.TestCase):
         self.assertNotIn("body.theme-", self.css)
         self.assertIn("html.theme-clear-day", self.css)
 
+    def test_backdrop_fallback_colour_matches_the_gradient_bottom(self):
+        """Chrome fills not-yet-drawn tiles of the fixed layer with its own
+        background-color. Verified from a screen recording: the dark strip was
+        exactly --b1, the darkest stop. The fallback must sit near the bottom
+        of the gradient instead."""
+        css = re.sub(r"/\*.*?\*/", "", read("style.css"), flags=re.S)
+        block = re.search(r"(?m)^\.backdrop\s*\{([^}]*)\}", css).group(1)
+        self.assertNotIn("background-color: var(--b1)", block)
+        self.assertIn("color-mix(in srgb, var(--b2) 40%, var(--b3))", block)
+
     def test_light_and_dark_materials_are_both_defined(self):
         self.assertIn("html.mode-light", self.css)
         self.assertIn("--glass-bg", self.css)
