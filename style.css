@@ -198,7 +198,12 @@ body.wrap { max-width: 1180px; margin: 0 auto; }
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-color: var(--b1);
+  /* Chrome tiles this layer. When the toolbar hides, the layer grows and the
+     new strip is filled with this colour until the gradient is drawn there,
+     which a fast scroll can delay by a second or more. So it has to match the
+     bottom of the gradient (between --b2 and --b3), not the darkest stop. */
+  background-color: var(--b2);
+  background-color: color-mix(in srgb, var(--b2) 40%, var(--b3));
   background-image:
     /* A glow that follows the sun. Driven by three custom properties the page
        sets from the Florina clock and the day's sunrise and sunset, so dawn,
