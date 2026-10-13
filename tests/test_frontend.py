@@ -1249,6 +1249,11 @@ class StylesheetTests(unittest.TestCase):
             root.group(1),
         )
 
+    def test_backdrop_outgrows_the_viewport_for_mobile_url_bar_resize(self):
+        block = re.search(r"(?m)^\.backdrop\s*\{([^}]*)\}", self.css).group(1)
+        self.assertIn("calc(100lvh + 160px)", block)
+        self.assertNotIn("inset: 0", block)
+
     def test_light_and_dark_materials_are_both_defined(self):
         self.assertIn("html.mode-light", self.css)
         self.assertIn("--glass-bg", self.css)

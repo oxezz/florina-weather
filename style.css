@@ -197,7 +197,14 @@ body.wrap { max-width: 1180px; margin: 0 auto; }
 /* One fixed layer instead of background-attachment: fixed. */
 .backdrop {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* On Android Chrome the URL bar collapses mid-scroll and a fixed layer sized
+     to the visible viewport lags a frame behind, exposing the bare canvas at
+     the bottom. Sizing to the large viewport plus a margin keeps it covered. */
+  height: calc(100vh + 160px);
+  height: calc(100lvh + 160px);
   z-index: -1;
   pointer-events: none;
   background-color: var(--b1);
