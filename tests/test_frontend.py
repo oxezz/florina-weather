@@ -1241,6 +1241,14 @@ class StylesheetTests(unittest.TestCase):
         self.assertNotIn("body.theme-", self.css)
         self.assertIn("html.theme-clear-day", self.css)
 
+    def test_root_canvas_keeps_the_weather_gradient_for_mobile_overscroll(self):
+        root = re.search(r"(?m)^html\s*\{([^}]*)\}", self.css)
+        self.assertIsNotNone(root)
+        self.assertIn(
+            "background: linear-gradient(158deg, var(--b1) 0%, var(--b2) 48%, var(--b3) 100%);",
+            root.group(1),
+        )
+
     def test_light_and_dark_materials_are_both_defined(self):
         self.assertIn("html.mode-light", self.css)
         self.assertIn("--glass-bg", self.css)

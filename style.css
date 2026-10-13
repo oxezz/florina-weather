@@ -174,7 +174,9 @@ html.mode-light.theme-fog         { --g1: #b6bfc6; --g2: #c4ccd2; --b1: #f3f5f6;
    right base colour, and it is what the browser uses for the canvas and the
    overscroll area. */
 html {
-  background: var(--b1);
+  /* Keep the weather palette visible if mobile overscroll briefly exposes
+     the root canvas instead of the fixed .backdrop layer. */
+  background: linear-gradient(158deg, var(--b1) 0%, var(--b2) 48%, var(--b3) 100%);
   scrollbar-color: var(--track) transparent;
 }
 
