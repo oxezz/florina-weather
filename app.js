@@ -276,7 +276,11 @@
     }
 
     if (!first && changed && document.startViewTransition && !prefersReducedMotion()) {
-      document.startViewTransition(swap);
+      root.classList.add("vt-sky");
+      var vt = document.startViewTransition(swap);
+      var release = function () { root.classList.remove("vt-sky"); };
+      if (vt && vt.finished) vt.finished.then(release, release);
+      else setTimeout(release, 700);
     } else {
       swap();
     }

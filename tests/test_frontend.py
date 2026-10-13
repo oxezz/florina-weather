@@ -258,7 +258,20 @@ class ClientTests(unittest.TestCase):
         css = read("style.css")
         self.assertIn("document.startViewTransition", self.js)
         self.assertIn("view-transition-name: backdrop", css)
-        # The root snapshot must not fade: the numbers would go with it.
+
+    def test_backdrop_is_only_a_transition_target_while_one_runs(self):
+        """A permanent view-transition-name makes the fixed backdrop an isolated
+        render surface, which drops regions of itself on Android Chrome during
+        fast scrolling. The name must be scoped to .vt-sky, which the scripts
+        hold only for the duration of a transition."""
+        css = re.sub(r"/\*.*?\*/", "", read("style.css"), flags=re.S)
+        block = re.search(r"(?m)^\.backdrop\s*\{([^}]*)\}", css).group(1)
+        self.assertNotIn("view-transition-name", block)
+        self.assertRegex(css, r"html\.vt-sky \.backdrop\s*\{\s*view-transition-name: backdrop;")
+        self.assertIn('classList.add("vt-sky")', self.js)
+        self.assertIn('classList.remove("vt-sky")', self.js)
+        theme = read("theme.js")
+        self.assertIn('"vt-theme", "vt-sky"', theme)        # The root snapshot must not fade: the numbers would go with it.
         self.assertIn("::view-transition-old(root)", css)
         root_block = css[css.index("::view-transition-old(root)"):]
         self.assertIn("animation: none", root_block[:160])
@@ -1240,27 +1253,6 @@ class StylesheetTests(unittest.TestCase):
         fallback colour for one frame."""
         self.assertNotIn("body.theme-", self.css)
         self.assertIn("html.theme-clear-day", self.css)
-
-    def test_root_canvas_paints_the_same_sky_as_the_backdrop(self):
-        """If Chrome Android fails to draw part of the fixed backdrop during
-        fast scrolling, the canvas behind it must look identical."""
-        shared = re.search(r"(?m)^html,\s*\n\.backdrop\s*\{([^}]*)\}", self.css)
-        self.assertIsNotNone(shared)
-        self.assertIn("background-image:", shared.group(1))
-        self.assertNotIn("transform", shared.group(1))
-        self.assertNotIn("view-transition-name", shared.group(1))
-        root = re.search(r"(?m)^html\s*\{([^}]*)\}", self.css).group(1)
-        self.assertIn("background-attachment: fixed", root)
-
-    def test_backdrop_outgrows_the_viewport_for_mobile_url_bar_resize(self):
-        block = re.search(r"(?m)^\.backdrop\s*\{([^}]*)\}", self.css).group(1)
-        self.assertIn("calc(100lvh + 160px)", block)
-        self.assertNotIn("inset: 0", block)
-
-    def test_backdrop_outgrows_the_viewport_for_mobile_url_bar_resize(self):
-        block = re.search(r"(?m)^\.backdrop\s*\{([^}]*)\}", self.css).group(1)
-        self.assertIn("calc(100lvh + 160px)", block)
-        self.assertNotIn("inset: 0", block)
 
     def test_light_and_dark_materials_are_both_defined(self):
         self.assertIn("html.mode-light", self.css)

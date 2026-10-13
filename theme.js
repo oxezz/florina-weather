@@ -77,9 +77,9 @@
     /* The stylesheet switches the root view-transition animation off, because
        the weather crossfade has to fade the backdrop alone and a root fade
        would take the numbers with it. This class says which case we are in. */
-    root.classList.add("vt-theme");
+    root.classList.add("vt-theme", "vt-sky");
     var vt = document.startViewTransition(function () { apply(mode); });
-    var done = function () { root.classList.remove("vt-theme"); };
+    var done = function () { root.classList.remove("vt-theme", "vt-sky"); };
     if (vt && vt.finished) vt.finished.then(done, done);
     else setTimeout(done, 600);
   }
