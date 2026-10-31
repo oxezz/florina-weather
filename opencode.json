@@ -1,0 +1,24 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "llamacpp": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Local ROCm",
+      "options": {
+        "baseURL": "http://127.0.0.1:8080/v1",
+        "apiKey": "local-secret-key"
+      },
+      "models": {
+        "local-model": {
+          "name": "MiMo 9B (Local)",
+          "limit": { 
+            "context": 65536,
+            "output": 4096
+          },
+          "tool_call": true
+        }
+      }
+    }
+  },
+  "model": "llamacpp/local-model"
+}

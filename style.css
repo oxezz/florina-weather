@@ -1,0 +1,1528 @@
+/* ==========================================================================
+   Καιρός · Φλώρινα — stylesheet
+   --------------------------------------------------------------------------
+   Two independent axes drive the look:
+
+     html.mode-light / html.mode-dark   set by theme.js, decides the material
+                                        (text colours, glass tint, shadows)
+     html.theme-*                       set by app.js from the current weather,
+                                        decides the backdrop hue
+
+   Both classes live on <html>, so the root element can pick the correct base
+   colour for the canvas and the overscroll area. When the weather theme lived
+   on <body> instead, <html> was left with a flat fallback colour that flashed
+   for one frame on desktop, before the fixed .backdrop layer had been
+   composited.
+
+   PERFORMANCE NOTES — this file is deliberately frugal on phones.
+
+   Scroll jank on mobile, and on Firefox in particular, comes from work the
+   browser has to redo on *every scroll frame*. Four things caused that here
+   and have been removed:
+
+     1. `background-attachment: fixed` — forces a full-viewport repaint per
+        frame. Replaced by a single position:fixed layer (.backdrop), which the
+        compositor reuses and never repaints.
+     2. A backdrop-filter on all 13 panels and cards — 13 blur surfaces, each
+        re-blurring the moving backdrop every frame. Now applied only to
+        pointer devices with a hover, i.e. never on a phone.
+     3. `mask-image` on the hourly strip, re-evaluated as it scrolls. Desktop
+        only now.
+     4. `:hover` rules that touch devices still evaluate. All hover styling
+        lives inside one `@media (hover: hover)` block.
+
+   The glass look survives on touch without any blur: the backdrop here is a
+   smooth gradient, so blurring it was never visible anyway. What actually
+   reads as glass is the translucent fill, the specular rim and the sheen.
+   ========================================================================== */
+
+@property --hl {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+/* --- dark material (default) -------------------------------------------- */
+:root {
+  --radius-xl: 30px;
+  --radius-lg: 22px;
+  --radius-md: 16px;
+  --radius-sm: 12px;
+  --ease: cubic-bezier(.32, .72, 0, 1);
+
+  /* backdrop */
+  --b1: #0c2339;
+  --b2: #103a5c;
+  --b3: #1a6b8f;
+  --g1: #2b5fa5;
+  --g2: #1580a8;
+
+  /* Where the sun is. app.js overwrites these from the Florina clock and the
+     day's sunrise and sunset; these defaults are what a page with no script
+     draws, which is no glow at all. */
+  --sun-x: 50%;
+  --sun-y: 34%;
+  --sun-warmth: 0;
+
+  /* type */
+  --text: #f2f7ff;
+  --text-dim: rgba(242, 247, 255, .74);
+  --text-faint: rgba(242, 247, 255, .54);
+  --accent: #9fd8ff;
+  --temp-shadow: 0 6px 22px rgba(0, 0, 0, .35);
+  --icon-shadow: 0 6px 16px rgba(0, 0, 0, .45);
+
+  /* glass */
+  --glass-bg: rgba(255, 255, 255, .085);
+  --glass-bg-hover: rgba(255, 255, 255, .14);
+  --glass-inner: rgba(255, 255, 255, .06);
+  --glass-inner-hover: rgba(255, 255, 255, .12);
+  --glass-border: rgba(255, 255, 255, .15);
+  --glass-border-soft: rgba(255, 255, 255, .09);
+  --rim-top: rgba(255, 255, 255, .50);
+  --rim-bottom: rgba(255, 255, 255, .05);
+  --sheen: rgba(255, 255, 255, .17);
+  --track: rgba(255, 255, 255, .12);
+  --skel-bg: rgba(255, 255, 255, .11);
+  --shadow: 0 8px 24px rgba(0, 0, 0, .30);
+  --shadow-lift: 0 14px 34px rgba(0, 0, 0, .36);
+  --blur: blur(16px) saturate(160%);
+
+  /* status */
+  --ok-bg: rgba(74, 222, 128, .10);
+  --ok-border: rgba(74, 222, 128, .28);
+  --ok-text: #bbf7d0;
+  --warn-text: #fcd34d;
+
+  /* chart */
+  --chart-line: #ffd166;
+  --chart-precip: #6cc4f0;
+  --chart-night: rgba(255, 255, 255, .05);
+  --chart-grid: rgba(255, 255, 255, .10);
+}
+
+/* --- light material ------------------------------------------------------ */
+html.mode-light {
+  --b1: #eaf3fb;
+  --b2: #d8e9f7;
+  --b3: #c3ddf2;
+
+  --text: #0a1a2b;
+  --text-dim: rgba(10, 26, 43, .74);
+  --text-faint: rgba(10, 26, 43, .53);
+  --accent: #0b6bb0;
+  --temp-shadow: 0 2px 12px rgba(255, 255, 255, .9);
+  --icon-shadow: 0 4px 12px rgba(23, 58, 92, .20);
+
+  --glass-bg: rgba(255, 255, 255, .58);
+  --glass-bg-hover: rgba(255, 255, 255, .76);
+  --glass-inner: rgba(255, 255, 255, .48);
+  --glass-inner-hover: rgba(255, 255, 255, .70);
+  --glass-border: rgba(255, 255, 255, .85);
+  --glass-border-soft: rgba(255, 255, 255, .62);
+  --rim-top: rgba(255, 255, 255, .95);
+  --rim-bottom: rgba(255, 255, 255, .30);
+  --sheen: rgba(255, 255, 255, .55);
+  --track: rgba(10, 26, 43, .10);
+  --skel-bg: rgba(10, 26, 43, .12);
+  --shadow: 0 8px 22px rgba(23, 58, 92, .14);
+  --shadow-lift: 0 14px 32px rgba(23, 58, 92, .18);
+
+  --ok-bg: rgba(22, 163, 74, .10);
+  --ok-border: rgba(22, 163, 74, .30);
+  --ok-text: #15803d;
+  --warn-text: #b45309;
+
+  --chart-line: #d98313;
+  --chart-precip: #2f8fd0;
+  --chart-night: rgba(11, 40, 70, .06);
+  --chart-grid: rgba(11, 40, 70, .13);
+}
+
+/* --- backdrop per weather (dark) ---------------------------------------- */
+html.theme-clear-day   { --g1: #2f7fd0; --g2: #3fb6d8; --b1: #0b2b4a; --b2: #12557f; --b3: #2b93b8; }
+html.theme-clear-night { --g1: #1d2f63; --g2: #27356b; --b1: #070d20; --b2: #101a3a; --b3: #1d2b5c; }
+html.theme-cloud       { --g1: #48607a; --g2: #3d6b86; --b1: #131f2c; --b2: #24384a; --b3: #38607a; }
+html.theme-rain        { --g1: #2c4a68; --g2: #2f6b84; --b1: #0d1a26; --b2: #1b3145; --b3: #2b5a75; }
+html.theme-storm       { --g1: #3b3468; --g2: #4a3b6e; --b1: #0d0b1c; --b2: #221c3d; --b3: #3d3566; }
+html.theme-snow        { --g1: #5b7f9e; --g2: #6f9bb5; --b1: #16232f; --b2: #2b4055; --b3: #4a6d88; }
+html.theme-fog         { --g1: #5c6b78; --g2: #5f7d8c; --b1: #1a2229; --b2: #303c46; --b3: #4c5f6d; }
+
+/* --- backdrop per weather (light) --------------------------------------- */
+html.mode-light.theme-clear-day   { --g1: #8ac6f0; --g2: #a6e0f0; --b1: #f0f7fd; --b2: #dcebf8; --b3: #c3ddf2; }
+html.mode-light.theme-clear-night { --g1: #93a9e0; --g2: #a8b6e8; --b1: #eef1f8; --b2: #dde3f2; --b3: #c9d2ea; }
+html.mode-light.theme-cloud       { --g1: #b3c0cd; --g2: #c2ccd6; --b1: #f2f4f7; --b2: #e2e7ec; --b3: #ced6de; }
+html.mode-light.theme-rain        { --g1: #93aec7; --g2: #a5bdd2; --b1: #eef2f6; --b2: #dbe3eb; --b3: #c5d1dd; }
+html.mode-light.theme-storm       { --g1: #a49ecb; --g2: #b4aed6; --b1: #f1f0f6; --b2: #e0ddee; --b3: #cbc6e0; }
+html.mode-light.theme-snow        { --g1: #aac4d8; --g2: #bcd3e2; --b1: #f4f8fb; --b2: #e4edf4; --b3: #d0dfeb; }
+html.mode-light.theme-fog         { --g1: #b6bfc6; --g2: #c4ccd2; --b1: #f3f5f6; --b2: #e6eaed; --b3: #d4dade; }
+
+/* --- base --------------------------------------------------------------- */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+* { margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+/* The [hidden] attribute only works through the browser's own
+   `[hidden] { display: none }`, which ANY author rule setting `display` beats.
+   That bit us twice: .local-card and .chip sat visible with their contents
+   blank. This makes the attribute authoritative, as it is meant to be. */
+[hidden] { display: none !important; }
+
+/* The mode *and* weather class both live on <html>, so this is always the
+   right base colour, and it is what the browser uses for the canvas and the
+   overscroll area. */
+html {
+  scrollbar-color: var(--track) transparent;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
+               Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--text);
+  min-height: 100vh;
+  padding: 32px 22px 64px;
+  background: none; /* the .backdrop layer paints it instead */
+  transition: color 400ms var(--ease);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body.wrap { max-width: 1180px; margin: 0 auto; }
+
+/* One fixed layer for the sky. It provides the background for both the canvas
+   and the viewport during resizing, so there is only one surface to paint. */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  /* Hint Chrome to rasterize this layer early so it won't be undrawn when
+     the viewport resizes during fast scrolling. This costs nothing. */
+  will-change: background;
+  /* The fallback must sit near the bottom of the gradient, not at its top:
+     Chrome fills not-yet-drawn tiles of a fixed layer with its own
+     background-color, and var(--b1) is the darkest stop. */
+  background-color: color-mix(in srgb, var(--b2) 40%, var(--b3));
+  background-image:
+    /* A glow that follows the sun. Driven by three custom properties the page
+       sets from the Florina clock and the day's sunrise and sunset, so dawn,
+       noon and dusk move it. Kept as a separate layer so the seven weather
+       themes above it stay exactly as written - a time of day is not a
+       weather condition and the two should not have to know about each other.
+       The defaults draw nothing, which is what a missing payload gets. */
+    radial-gradient(760px 560px at var(--sun-x, 50%) var(--sun-y, 34%),
+                    rgba(255, 208, 140, var(--sun-warmth, 0)) 0%,
+                    rgba(255, 190, 130, 0) 62%),
+    radial-gradient(1200px 820px at 12% 6%, var(--g1) 0%, transparent 55%),
+    radial-gradient(1000px 900px at 88% 16%, var(--g2) 0%, transparent 60%),
+    linear-gradient(158deg, var(--b1) 0%, var(--b2) 48%, var(--b3) 100%);
+  /* Promote it once; it then never repaints while the page scrolls. */
+  transform: translateZ(0);
+}
+
+/* Named so a view transition can crossfade the sky on its own. The gradient
+   is built from custom properties and gradients do not interpolate, so
+   without this the backdrop snaps from clear to rain.
+
+   Only while a transition runs (app.js and theme.js add .vt-sky). A permanent
+   view-transition-name turns this fixed layer into an isolated render
+   surface, and on Android Chrome that surface drops parts of itself during
+   fast scrolling: the bare canvas colour shows through as a dark band. */
+html.vt-sky .backdrop {
+  view-transition-name: backdrop;
+}
+
+/* A weather change crossfades the sky and nothing else. The root snapshot is
+   switched off on purpose: fading every number along with the backdrop reads
+   as a page reload rather than as the weather turning. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-old(backdrop),
+::view-transition-new(backdrop) {
+  animation-duration: .55s;
+  animation-timing-function: var(--ease);
+}
+
+/* The light/dark switch, which is a whole-page material change: here the root
+   snapshot *should* fade, so theme.js marks the transition for its duration.
+   Higher specificity than the animation: none above, which is what the weather
+   crossfade needs. */
+html.vt-theme::view-transition-old(root),
+html.vt-theme::view-transition-new(root) {
+  animation-duration: .35s;
+  animation-timing-function: var(--ease);
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+/* --- glass -------------------------------------------------------------- */
+/* No backdrop-filter and no isolation here: see the performance note above. */
+.glass {
+  position: relative;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--glass-border);
+  background-color: var(--glass-bg);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--rim-top);
+  overflow: hidden;
+  transition: background-color .35s var(--ease);
+}
+
+/* sheen sweeping out of the top-left corner, plus a faint bottom bounce */
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(152deg, var(--sheen) 0%, transparent 32%),
+    radial-gradient(130% 70% at 100% 100%, var(--sheen), transparent 60%);
+  opacity: .8;
+}
+
+.notice { padding: 18px 22px; margin-bottom: 18px; line-height: 1.5; }
+
+/* --- alerts ------------------------------------------------------------- */
+.alerts { display: grid; gap: 12px; margin-bottom: 18px; }
+
+.alert {
+  position: relative;
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 14px;
+  /* Left padding clears the colour bar. */
+  padding: 16px 18px 16px 22px;
+  /* Fill, radius and overflow come from .glass, which this now carries. It
+     used to set its own: the *hover* fill, so every warning sat a third
+     lighter than the cards around it and the weather hue stopped reading; and
+     no overflow, which is why the colour bar below poked out of the corners
+     it was sitting inside. */
+  box-shadow: var(--shadow), inset 0 1px 0 var(--rim-top);
+}
+.alert::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 6px;
+  background: var(--level, #facc15);
+}
+.alert-icon { font-size: 1.9rem; line-height: 1.1; text-align: center; }
+.alert-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.alert-title strong { font-size: 1.02rem; }
+.alert-area { color: var(--text-dim); font-size: .85rem; }
+.alert-window { color: var(--text-faint); font-size: .82rem; margin-top: 3px; }
+.alert-body { margin-top: 8px; font-size: .9rem; line-height: 1.55; color: var(--text-dim); }
+.alert-body summary { cursor: pointer; color: var(--accent); font-size: .85rem; list-style: none; }
+.alert-body summary::-webkit-details-marker { display: none; }
+.alert-body summary::before { content: "▸ "; }
+.alert-body[open] summary::before { content: "▾ "; }
+.alert-body p { margin-top: 8px; }
+
+.alert-all-clear {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 18px;
+  border-radius: var(--radius-md);
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-border);
+  color: var(--ok-text);
+  font-size: .88rem;
+  font-weight: 500;
+}
+
+/* --- hero --------------------------------------------------------------- */
+.hero {
+  padding: 26px 28px 28px;
+  margin-bottom: 20px;
+  text-align: center;
+  animation: rise .5s var(--ease) both;
+}
+.hero-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.loc { text-align: left; line-height: 1.35; }
+.place { display: block; font-size: 1.3rem; font-weight: 600; letter-spacing: .3px; }
+.region { display: block; font-size: .84rem; color: var(--text-faint); }
+
+.hero-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+
+/* iOS-style segmented control */
+.modes {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border-soft);
+}
+.modes button {
+  width: 32px; height: 28px;
+  display: grid; place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.modes button[aria-pressed="true"] {
+  background: var(--glass-bg-hover);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .16);
+}
+
+.refresh {
+  flex: 0 0 auto;
+  width: 38px; height: 38px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-inner);
+  color: var(--text);
+  cursor: pointer;
+}
+.refresh[aria-busy="true"] svg { animation: spin 1s linear infinite; }
+
+.now {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 8px 0 4px;
+}
+/* text-shadow, not filter: drop-shadow — a filter pass costs far more. */
+.sym { font-size: 5rem; line-height: 1; text-shadow: var(--icon-shadow); }
+.temp-block { display: flex; align-items: flex-start; }
+.temp {
+  font-size: 6rem;
+  font-weight: 200;
+  line-height: .95;
+  letter-spacing: -2px;
+  text-shadow: var(--temp-shadow);
+  font-variant-numeric: tabular-nums;
+}
+.deg { font-size: 2rem; font-weight: 300; margin-top: .5rem; color: var(--text-dim); }
+
+.code { font-size: 1.05rem; color: var(--text-dim); }
+.summary {
+  margin-top: 8px;
+  font-size: .92rem;
+  color: var(--text-faint);
+  max-width: 640px;
+  margin-inline: auto;
+  line-height: 1.5;
+}
+.stamp { margin-top: 10px; font-size: .76rem; color: var(--text-faint); }
+
+/* --- stat grid ---------------------------------------------------------- */
+/* 8 cards: 2 across on phones, 4 across from tablets up, so they always
+   make complete rows instead of a 6 + 2 remainder. */
+/* ---------------------------------------------------------------- extras */
+
+.greet {
+  margin: 16px 0 0;
+  font-size: .95rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-wrap: balance;
+}
+
+/* How today compares with the decade's average for the same date. */
+.normal {
+  margin: 10px 0 0;
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.ocard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+.ocard-ico { font-size: 1.9rem; line-height: 1; }
+/* minmax(0, 1fr) is load-bearing: a plain grid column sizes to max-content,
+   so a long headline stretched the card past the viewport instead of wrapping.
+
+   text-align has to live here rather than on .ocard, because .ocard and .card
+   are the same element: both are single-class selectors and .card comes later,
+   so it wins. Setting it on a child sidesteps the ordering entirely, which is
+   also why .moon-body gets away with it. */
+.ocard-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 260px;
+  text-align: left;
+}
+.ocard-lbl {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-faint);
+}
+.ocard-text { font-size: 1.02rem; font-weight: 650; min-width: 0; }
+.ocard-detail { font-size: .78rem; color: var(--text-faint); min-width: 0; }
+.ocard-items { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+/* An empty chip row still adds a flex gap, so it is taken out entirely. */
+.ocard-items:empty { display: none; }
+/* Wraps to its own row, which is why it is a flex child with a full basis.
+   Left-aligned for the same reason as .ocard-body above. */
+.ocard-advice {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--glass-border-soft);
+  font-size: .8rem;
+  line-height: 1.5;
+  color: var(--accent);
+  text-align: left;
+}
+.ocard-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: .76rem;
+  font-weight: 600;
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border-soft);
+  color: var(--text-dim);
+}
+
+.moon-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--glass-border-soft);
+}
+.moon-ico { font-size: 2.1rem; line-height: 1; }
+/* The panel centres its text; this row reads as a left-aligned caption. */
+.moon-body { display: grid; gap: 2px; min-width: 0; text-align: left; }
+.moon-name { font-size: 1.02rem; font-weight: 650; }
+.moon-meta { font-size: .76rem; color: var(--text-faint); }
+.moon-verdict {
+  margin-left: auto;
+  padding: 6px 13px;
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--tone, var(--text-dim));
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border-soft);
+}
+
+/* ---------------------------------------------------------- radar ------ */
+
+/* No basemap and no tiles: the server decodes RainViewer's radar and ships a
+   64x64 grid of palette indexes, so this is one canvas and some rings. */
+.radar-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  margin: 0 auto;
+}
+#radar-cv {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 18px;
+  /* A scope, not a hole in the card: the grid is transparent where it is dry,
+     and without a floor of its own the rings float on nothing. */
+  background:
+    radial-gradient(circle at 50% 45%,
+                    rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.16) 70%),
+    var(--glass-inner);
+  border: 1px solid var(--glass-border-soft);
+  color: var(--text-faint);   /* the rings and labels inherit this */
+}
+
+/* Sits on the canvas rather than beside it, so the map stays square. */
+.radar-play {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--text);
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 120ms ease, background 120ms ease;
+}
+/* The scale lives on the icon, not the button. The button carries a
+   backdrop-filter, so transforming it re-rasterises the blur on every frame;
+   the icon has no blur, so this keeps the press affordance for free. */
+/* The radar scrubber. Native range styling is wildly inconsistent between
+   engines, so both the WebKit and the Gecko pseudo-elements are set and the
+   control is drawn from scratch. */
+.radar-scrub {
+  display: block;
+  width: 100%;
+  height: 22px;
+  margin-top: 10px;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  cursor: pointer;
+}
+.radar-scrub::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--track);
+}
+.radar-scrub::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--track);
+}
+.radar-scrub::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.radar-scrub::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.radar-scrub:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.radar-play:hover svg { transform: scale(1.06); }
+.radar-play:active svg { transform: scale(0.96); }
+.radar-play svg { transition: transform .18s var(--ease); }
+.radar-play:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* Blur only where there is a pointer to hover with, as everywhere else. */
+@media (hover: hover) and (pointer: fine) {
+  .radar-play {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+}
+
+/* ------------------------------------------------- below the fold ------ */
+
+/* The page is about 5000 px tall and the first paint laid out all of it.
+
+   Numbers, because the first ones taken were wrong. A single measurement of
+   this page reported a 490 ms long task, and that figure is a first-run
+   artifact: over five runs the same build gives 456, 54, 51, 52, 55 ms. The
+   steady state is about 54 ms and only the first run is expensive. Every
+   alarming figure in this file's history came from measuring once.
+
+   With these rules off, the same five runs give 121, 60, 64, 68, 68 - median
+   68 ms. So content-visibility is worth about 20 %, not the 90 % that a single
+   pair of runs appeared to show.
+
+   Splitting the DOM insertion across frames was tried and does not work: with
+   nothing forcing layout between slices, the browser batches every append into
+   the one layout it was going to do at paint time anyway.
+
+   contain-intrinsic-size reserves the space so nothing shifts, and "auto"
+   keeps the real height once a card has been laid out once, so the reservation
+   improves instead of staying a guess. The numbers below only affect the first
+   paint. */
+#local-panel,
+#snow-panel,
+#mountain-panel,
+#air-panel,
+#station-strip,
+#radar-panel,
+.below {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 340px;
+}
+
+/* The 7-day panel is the tallest thing on the page and sits furthest down, so
+   a 340px reservation would understate it badly on the first paint. */
+.tall {
+  contain-intrinsic-size: auto 1100px;
+}
+
+@media print {
+  /* content-visibility skips cards that are off screen, and a printed sheet
+     has no screen. Without this the panels below the fold print blank - the
+     same way they come out blank in a full-page screenshot taken without
+     scrolling, which is how this was noticed. */
+  #local-panel,
+  #snow-panel,
+  #mountain-panel,
+  #air-panel,
+  #station-strip,
+  #radar-panel,
+  .below {
+    content-visibility: visible;
+  }
+}
+
+/* ------------------------------------------------------ snow climate ---- */
+
+/* The time and the explainer button as one right-hand group. The button
+   cannot live inside the <h2>: .info is display:grid, so there it becomes a
+   block and drops onto its own line under the title. */
+.radar-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+/* Always visible, unlike every other seasonal card: a climatology means
+   something in July. The two-tone bars are the point — the pale track is the
+   old share and the fill is today's, so the shrink is what you see. */
+.snow-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin-bottom: 16px;
+  text-align: left;
+}
+.snow-now strong { font-size: 1.7rem; font-weight: 700; }
+.snow-unit { font-size: .84rem; color: var(--text-dim); }
+.snow-before { font-size: .82rem; color: var(--text-faint); }
+
+.snow-months { display: grid; gap: 9px; }
+.snow-month {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 52px 76px;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+.snow-month-name { font-size: .8rem; font-weight: 650; }
+/* The current month, when it is a winter one, gets a mark rather than a
+   colour — the bars are already carrying two colours each. */
+.snow-month.is-now .snow-month-name::after {
+  content: "•";
+  margin-left: 3px;
+  color: var(--accent);
+}
+.snow-track {
+  position: relative;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--glass-inner);
+  overflow: hidden;
+}
+.snow-fill { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 7px; }
+.snow-fill.was { background: var(--glass-border-soft); }
+.snow-fill.now { background: var(--accent); opacity: .85; }
+.snow-month-val {
+  font-size: .86rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.snow-month-was {
+  font-size: .76rem;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.snow-decades {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 56px;
+  margin: 20px 0 4px;
+}
+.snow-decade {
+  flex: 1;
+  border-radius: 3px 3px 0 0;
+  background: var(--accent);
+  opacity: .55;
+}
+.snow-decade:last-child { opacity: .95; }
+.snow-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: .7rem;
+  color: var(--text-faint);
+}
+.snow-note {
+  margin: 16px 0 0;
+  font-size: .82rem;
+  line-height: 1.5;
+  color: var(--accent);
+  text-align: left;
+}
+
+/* --------------------------------------------------- mountain card ------ */
+
+/* Three metrics that change meaning with the season: the labels and values are
+   swapped by the season, the layout never is. */
+.mountain-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+.m-item {
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border-soft);
+  text-align: left;
+}
+.m-item .big { font-size: 1.22rem; }
+.mountain-hint {
+  margin: 14px 0 0;
+  font-size: .84rem;
+  line-height: 1.5;
+  color: var(--accent);
+  text-align: left;
+}
+
+/* ------------------------------------------------------- station refs ---- */
+
+/* Two nearby real stations, side by side at the bottom. The point of them is
+   the comparison, so they are laid out as rows rather than cards. */
+.refs { display: grid; gap: 10px; }
+.ref {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding: 11px 14px;
+  border-radius: var(--radius-md);
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border-soft);
+  text-align: left;
+}
+/* The one the page leans on gets the accent hairline, as elsewhere. */
+.ref-name { font-weight: 650; min-width: 86px; }
+.ref-temp { font-size: 1.12rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ref-range, .ref-age {
+  font-size: .78rem;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+/* The observation time is the last thing on the row, where the distance used
+   to be: which is the more useful of the two to sit beside a reading that may
+   be a day old. */
+.ref-age { margin-left: auto; }
+.ref-note {
+  margin: 14px 0 0;
+  font-size: .78rem;
+  line-height: 1.55;
+  color: var(--text-faint);
+  text-align: left;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+@media (min-width: 640px) {  .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.card { padding: 16px 16px; text-align: center; }
+.lbl { display: block; font-size: .8rem; color: var(--text-faint); margin-bottom: 9px; }
+.big { display: block; font-size: 1.75rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.big small { font-size: .85rem; font-weight: 400; color: var(--text-dim); }
+.sub { display: block; margin-top: 5px; font-size: .76rem; color: var(--text-faint); }
+
+/* The wind arrow, pointing where the wind blows towards. Drawn pointing up, so
+   a bearing of 0 rotates it 180 degrees. The rotation is animated and the
+   client always takes the short way round, or a veer from 350 to 10 would spin
+   it almost the whole circle. */
+.wind-arrow {
+  width: .78em;
+  height: .78em;
+  margin-right: .32em;
+  vertical-align: -.05em;
+  fill: currentColor;
+  transition: transform .6s var(--ease);
+  transform-origin: 50% 50%;
+}
+
+/* --- panel -------------------------------------------------------------- */
+.panel { padding: 22px 24px 24px; margin-bottom: 20px; }
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.panel-head h2 { font-size: 1.06rem; font-weight: 600; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 600;
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border-soft);
+  color: var(--text);
+}
+.chip.muted { background: transparent; color: var(--text-faint); font-weight: 400; }
+
+/* --- sun ---------------------------------------------------------------- */
+.sun-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 18px; }
+.sun-item { display: grid; gap: 3px; text-align: center; min-width: 78px; }
+.sun-ico { font-size: 1.5rem; }
+.sun-lbl { font-size: .74rem; color: var(--text-faint); }
+.sun-val { font-size: 1.1rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sun-track { position: relative; height: 6px; border-radius: 999px; background: var(--track); overflow: hidden; }
+.sun-track-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fcd34d, #fb923c);
+  transition: width .6s var(--ease);
+}
+.sun-meta {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 22px;
+  margin-top: 6px;
+  font-size: .82rem;
+  color: var(--text-faint);
+}
+.sun-meta strong { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* --- chart -------------------------------------------------------------- */
+.chart-wrap { width: 100%; overflow: hidden; margin-bottom: 6px; }
+#chart { display: block; width: 100%; height: auto; }
+#chart text { font-family: inherit; font-size: 11px; fill: var(--text-faint); }
+#chart .axis-line { stroke: var(--chart-grid); stroke-width: 1; }
+#chart .now-line { stroke: var(--text-faint); stroke-width: 1; stroke-dasharray: 3 4; }
+#chart .temp-area { fill: url(#tempFill); }
+#chart .temp-line {
+  fill: none;
+  stroke: var(--chart-line);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+#chart .temp-dot { fill: var(--chart-line); }
+#chart .temp-label { fill: var(--text); font-weight: 600; font-size: 11px; }
+#chart .night-band { fill: var(--chart-night); }
+#chart .precip-bar { fill: var(--chart-precip); }
+
+/* --- hourly strip ------------------------------------------------------- */
+.hourly {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 6px 2px 12px;
+  /* mandatory gives a crisp card-by-card snap; proximity snapped only when you
+     happened to stop near a card. One line to revert if it ever feels grabby. */
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 2px;
+  /* Keep a horizontal fling inside the strip instead of triggering the
+     browser's back gesture at the edges. */
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+.hourly::-webkit-scrollbar { height: 8px; }
+.hourly::-webkit-scrollbar-thumb { background: var(--track); border-radius: 999px; }
+.hourly::-webkit-scrollbar-track { background: transparent; }
+
+.h {
+  flex: 0 0 auto;
+  width: 92px;
+  scroll-snap-align: start;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 11px 8px;
+  border-radius: var(--radius-md);
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border-soft);
+  font-size: .82rem;
+}
+.h.now {
+  background: rgba(255, 209, 102, .16);
+  border-color: rgba(255, 209, 102, .45);
+}
+.h .t { font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.h .i { font-size: 1.55rem; line-height: 1.1; }
+.h .d { font-size: 1.06rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.h .r { color: var(--accent); font-size: .76rem; }
+.h .w { color: var(--text-faint); font-size: .72rem; }
+
+/* Rain-probability gauge. Bars in adjacent cards line up into one chart. */
+.h .bar {
+  width: 100%;
+  max-width: 54px;
+  height: 22px;
+  display: flex;
+  align-items: flex-end;
+  margin: 1px 0;
+  border-radius: 5px;
+  background: var(--track);
+  overflow: hidden;
+}
+.h .bar i {
+  display: block;
+  width: 100%;
+  height: calc(var(--rain, 0) * 1%);
+  border-radius: 4px;
+  background: linear-gradient(180deg, #7dd3fc, #38bdf8);
+}
+/* An hour with no chance of rain draws no track at all. The element keeps its
+   space either way, so the cards stay one height. */
+.h .bar.idle { background: transparent; }
+
+.hour-sep { flex: 0 0 auto; display: grid; place-items: center; padding: 0 8px; scroll-snap-align: start; }
+.day-sep {
+  font-size: .68rem;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  writing-mode: vertical-rl;
+}
+
+/* --- daily -------------------------------------------------------------- */
+/* Narrow enough that all seven days sit on one row on a normal desktop. */
+.days { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 12px; }
+.day {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 15px 12px;
+  border-radius: var(--radius-md);
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border-soft);
+  font-size: .84rem;
+}
+.day.today {
+  background: rgba(255, 209, 102, .13);
+  border-color: rgba(255, 209, 102, .40);
+}
+.day .dn { font-weight: 600; }
+.day .dd { font-size: .72rem; color: var(--text-faint); }
+.day .i { font-size: 1.85rem; line-height: 1.1; }
+.day .c { font-size: .74rem; color: var(--text-dim); text-align: center; line-height: 1.3; min-height: 2.1em; }
+.day .dt { font-size: 1.14rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.day .dt .lo { color: var(--text-dim); font-weight: 400; }
+.day .dr { font-size: .76rem; color: var(--accent); }
+.day .up { font-size: .74rem; color: var(--text-faint); text-align: center; }
+/* Model disagreement for the day. Always present so the cards keep one height;
+   the value is empty when only one model answered. The colour is a redundant
+   cue — the magnitude is already in the number — so no underline, which would
+   read as a link. */
+.day .agree {
+  min-height: 1em;
+  font-size: .72rem;
+  font-weight: 600;
+  color: var(--tone, var(--text-faint));
+  font-variant-numeric: tabular-nums;
+}
+
+.range { position: relative; width: 100%; height: 5px; border-radius: 999px; background: var(--track); margin: 2px 0; }
+.range-fill {
+  position: absolute;
+  top: 0; bottom: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6cc4f0, #ffd166, #fb923c);
+}
+
+/* --- local conditions --------------------------------------------------- */
+/* Only the cards that have something to say are rendered, so the panel is
+   absent entirely for most of the summer. */
+/* The cards share whatever row they land in, so a lone card fills the panel
+   and two or three sit side by side. Capping a lone card's width instead left
+   a large void beside it that read as a rendering fault. */
+.local-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+.local-card {
+  display: grid;
+  gap: 5px;
+  padding: 15px 16px;
+  border-radius: var(--radius-md);
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border-soft);
+  /* a coloured hairline on the left, like the alert cards */
+  box-shadow: inset 3px 0 0 var(--tone, transparent);
+}
+.local-card .lbl {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 0;
+}
+.local-card .val {
+  font-size: 1.55rem;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--tone, inherit);
+  font-variant-numeric: tabular-nums;
+}
+.local-card .sub { margin-top: 0; line-height: 1.4; }
+
+/* The "what does this mean?" affordance: a plain toggle, so it works with a
+   thumb and with a keyboard, and reads correctly to a screen reader. */
+.info {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: .64rem;
+  font-weight: 700;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.info[aria-expanded="true"] {
+  background: var(--glass-inner-hover);
+  color: var(--text);
+}
+.local-card .hint {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--glass-border-soft);
+  font-size: .74rem;
+  line-height: 1.5;
+  color: var(--text-faint);
+  text-align: left;
+}
+
+/* The same explainer, when it belongs to a whole panel rather than a card.
+   text-align has to be stated: .card centres its text, and a paragraph is
+   exactly what should not be centred. This was missing, so every panel-level
+   explainer rendered centred — the same trap as .ocard-body and .moon-body. */
+.panel-hint {
+  margin: -8px 0 18px;
+  padding-top: 10px;
+  border-top: 1px solid var(--glass-border-soft);
+  font-size: .78rem;
+  line-height: 1.55;
+  color: var(--text-faint);
+  text-align: left;
+}
+.chip .info { margin-left: 2px; }
+
+/* --- air quality -------------------------------------------------------- */
+
+/* Two columns, stated rather than auto-fit. auto-fit never collapses a track
+   here because the pollen row below spans them all, so no track is ever
+   empty — and the two stats were squeezed into the left third of the panel. */
+.air-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 560px) {
+  .air-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.air-stat { text-align: center; }
+.air-pollen { grid-column: 1 / -1; }
+.air-pollen .chips { justify-content: center; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.pollen {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: .8rem;
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border-soft);
+}
+.pollen strong { font-variant-numeric: tabular-nums; }
+.dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--c, #94a3b8);
+  margin-right: 6px;
+}
+
+/* --- footer ------------------------------------------------------------- */
+footer { margin-top: 28px; font-size: .8rem; color: var(--text-faint); }
+.foot-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; text-align: center; }
+.foot-row.muted { margin-top: 8px; font-size: .74rem; opacity: .85; }
+
+/* The reduced-effects switch. Reads as the footer text around it rather than as
+   a control, because that is the size of the thing it does - but it is a real
+   button, and it says whether it is on. */
+#fx-toggle {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--glass-border);
+}
+#fx-toggle:hover { text-decoration-color: currentColor; }
+#fx-toggle:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; border-radius: 4px; }
+#fx-toggle[aria-pressed="true"] { text-decoration-color: currentColor; opacity: 1; }
+#fx-toggle[aria-pressed="true"] { text-decoration-color: currentColor; }
+#fx-toggle #fx-state { text-decoration: none; }
+#fx-toggle:not([aria-pressed="true"]) #fx-state { opacity: .75; }
+.warn { color: var(--warn-text); }
+
+/* --- loading skeletons -------------------------------------------------- */
+/* Placeholders shaped like the real content, so the first paint already looks
+   finished and nothing jumps when the data lands.
+
+   They stay at opacity 0 for the first 350ms: on a fast connection the data
+   beats the animation, and a skeleton that flashes for two frames looks worse
+   than no skeleton at all. */
+.skel {
+  display: inline-block;
+  vertical-align: middle;
+  background: var(--skel-bg);
+  border-radius: 999px;
+  opacity: 0;
+  animation: pulse 1.6s ease-in-out .35s infinite;
+}
+.skel-value { display: block; width: 56%; height: 1.45rem; margin: 0 auto; }
+.skel-sun   { width: 54px; height: 1.05rem; }
+.skel-temp  { width: 148px; height: 4.3rem; border-radius: 18px; }
+.skel-code  { width: 186px; height: 1rem; }
+.skel-line  { width: 62%; height: .9rem; }
+.skel-stamp { width: 148px; height: .68rem; }
+.skel-chart { display: block; width: 100%; height: 208px; border-radius: var(--radius-md); }
+
+/* Reuse the real tile geometry so the grid does not reflow when it fills. */
+/* These must track the real card heights, or the skeleton collapses and the
+   page jumps when the data lands. Measured: .h is 165px, .day is 259px. */
+.h-skel   { min-height: 165px; border-radius: var(--radius-md); border-color: transparent; }
+.day-skel { min-height: 259px; border-radius: var(--radius-md); border-color: transparent; }
+
+/* ==========================================================================
+   Effects, chosen by the reader - in both directions.
+
+   The hover media query further down is a guess: it assumes a touch device
+   cannot afford thirteen blur surfaces. Usually right, and the reader is the
+   one who knows when it is wrong. So the switch takes effects away *and* hands
+   them back, which is the only reading of "let the device have the goodies"
+   that means anything on a phone.
+
+     html.fx-full     force them on, whatever the media query says
+     html.fx-reduced  force them off
+     neither          the media query and the OS preference decide
+
+   theme.js applies one of the two before the first paint so nothing flashes,
+   and derives the starting value from the device: a touch device starts
+   reduced, because that is honestly what it was already rendering.
+
+   Applies to every theme. Light and dark and all seven weather backdrops set
+   colours and nothing else - the material is not theirs to decide.
+   ========================================================================== */
+html.fx-full .glass,
+html.fx-full .radar-play,
+html.fx-full .modes {
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+}
+
+html.fx-reduced .glass,
+html.fx-reduced .hero,
+html.fx-reduced .card,
+html.fx-reduced .backdrop,
+html.fx-reduced .radar-play,
+html.fx-reduced .modes {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html.fx-reduced *,
+html.fx-reduced *::before,
+html.fx-reduced *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* The skeletons get their visibility from the pulse animation, so without it
+   they would sit at opacity 0 forever. Same reason as the reduce block. */
+html.fx-reduced .skel { opacity: .5 !important; }
+
+/* View transition pseudo-elements are not elements, so the rule above reaches
+   none of them. */
+html.fx-reduced ::view-transition-old(backdrop),
+html.fx-reduced ::view-transition-new(backdrop) { animation: none !important; }
+
+/* --- motion ------------------------------------------------------------- */
+
+/* Cards fade in instead of appearing.
+
+   No JavaScript: an element going from display:none to rendered restarts its
+   animations, so the fade fires exactly when a card is unhidden and never
+   again. That also means it does not re-run on the ten-minute refresh, which is
+   the trap with animating anything rebuilt - the hourly tiles and day cards are
+   deliberately left out for that reason.
+
+   Containers are deliberately NOT animated, and that is the whole point of the
+   rule below. A live animation with fill-mode `both` keeps a compositing layer
+   on the element, and a layer acts as a backdrop root: the boundary past which
+   backdrop-filter cannot sample. Glass on that element still works, because an
+   element's own paint is not cut off from its own backdrop - which is why the
+   hero and the panels always responded. Glass on its CHILDREN does not, and the
+   stats row is the one place glass sits on children of a plain <section>. That
+   row was the single part of the page that ignored the effects switch.
+
+   So only these two are animated: both are self-contained cards holding no
+   glass of their own. prefers-reduced-motion switches all of it off further
+   down the file. */
+.ocard,
+.local-card {
+  animation: rise .42s var(--ease) both;
+}
+.ocard { animation-duration: .36s; }
+.ocard:nth-of-type(2) { animation-delay: 40ms; }
+
+@keyframes rise {
+  /* Opacity only - no transform, and that is not a stylistic choice.
+
+     `both` keeps the final keyframe applied for the life of the page, so an
+     animated transform persists as an identity matrix. A transform on an
+     ancestor makes that ancestor a backdrop root: the boundary past which
+     backdrop-filter cannot sample. Every <section> was therefore cutting the
+     glass cards inside it off from the sky behind them, which is why the stats
+     row - the one <section> holding glass cards as children - was the single
+     thing that did not respond to the effects switch, on Chromium.
+
+     A blur over a locally smooth gradient is close to a no-op, so this was
+     measured rather than reasoned about. Same card, same position, only the
+     containment differs:
+
+       a glass card on the body              97.92% of pixels changed
+       the real stats row, inside <section>  16.27%, max channel delta 15
+
+     The hero was never affected because its blur lives on the transformed
+     element itself, and an element's own transform does not cut it off from
+     its own backdrop.
+
+     Ending on `transform: none` does not help - the animation still resolves
+     to an identity matrix - so the transform is gone from the keyframes. */
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse {
+  0%, 100% { opacity: .34; }
+  50%      { opacity: .72; }
+}
+@keyframes flash {
+  0%   { color: #ffd166; opacity: .55; }
+  100% { color: inherit; opacity: 1; }
+}
+.flash { animation: flash .9s var(--ease); }
+
+/* ==========================================================================
+   Pointer devices only.
+   Everything that costs per-frame work, or that only makes sense with a
+   mouse, lives here so phones never pay for it.
+   ========================================================================== */
+@media (hover: hover) and (pointer: fine) {
+  .glass {
+    /* 13 blur surfaces down to 13 only on desktops that can afford it, and
+       at half the radius the first version used. */
+    -webkit-backdrop-filter: var(--blur);
+    backdrop-filter: var(--blur);
+    /* the pointer-tracked highlight, which only exists with a pointer */
+    background-image: radial-gradient(
+      260px circle at var(--mx, 50%) var(--my, 0%),
+      rgba(255, 255, 255, calc(var(--hl, 0) * .17)),
+      transparent 72%);
+    transition: --hl .45s var(--ease), background-color .3s var(--ease),
+                box-shadow .3s var(--ease), transform .3s var(--ease);
+  }
+  .glass:hover { --hl: 1; box-shadow: var(--shadow-lift), inset 0 1px 0 var(--rim-top); }
+  .glass:hover::before { opacity: 1; }
+
+  .grid .card:hover { background-color: var(--glass-bg-hover); }
+/* No transform here on purpose: these cards carry backdrop-filter, and
+   transforming one forces its blurred backdrop to be re-rasterised.
+   Twenty of them fire as the pointer crosses the grid. The fill change
+   above is what signals the hover. */
+  .h:hover { background: var(--glass-inner-hover); transform: translateY(-2px); }
+  .day:hover { background: var(--glass-inner-hover); transform: translateY(-2px); }
+  .refresh:hover { background: var(--glass-inner-hover); }
+  .refresh:active { transform: scale(.92); }
+  .modes button:hover { color: var(--text-dim); }
+
+  /* The edge fade needs a mask, which is re-evaluated while scrolling. */
+  .hourly.can-right {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 60px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 60px), transparent);
+  }
+  .hourly.can-left {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 60px);
+    mask-image: linear-gradient(90deg, transparent, #000 60px);
+  }
+  .hourly.can-left.can-right {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 60px,
+                        #000 calc(100% - 60px), transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 60px,
+                #000 calc(100% - 60px), transparent);
+  }
+
+  .card, .h, .day, .refresh, .modes button {
+    transition: background-color .2s var(--ease), transform .25s var(--ease),
+                box-shadow .25s var(--ease);
+  }
+}
+
+/* --- responsive --------------------------------------------------------- */
+@media (max-width: 620px) {
+  body { padding: 18px 12px 48px; }
+  .hero { padding: 20px 18px 22px; }
+  .sym { font-size: 3.6rem; }
+  .temp { font-size: 4.2rem; letter-spacing: -1px; }
+  .deg { font-size: 1.4rem; }
+  .panel { padding: 18px 16px 20px; }
+  .sun-row { grid-template-columns: auto 1fr auto; gap: 12px; }
+  .summary { font-size: .86rem; }
+  .grid { gap: 10px; }
+  .big { font-size: 1.45rem; }
+  .place { font-size: 1.1rem; }
+  .modes button { width: 30px; height: 26px; }
+  /* Shadows are the next biggest per-frame paint cost after blur. */
+  .glass { box-shadow: 0 4px 14px rgba(0, 0, 0, .22), inset 0 1px 0 var(--rim-top); }
+  html.mode-light .glass { box-shadow: 0 4px 14px rgba(23, 58, 92, .10), inset 0 1px 0 var(--rim-top); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* :not(.fx-full) so the reader's explicit "full effects" wins. The system
+     setting decides the default - theme.js reads it too - but a deliberate
+     choice outranks a default. Compare the contrast block below, which is
+     about legibility and is deliberately not overridable. */
+  html:not(.fx-full) *,
+  html:not(.fx-full) *::before,
+  html:not(.fx-full) *::after { animation: none !important; transition: none !important; }
+  /* The skeletons get their visibility from the pulse animation, so without
+     it they would sit at opacity 0 forever. */
+  .skel { opacity: .5 !important; }
+  /* View transition pseudo-elements are not elements, so the rule above
+     reaches none of them. The backdrop crossfade needs saying twice. */
+  ::view-transition-old(backdrop),
+  ::view-transition-new(backdrop) { animation: none !important; }
+}
+
+/* ==========================================================================
+   Accessibility preferences.
+   These come after the pointer block so they win on source order.
+   ========================================================================== */
+
+/* "Reduce transparency" is a real setting on iOS, macOS and Windows. Without
+   this the interface ignored it and kept stacking translucent panels. */
+@media (prefers-reduced-transparency: reduce) {
+  /* Overridable, for the same reason. This one is Chromium-only, which is why
+     the effects switch used to appear to do nothing in Chrome and work in
+     Firefox: with the OS setting on, fx-full could not bring the blur back. */
+  html:not(.fx-full) .glass,
+  html:not(.fx-full) .hero,
+  html:not(.fx-full) .card,
+  html:not(.fx-full) .backdrop {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background-image: none !important;
+  }
+  /* Solid enough that text never reads against the weather behind it. */
+  html:not(.fx-full) .glass { background-color: var(--b2); }
+  html:not(.fx-full) .card { background-color: var(--b2); }
+  html:not(.fx-full) .radar-play { background-color: var(--b2); }
+  html:not(.fx-full) .backdrop { opacity: .5; }
+  html:not(.fx-full) .moon-verdict,
+  html:not(.fx-full) .ocard-item { background: var(--b2); }
+}
+
+/* "Increase contrast": firmer edges, no translucency, brighter secondary
+   text. Contrast ratios are the reason --text-dim and --text-faint exist, so
+   collapsing them onto --text is the point rather than a shortcut.
+
+   Deliberately NOT overridable by fx-full. Transparency and motion are
+   preferences about how the page looks; contrast is about being able to read
+   it, and a switch labelled "full effects" should not be able to take that
+   away. */
+
+@media (prefers-contrast: more) {
+  :root,
+  html.mode-light,
+  html.mode-dark {
+    --text-dim: var(--text);
+    --text-faint: var(--text);
+    --glass-border-soft: var(--glass-border);
+    --glass-inner: var(--b2);
+  }
+  .glass,
+  .card,
+  .backdrop {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background-image: none !important;
+  }
+  .glass,
+  .card { background-color: var(--b2); border: 1px solid var(--glass-border); }
+  .chip,
+  .moon-verdict,
+  .ocard-item { border-color: var(--text-dim); }
+  /* The coloured hairline carries meaning, so thicken it rather than drop it. */
+  .local-card,
+  .alert { box-shadow: inset 4px 0 0 var(--tone, transparent); }
+  .skel { opacity: .35 !important; }
+}
+
+@media print {
+  body { background: #fff; color: #111; }
+  .backdrop, .hero-actions, .hourly { display: none; }
+}

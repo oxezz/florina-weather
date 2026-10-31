@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<meta name="description" content="Τρέχων καιρός και πρόβλεψη για {{PLACE}}, {{REGION}}.">
+<meta name="theme-color" content="#0c2339">
+<title>{{TITLE}}</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<!-- Both spellings: Safari needs the apple- prefixed one, Chrome the other. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="{{PLACE}}">
+<!-- Link previews. Without these a shared link is a bare URL. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{{TITLE}}">
+<meta property="og:locale" content="el_GR">
+<meta property="og:title" content="{{TITLE}}">
+<meta property="og:description" content="{{DESCRIPTION}}">
+<meta property="og:url" content="{{OG_URL}}">
+<meta property="og:image" content="{{OG_IMAGE}}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{{PLACE}} — {{REGION}}">
+<meta name="twitter:card" content="summary_large_image">
+<!-- The version stamp matters: after a deploy the service worker can still be
+     holding the previous app.js and style.css, so the page would run new HTML
+     against old code for one load. A changed URL is a guaranteed cache miss. -->
+<link rel="stylesheet" href="/style.css?v={{VERSION}}">
+<script src="/theme.js?v={{VERSION}}"></script>
+</head>
+<body class="wrap" data-refresh="{{REFRESH}}" data-version="{{VERSION}}">
+
+<!-- One fixed layer instead of background-attachment: fixed, which forces a
+     full-viewport repaint on every scroll frame. -->
+<div class="backdrop" aria-hidden="true"></div>
+
+<noscript>
+  <div class="card glass notice">
+    <strong>Χρειάζεται JavaScript.</strong>
+    Τα δεδομένα είναι διαθέσιμα και ως <a href="/api/weather">JSON</a>.
+  </div>
+</noscript>
+
+<div id="alerts" class="alerts" hidden aria-live="polite"></div>
+
+<header class="hero glass">
+  <div class="hero-top">
+    <div class="loc">
+      <span class="place">{{PLACE}}</span>
+      <span class="region">{{REGION}}</span>
+    </div>
+    <div class="hero-actions">
+      <div class="modes" role="group" aria-label="Θέμα εμφάνισης">
+        <button type="button" data-mode="auto" aria-pressed="false" title="Αυτόματα (ακολουθεί το σύστημα)" aria-label="Αυτόματα">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M12 3.4a8.6 8.6 0 0 1 0 17.2z" fill="currentColor"/>
+          </svg>
+        </button>
+        <button type="button" data-mode="light" aria-pressed="false" title="Φωτεινό" aria-label="Φωτεινό">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <circle cx="12" cy="12" r="4.1" fill="currentColor"/>
+            <g stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <path d="M12 2.4v2.4M12 19.2v2.4M2.4 12h2.4M19.2 12h2.4M5.2 5.2l1.7 1.7M17.1 17.1l1.7 1.7M18.8 5.2l-1.7 1.7M6.9 17.1l-1.7 1.7"/>
+            </g>
+          </svg>
+        </button>
+        <button type="button" data-mode="dark" aria-pressed="false" title="Σκοτεινό" aria-label="Σκοτεινό">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path d="M20.5 14.8A8.9 8.9 0 0 1 9.2 3.5a8.9 8.9 0 1 0 11.3 11.3z" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+      <button id="refresh" class="refresh" type="button" title="Άμεση ανανέωση" aria-label="Άμεση ανανέωση">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M12 4V1L7 5l5 4V6a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z" fill="currentColor"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <p class="greet" id="greet" hidden></p>
+
+  <div class="now">
+    <span class="sym" id="sym" aria-hidden="true">&#9729;&#65039;</span>
+    <div class="temp-block">
+      <span class="temp" id="temp"><span class="skel skel-temp"></span></span><span class="deg">&deg;C</span>
+    </div>
+  </div>
+
+  <p class="code" id="code"><span class="skel skel-code"></span></p>
+  <p class="normal" id="normal" hidden></p>
+  <p class="summary" id="summary"><span class="skel skel-line"></span></p>
+  <p class="stamp" id="stamp"><span class="skel skel-stamp"></span></p>
+</header>
+
+<section class="card glass ocard" id="outfit-panel" hidden>
+  <span class="ocard-ico" id="outfit-ico" aria-hidden="true"></span>
+  <div class="ocard-body">
+    <span class="ocard-lbl">Τι να φορέσω;</span>
+    <span class="ocard-text" id="outfit-text"></span>
+    <span class="ocard-detail" id="outfit-detail"></span>
+  </div>
+  <div class="ocard-items" id="outfit-items"></div>
+  <p class="ocard-advice" id="outfit-advice" hidden></p>
+</section>
+
+<section class="card glass ocard" id="station-panel" hidden>
+  <span class="ocard-ico" aria-hidden="true">&#128225;</span>
+  <div class="ocard-body">
+    <span class="ocard-lbl">Μέτρηση σταθμού &middot; <span id="station-name"></span></span>
+    <span class="ocard-text" id="station-text"></span>
+    <span class="ocard-detail" id="station-detail"></span>
+  </div>
+</section>
+
+<section class="grid" id="stats" aria-label="Τρέχουσες συνθήκες">
+  <div class="card glass"><span class="lbl">Αίσθηση</span><span class="big" id="s-apparent"><span class="skel skel-value"></span></span></div>
+  <div class="card glass"><span class="lbl">Υγρασία</span><span class="big" id="s-humidity"><span class="skel skel-value"></span></span></div>
+  <div class="card glass"><span class="lbl">Άνεμος</span><span class="big"><span id="s-wind"><span class="skel skel-value"></span></span> <small>km/h</small></span><span class="sub" id="s-wind-sub"><svg class="wind-arrow" id="s-wind-arrow" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 0.7 10.6 11.2 6 8.6 1.4 11.2Z"/></svg><span id="s-wind-label"></span></span></div>
+  <div class="card glass"><span class="lbl">Ριπές ανέμου</span><span class="big"><span id="s-gusts"><span class="skel skel-value"></span></span> <small>km/h</small></span></div>
+  <div class="card glass"><span class="lbl">Υετός</span><span class="big"><span id="s-rain"><span class="skel skel-value"></span></span> <small>mm</small></span></div>
+  <div class="card glass"><span class="lbl">Νέφωση</span><span class="big" id="s-cloud"><span class="skel skel-value"></span></span></div>
+  <div class="card glass"><span class="lbl">Πίεση</span><span class="big"><span id="s-pressure"><span class="skel skel-value"></span></span> <small>hPa</small></span></div>
+  <div class="card glass"><span class="lbl">Ορατότητα</span><span class="big" id="s-visibility"><span class="skel skel-value"></span></span><span class="sub" id="s-visibility-sub"></span></div>
+  <div class="card glass" id="dew-card" hidden><span class="lbl">Δείκτης δρόσου</span><span class="big"><span id="s-dew"></span> <small>&deg;C</small></span><span class="sub" id="s-dew-sub"></span></div>
+  <div class="card glass" id="solar-card" hidden><span class="lbl">Ηλιακή ενέργεια</span><span class="big"><span id="s-solar"></span> <small>kWh/m&sup2;</small></span><span class="sub" id="s-solar-sub"></span></div>
+</section>
+
+<section class="card glass panel below">
+  <div class="panel-head">
+    <h2>Ήλιος &amp; δείκτης UV</h2>
+    <span class="chip" id="uv-chip" hidden></span>
+  </div>
+  <div class="sun-row">
+    <div class="sun-item">
+      <span class="sun-ico">&#127749;</span>
+      <span class="sun-lbl">Ανατολή</span>
+      <span class="sun-val" id="sun-rise"><span class="skel skel-sun"></span></span>
+    </div>
+    <div class="sun-track" aria-hidden="true"><span class="sun-track-fill" id="sun-fill"></span></div>
+    <div class="sun-item">
+      <span class="sun-ico">&#127751;</span>
+      <span class="sun-lbl">Δύση</span>
+      <span class="sun-val" id="sun-set"><span class="skel skel-sun"></span></span>
+    </div>
+    <div class="sun-meta">
+      <span>Διάρκεια ημέρας <strong id="sun-daylight"><span class="skel skel-sun"></span></strong></span>
+      <span>Ηλιοφάνεια <strong id="sun-sunshine"><span class="skel skel-sun"></span></strong></span>
+    </div>
+  </div>
+
+  <div class="moon-row" id="moon-row" hidden>
+    <span class="moon-ico" id="moon-ico" aria-hidden="true"></span>
+    <div class="moon-body">
+      <span class="moon-name" id="moon-name"></span>
+      <span class="moon-meta" id="moon-meta"></span>
+    </div>
+    <span class="moon-verdict" id="moon-verdict"></span>
+  </div>
+</section>
+
+<section class="card glass panel below">
+  <div class="panel-head">
+    <h2>Επόμενες 48 ώρες</h2>
+    <button class="info" type="button" aria-expanded="false"
+            aria-controls="hint-chart" aria-label="Τι σημαίνει;">?</button>
+  </div>
+  <p class="hint panel-hint" id="hint-chart" hidden>
+    Η γραμμή είναι η θερμοκρασία και οι κάθετες μπάρες κάτω από αυτήν η
+    πιθανότητα υετού, ώρα προς ώρα. Οι μπάρες εμφανίζονται μόνο όπου υπάρχει
+    κάποια πιθανότητα &mdash; οι άδειες θέσεις σημαίνουν ξηρή ώρα, όχι έλλειψη
+    δεδομένων. Η σκιασμένη ζώνη είναι το εύρος στο οποίο διαφωνούν τα μοντέλα.
+  </p>
+  <div class="chart-wrap">
+    <div class="skel skel-chart" data-skeleton></div>
+    <svg id="chart" viewBox="0 0 960 250" preserveAspectRatio="xMidYMid meet"
+         role="img" aria-label="Γράφημα θερμοκρασίας και πιθανότητας βροχής"></svg>
+  </div>
+  <div class="hourly" id="hourly" tabindex="0" aria-label="Ωριαία πρόβλεψη, οριζόντια κύλιση">
+    <div class="h skel h-skel" data-skeleton></div>
+    <div class="h skel h-skel" data-skeleton></div>
+    <div class="h skel h-skel" data-skeleton></div>
+    <div class="h skel h-skel" data-skeleton></div>
+    <div class="h skel h-skel" data-skeleton></div>
+  </div>
+</section>
+
+<section class="card glass panel below tall">
+  <div class="panel-head">
+    <h2>Πρόβλεψη 7 ημερών</h2>
+    <button class="info" type="button" aria-expanded="false"
+            aria-controls="hint-agreement" aria-label="Τι σημαίνει;">?</button>
+  </div>
+  <p class="hint panel-hint" id="hint-agreement" hidden>
+    Κάθε ημέρα προέρχεται από περισσότερα του ενός μοντέλα &mdash; το
+    &laquo;best match&raquo; που βλέπετε, μαζί με τα ICON-EU (DWD), ECMWF και
+    GFS (NOAA). Όταν συμφωνούν, η πρόβλεψη είναι σχετικά σίγουρη. Όταν
+    διαφωνούν, το &plusmn; δείχνει πόσο απέχουν. Σε ορεινές κοιλάδες όπως η
+    Φλώρινα η διαφωνία είναι συχνά μεγάλη, γιατί κάθε μοντέλο χειρίζεται
+    διαφορετικά το ανάγλυφο.
+  </p>
+  <div class="days" id="days">
+    <div class="day skel day-skel" data-skeleton></div>
+    <div class="day skel day-skel" data-skeleton></div>
+    <div class="day skel day-skel" data-skeleton></div>
+    <div class="day skel day-skel" data-skeleton></div>
+    <div class="day skel day-skel" data-skeleton></div>
+    <div class="day skel day-skel" data-skeleton></div>
+    <div class="day skel day-skel" data-skeleton></div>
+   </div>
+</section>
+
+<section class="card glass panel" id="radar-panel" hidden>
+  <div class="panel-head">
+    <h2>Ραντάρ βροχής</h2>
+    <span class="radar-meta">
+      <span class="chip muted" id="radar-time"></span>
+      <button class="info" type="button" aria-expanded="false"
+              aria-controls="hint-radar" aria-label="Τι σημαίνει;">?</button>
+    </span>
+  </div>
+  <div class="radar-wrap">
+    <canvas id="radar-cv" role="img"
+            aria-label="Ραντάρ βροχής γύρω από τη Φλώρινα"></canvas>
+    <button type="button" class="radar-play" id="radar-play" aria-label="Παύση" hidden>&#10074;&#10074;</button>
+  </div>
+  <input type="range" class="radar-scrub" id="radar-scrub" min="0" max="12"
+         step="1" value="0" hidden aria-label="Καρέ ραντάρ">
+  <p class="sub" id="radar-note" aria-live="polite"></p>
+  <p class="hint panel-hint" id="hint-radar" hidden>
+    Οι δύο τελευταίες ώρες, καρέ-καρέ κάθε δέκα λεπτά. Οι ακτίνες είναι στα
+    30, 60 και 90 χλμ. από τη Φλώρινα και οι κουκκίδες είναι γύρω πόλεις,
+    ώστε να φαίνεται από πού έρχεται η βροχή. Δεν υπάρχει χάρτης: η γκρι
+    γραμμή είναι τα σύνορα και οι γκρι κηλίδες οι λίμνες της Πρέσπας και της
+    Οχρίδας &mdash; όχι το έδαφος. Το ραντάρ δεν βλέπει χαμηλά σύννεφα πίσω
+    από τα βουνά, οπότε πίσω από τον Βαρνούντα μπορεί να βρέχει χωρίς να
+    φαίνεται. Δεδομένα:
+    <a href="https://www.rainviewer.com" target="_blank" rel="noopener">RainViewer</a>.
+    Χάρτης: <a href="https://www.naturalearthdata.com" target="_blank" rel="noopener">Natural Earth</a>.
+  </p>
+</section>
+
+<section class="card glass panel" id="local-panel" hidden>
+  <div class="panel-head">
+    <h2>Τοπικές συνθήκες</h2>
+  </div>
+  <div class="local-grid">
+    <div class="local-card glass" id="local-inversion" hidden>
+      <span class="lbl">Θερμοκρασιακή αναστροφή
+        <button class="info" type="button" aria-expanded="false"
+                aria-controls="hint-inversion" aria-label="Τι σημαίνει;">?</button>
+      </span>
+      <span class="val" id="inversion-val"><span class="skel skel-value"></span></span>
+      <span class="sub" id="inversion-sub"></span>
+      <p class="hint" id="hint-inversion" hidden>
+        Τις καθαρές άπνοες νύχτες ο ψυχρός αέρας &laquo;κάθεται&raquo; στον κάμπο.
+        Η {{PLACE}} γίνεται ψυχρότερη από τα υψώματα γύρω της. Συγκρίνουμε τη
+        θερμοκρασία στην πόλη με σημείο αναφοράς ({{SLOPE_NAME}}): όταν το ύψωμα
+        είναι θερμότερο από ό,τι προβλέπει η κανονική πτώση της θερμοκρασίας με
+        το ύψος (&minus;0,65&deg;C ανά 100 μ.), έχουμε αναστροφή. Η διαφωνία των
+        μοντέλων δείχνει πόσο αξιόπιστη είναι η μέτρηση.
+        <br><br>
+        <strong>Πόσο να το εμπιστεύεσαι:</strong> ο δείκτης βγαίνει από δύο
+        <em>υπολογισμένες</em> θερμοκρασίες, και οι δύο διορθωμένες με
+        μετρήσεις. Στην κοιλάδα, εννιά χρόνια μετρήσεων δίνουν το μοντέλο
+        <strong>2,06&deg;C θερμότερο τις νύχτες</strong> και αμερόληπτο τη μέρα.
+        Στην κορυφογραμμή, ο σταθμός της ΕΜΥ στο Βίτσι (40,6417 N, 21,3833 E,
+        ~1875 μ.) δίνει <strong>&minus;0,30&deg;C</strong> τις ίδιες νύχτες.
+        Η διαφορά διορθώνεται κατά <strong>1,76&deg;C</strong>.
+        Όπου η διόρθωση αλλάζει το συμπέρασμα, η κάρτα λέει
+        <strong>«πιθανή»</strong> αντί να βεβαιώσει.
+      </p>
+    </div>
+    <div class="local-card glass" id="local-frost" hidden>
+      <span class="lbl">Κίνδυνος παγετού
+        <button class="info" type="button" aria-expanded="false"
+                aria-controls="hint-frost" aria-label="Τι σημαίνει;">?</button>
+      </span>
+      <span class="val" id="frost-val"><span class="skel skel-value"></span></span>
+      <span class="sub" id="frost-sub"></span>
+      <p class="hint" id="hint-frost" hidden>
+        Ο παγετός μετριέται σε δύο ύψη: στον αέρα (2 μ.) και στην επιφάνεια
+        του εδάφους. Τις καθαρές άπνοες νύχτες το έδαφος γίνεται 1&ndash;3&deg;C
+        ψυχρότερο, οπότε μπορεί να παγώσει ενώ ο αέρας είναι ακόμη πάνω από το
+        μηδέν &mdash; οι χαμηλές καλλιέργειες κινδυνεύουν πρώτες.
+      </p>
+    </div>
+    <div class="local-card glass" id="local-heating" hidden>
+      <span class="lbl">Βαθμοημέρες θέρμανσης
+        <button class="info" type="button" aria-expanded="false"
+                aria-controls="hint-heating" aria-label="Τι σημαίνει;">?</button>
+      </span>
+      <span class="val" id="heating-val"><span class="skel skel-value"></span></span>
+      <span class="sub" id="heating-sub"></span>
+      <p class="hint" id="hint-heating" hidden>
+        Δείχνει πόση θέρμανση χρειάστηκε ο μήνας. Για κάθε ημέρα προσθέτουμε τη
+        διαφορά της μέσης θερμοκρασίας από τους 18&deg;C. Όσο μεγαλύτερος ο
+        αριθμός, τόσο πιο κρύος ο μήνας.
+      </p>
+    </div>
+    <div class="local-card glass" id="local-smog" hidden>
+      <span class="lbl">Αιθαλομίχλη
+        <button class="info" type="button" aria-expanded="false"
+                aria-controls="hint-smog" aria-label="Τι σημαίνει;">?</button>
+      </span>
+      <span class="val" id="smog-val"><span class="skel skel-value"></span></span>
+      <span class="sub" id="smog-sub"></span>
+      <p class="hint" id="hint-smog" hidden>
+        Τις άπνοες βραδιές του χειμώνα ο καπνός από τα τζάκια παγιδεύεται στην
+        κοιλάδα. Ο αριθμός είναι τα αιωρούμενα σωματίδια PM2.5 σε
+        μικρογραμμάρια ανά κυβικό μέτρο. Όταν φυσάει, τα σωματίδια
+        διασκορπίζονται και δεν πρόκειται για αιθαλομίχλη.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="card glass panel" id="snow-panel" hidden>
+  <div class="panel-head">
+    <h2>Χιόνι στη Φλώρινα</h2>
+    <button class="info" type="button" aria-expanded="false"
+            aria-controls="hint-snow" aria-label="Τι σημαίνει;">?</button>
+  </div>
+
+  <p class="hint panel-hint" id="hint-snow" hidden>
+    Πόσο συχνά χιονίζει, από μετρήσεις. Καμία υπηρεσία δεν καταγράφει ύψος
+    χιονιού εδώ, οπότε μία μέρα μετράει ως χιονόπτωση όταν καταγράφηκε υετός
+    και η ελάχιστη ήταν 1&deg;C ή χαμηλότερα. Τα βροχόμετρα υπομετρούν το
+    χιόνι, με την ίδια επιβάρυνση και στις δύο περιόδους &mdash; άρα η σύγκριση
+    στέκει. Τα δύο διαστήματα είναι <strong>1932&ndash;1981</strong> (σταθμός
+    ISD) και <strong>2010&ndash;2023</strong> (δίκτυο ΕΑΑ/meteo.gr): η γκρίζα
+    μπάρα είναι το παλιό ποσοστό, η χρωματισμένη το σημερινό.
+  </p>
+
+  <div class="snow-head">
+    <span class="snow-now"><strong id="snow-days-now"></strong>
+      <span class="snow-unit">μέρες με χιόνι τον χειμώνα</span></span>
+    <span class="snow-before" id="snow-days-before"></span>
+  </div>
+
+  <div class="snow-months" id="snow-months"></div>
+
+  <div class="snow-decades" id="snow-decades" aria-hidden="true"></div>
+  <div class="snow-axis"><span>1940</span><span>σήμερα</span></div>
+
+  <p class="snow-note" id="snow-note"></p>
+</section>
+
+<section class="card glass panel" id="mountain-panel" hidden>
+  <div class="panel-head">
+    <h2 id="mountain-name"></h2>
+    <button class="info" type="button" aria-expanded="false"
+            aria-controls="hint-mountain" aria-label="Τι σημαίνει;">?</button>
+  </div>
+
+  <p class="hint panel-hint" id="hint-mountain" hidden>
+    Το ίδιο σημείο απαντά άλλο ερώτημα τον χειμώνα και άλλο το καλοκαίρι: χιόνι
+    και δρόμος από τον Νοέμβριο ως τον Μάρτιο, δροσιά και πεζοπορία τους
+    υπόλοιπους μήνες. Ο δρόμος κρίνεται από το ύψος στο οποίο παγώνει ο αέρας
+    και όχι από τη θερμοκρασία της πόλης &mdash; το διάσελο είναι πάνω από τα
+    1.700 μέτρα, οπότε βροχή εδώ μπορεί να είναι χιόνι εκεί. Οι συνθήκες είναι
+    από το μοντέλο· ο σταθμός της ΕΜΥ στη ράχη του Βιτσίου φτάνει σε παρτίδες
+    που μπορεί να είναι και μέρες πίσω.
+  </p>
+
+  <div class="mountain-grid">
+    <div class="m-item">
+      <span class="lbl">Θερμοκρασία</span>
+      <span class="big" id="mountain-temp"></span>
+      <span class="sub" id="mountain-gap"></span>
+    </div>
+    <div class="m-item">
+      <span class="lbl" id="mountain-second-lbl"></span>
+      <span class="big" id="mountain-second"></span>
+      <span class="sub" id="mountain-second-sub"></span>
+    </div>
+    <div class="m-item">
+      <span class="lbl" id="mountain-third-lbl"></span>
+      <span class="big" id="mountain-third"></span>
+      <span class="sub" id="mountain-third-sub"></span>
+    </div>
+  </div>
+  <p class="mountain-hint" id="mountain-hint"></p>
+</section>
+
+<section class="card glass panel" id="air-panel" hidden>
+  <div class="panel-head">
+    <h2>Ποιότητα αέρα</h2>
+    <span class="chip" id="air-chip" hidden></span>
+  </div>
+  <div class="air-grid">
+    <div class="air-stat">
+      <span class="lbl">Δείκτης (EAQI)</span>
+      <span class="big" id="air-aqi"><span class="skel skel-value"></span></span>
+      <span class="sub" id="air-aqi-label"></span>
+    </div>
+    <div class="air-stat">
+      <span class="lbl">Αιωρούμενα σωματίδια</span>
+      <span class="big" id="air-pm"><span class="skel skel-value"></span></span>
+      <span class="sub">PM2.5 / PM10 &micro;g/m&sup3;</span>
+    </div>
+    <div class="air-pollen">
+      <div class="chips" id="air-pollens"><span class="sub">Καμία αξιόλογη συγκέντρωση.</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="card glass panel" id="station-strip" hidden>
+  <div class="panel-head">
+    <h2>Κοντινοί σταθμοί</h2>
+  </div>
+  <div class="refs" id="station-refs"></div>
+  <p class="ref-note">
+    Την πόλη τη μετράει ο σταθμός της ΕΜΥ (WMO 16613) παραπάνω. Εδώ είναι οι
+    γειτονικοί σταθμοί &mdash; η Καστοριά στην επόμενη λεκάνη και το Βίτσι ψηλά
+    στο βουνό &mdash; για να φαίνεται πόσο διαφέρει η Φλώρινα από γύρω της.
+    Είναι πραγματικές μετρήσεις· όλα τα υπόλοιπα στη σελίδα είναι μοντέλα.
+  </p>
+</section>
+
+<footer>
+  <div class="foot-row">
+    <span>Δεδομένα: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>
+      &middot; <a href="https://www.meteoalarm.org" target="_blank" rel="noopener">Meteoalarm</a>
+      &middot; <a href="https://data.gov.gr" target="_blank" rel="noopener">data.gov.gr</a></span>
+    <span>Ανανέωση κάθε {{REFRESH_TEXT}}</span>
+  </div>
+  <div class="foot-row muted">
+    <span>Η βαθμονόμηση του &laquo;κανονικού&raquo; βασίζεται σε μετρήσεις του
+      δικτύου σταθμών του
+      <a href="https://www.meteo.gr" target="_blank" rel="noopener">Εθνικού
+      Αστεροσκοπείου Αθηνών / meteo.gr</a> (2010&ndash;2023, άδεια
+      <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC&nbsp;BY&nbsp;4.0</a>).</span>
+  </div>
+  <div class="foot-row muted" id="foot-status"></div>
+  <div class="foot-row muted">
+    <button type="button" id="fx-toggle" aria-pressed="false">
+      <span id="fx-label">&Epsilon;&phi;&#941;</span><span id="fx-state"></span>
+    </button>
+  </div>
+</footer>
+
+<script src="/app.js?v={{VERSION}}"></script>
+<script src="/radar.js?v={{VERSION}}"></script>
+</body>
+</html>

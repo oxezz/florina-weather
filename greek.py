@@ -1,0 +1,908 @@
+# -*- coding: utf-8 -*-
+"""Greek weather vocabulary and formatting helpers.
+
+Everything in this module is a pure function: no network, no clock, no config.
+That makes it the easiest part of the project to reason about and to test.
+
+Conventions
+-----------
+* Wind bearings follow the meteorological convention: the direction the wind
+  blows *from*. ``compass(0) == "Β"`` means a northerly wind.
+* Arrows returned by :func:`wind_arrow` point the way the wind is blowing
+  *towards*, which is what people intuitively read on a weather page.
+* Beaufort thresholds are the official km/h bands.
+"""
+
+import math
+
+# --------------------------------------------------------------------------
+# WMO weather interpretation codes
+# https://open-meteo.com/en/docs (WMO Code table 4677, abridged)
+# --------------------------------------------------------------------------
+
+# code -> (Greek description, icon key)
+_WMO = {
+    0:  ("Καθαρός", "clear"),
+    1:  ("Σχεδόν αίθριος", "mostly_clear"),
+    2:  ("Μερικώς νεφελώδης", "partly"),
+    3:  ("Νεφοσκεπής", "overcast"),
+    45: ("Ομίχλη", "fog"),
+    48: ("Παγωμένη ομίχλη", "fog"),
+    51: ("Ασθενές ψιλόβροχο", "drizzle"),
+    53: ("Ψιλόβροχο", "drizzle"),
+    55: ("Πυκνό ψιλόβροχο", "drizzle"),
+    56: ("Ασθενές παγωμένο ψιλόβροχο", "freezing"),
+    57: ("Πυκνό παγωμένο ψιλόβροχο", "freezing"),
+    61: ("Ασθενής βροχή", "rain"),
+    63: ("Βροχή", "rain"),
+    65: ("Ισχυρή βροχή", "rain"),
+    66: ("Ασθενής παγωμένη βροχή", "freezing"),
+    67: ("Ισχυρή παγωμένη βροχή", "freezing"),
+    71: ("Ασθενής χιονόπτωση", "snow"),
+    73: ("Χιονόπτωση", "snow"),
+    75: ("Ισχυρή χιονόπτωση", "snow"),
+    77: ("Χιονόκοκκοι", "snow"),
+    80: ("Ασθενείς τοπικές βροχές", "showers"),
+    81: ("Τοπικές βροχές", "showers"),
+    82: ("Ισχυρές τοπικές βροχές", "showers"),
+    85: ("Ασθενείς χιονοπτώσεις", "snow"),
+    86: ("Ισχυρές χιονοπτώσεις", "snow"),
+    95: ("Καταιγίδα", "thunder"),
+    96: ("Καταιγίδα με χαλάζι", "thunder"),
+    99: ("Ισχυρή καταιγίδα με χαλάζι", "thunder"),
+}
+
+UNKNOWN_TEXT = "Μη διαθέσιμο"
+
+# icon key -> (day emoji, night emoji). Written as escapes so the source file
+# stays readable in any editor and never depends on its own encoding.
+_EMOJI = {
+    "clear":        ("\u2600\ufe0f", "\U0001f319"),
+    "mostly_clear": ("\U0001f324\ufe0f", "\U0001f319"),
+    "partly":       ("\u26c5", "\u2601\ufe0f"),
+    "overcast":     ("\u2601\ufe0f", "\u2601\ufe0f"),
+    "fog":          ("\U0001f32b\ufe0f", "\U0001f32b\ufe0f"),
+    "drizzle":      ("\U0001f326\ufe0f", "\U0001f326\ufe0f"),
+    "rain":         ("\U0001f327\ufe0f", "\U0001f327\ufe0f"),
+    "freezing":     ("\U0001f328\ufe0f", "\U0001f328\ufe0f"),
+    "snow":         ("\U0001f328\ufe0f", "\U0001f328\ufe0f"),
+    "showers":      ("\U0001f326\ufe0f", "\U0001f326\ufe0f"),
+    "thunder":      ("\u26c8\ufe0f", "\u26c8\ufe0f"),
+}
+_UNKNOWN_EMOJI = "\u2601\ufe0f"
+
+
+def describe(code):
+    """Greek description for a WMO weather code."""
+    try:
+        return _WMO.get(int(code), (UNKNOWN_TEXT, None))[0]
+    except (TypeError, ValueError):
+        return UNKNOWN_TEXT
+
+
+def icon_key(code):
+    """Stable icon identifier for a WMO weather code (never ``None``)."""
+    try:
+        return _WMO.get(int(code), (None, "overcast"))[1]
+    except (TypeError, ValueError):
+        return "overcast"
+
+
+def emoji(code, is_day=True):
+    """Emoji for a WMO weather code, with a day/night variant where it helps."""
+    day, night = _EMOJI.get(icon_key(code), (_UNKNOWN_EMOJI, _UNKNOWN_EMOJI))
+    return day if is_day else night
+
+
+# --------------------------------------------------------------------------
+# Wind
+# --------------------------------------------------------------------------
+
+# 8-point compass, meteorological convention (direction the wind comes from).
+_COMPASS = ("Β", "ΒΑ", "Α", "ΝΑ", "Ν", "ΝΔ", "Δ", "ΒΔ")
+
+# Arrows point where the wind blows *towards* (bearing + 180°).
+_ARROWS = ("\u2193", "\u2199", "\u2190", "\u2196",
+           "\u2191", "\u2197", "\u2192", "\u2198")
+
+# Upper bound (inclusive, km/h) of Beaufort 1..11. Beaufort 0 is below 1 km/h
+# and Beaufort 12 is anything above the last bound.
+_BEAUFORT_UPPER = (5, 11, 19, 28, 38, 49, 61, 74, 88, 102, 117)
+
+_BEAUFORT_TEXT = (
+    "Άπνοια", "Σχεδόν άπνοια", "Πολύ ασθενής", "Ασθενής",
+    "Σχεδόν μέτριος", "Μέτριος", "Ισχυρός", "Σχεδόν θυελλώδης",
+    "Θυελλώδης", "Πολύ θυελλώδης", "Θύελλα", "Σφοδρή θύελλα", "Τυφώνας",
+)
+
+
+def _bearing_index(deg, points=8):
+    """Nearest compass index for a bearing in degrees."""
+    try:
+        d = float(deg) % 360.0
+    except (TypeError, ValueError):
+        return 0
+    return int(round(d / (360.0 / points))) % points
+
+
+def compass(deg):
+    """Greek 8-point compass abbreviation, e.g. ``"ΒΔ"``."""
+    return _COMPASS[_bearing_index(deg)]
+
+
+def wind_arrow(deg):
+    """Arrow showing where the wind is blowing towards."""
+    return _ARROWS[_bearing_index(deg)]
+
+
+def beaufort(kmh):
+    """Beaufort number (0-12) for a wind speed in km/h."""
+    try:
+        v = float(kmh)
+    except (TypeError, ValueError):
+        return 0
+    if v != v:  # NaN
+        return 0
+    speed = int(v) if v > 0 else 0
+    if speed < 1:
+        return 0
+    for index, limit in enumerate(_BEAUFORT_UPPER):
+        if speed <= limit:
+            return index + 1
+    return 12
+
+
+def beaufort_text(number):
+    """Greek description of a Beaufort number."""
+    try:
+        n = int(number)
+    except (TypeError, ValueError):
+        return _BEAUFORT_TEXT[0]
+    return _BEAUFORT_TEXT[max(0, min(12, n))]
+
+
+# --------------------------------------------------------------------------
+# Index levels
+# --------------------------------------------------------------------------
+
+_UV_BANDS = (
+    (3, "Χαμηλός", "#4ade80"),
+    (6, "Μέτριος", "#facc15"),
+    (8, "Υψηλός", "#fb923c"),
+    (11, "Πολύ υψηλός", "#f87171"),
+)
+_UV_TOP = ("Ακραίος", "#c084fc")
+
+# European AQI bands (0-20 good ... >100 extremely poor).
+_AQI_BANDS = (
+    (20, "Καλή", "#4ade80"),
+    (40, "Αποδεκτή", "#a3e635"),
+    (60, "Μέτρια", "#facc15"),
+    (80, "Κακή", "#fb923c"),
+    (100, "Πολύ κακή", "#f87171"),
+)
+_AQI_TOP = ("Εξαιρετικά κακή", "#c084fc")
+
+_UV_QUALITY = (
+    "Καθαρή ατμόσφαιρα", "Καλή ορατότητα", "Μέτρια ορατότητα",
+    "Μειωμένη ορατότητα", "Πολύ μειωμένη ορατότητα",
+)
+
+# Frost bands for growers, coldest first. -2 °C is the usual damage threshold
+# for flowering fruit trees; -4 °C is a hard, crop-damaging freeze.
+_FROST_BANDS = (
+    (-4.0, "severe", "Ισχυρός παγετός", "#a5b4fc"),
+    (-2.0, "hard", "Έντονος παγετός", "#93c5fd"),
+    (0.0, "frost", "Παγετός", "#7dd3fc"),
+    (2.0, "risk", "Πιθανός παγετός", "#bae6fd"),
+)
+
+# Winter wood-smoke build-up, in µg/m³ of PM2.5. The 15 figure is the WHO 2021
+# 24-hour guideline; 25 is the EU daily limit value.
+_SMOG_BANDS = (
+    (50.0, "alert", "Έντονη αιθαλομίχλη", "#f87171"),
+    (25.0, "warn", "Αιθαλομίχλη", "#fb923c"),
+    (15.0, "note", "Αυξημένα σωματίδια", "#facc15"),
+)
+
+
+def frost_level(min_temp):
+    """(key, Greek label, hex colour) for a forecast minimum, or ``None``.
+
+    ``None`` means the night is warm enough not to be worth mentioning, which
+    is what keeps the frost card off the page for most of the year.
+    """
+    try:
+        value = float(min_temp)
+    except (TypeError, ValueError):
+        return None
+    if value != value:  # NaN
+        return None
+    for limit, key, label, colour in _FROST_BANDS:
+        if value <= limit:
+            return (key, label, colour)
+    return None
+
+
+def smog_level(pm25):
+    """(key, Greek label, hex colour) for a peak PM2.5 value, or ``None``."""
+    try:
+        value = float(pm25)
+    except (TypeError, ValueError):
+        return None
+    if value != value:  # NaN
+        return None
+    for limit, key, label, colour in _SMOG_BANDS:
+        if value >= limit:
+            return (key, label, colour)
+    return None
+
+
+# How far apart the weather models are on a day's temperature, in °C. A spread
+# of a degree is normal; five degrees means the forecast deserves a caveat.
+_AGREEMENT_BANDS = (
+    (1.5, "tight", "Τα μοντέλα συμφωνούν", "#4ade80"),
+    (3.5, "fair", "Μικρή διαφωνία μοντέλων", "#facc15"),
+)
+_AGREEMENT_WIDE = ("wide", "Τα μοντέλα διαφωνούν", "#fb923c")
+
+# A thermal inversion, measured as how much warmer the slope is than the
+# standard atmosphere would make it.
+_INVERSION_BANDS = (
+    (3.5, "strong", "Ισχυρή αναστροφή", "#f472b6"),
+    (1.5, "inversion", "Θερμοκρασιακή αναστροφή", "#c084fc"),
+)
+
+# When the models disagree by more than the anomaly itself, the reading is a
+# hint rather than a fact and should say so.
+UNCERTAIN_INVERSION = ("uncertain", "Πιθανή αναστροφή", "#a5b4fc")
+
+
+def agreement_level(spread):
+    """(key, Greek label, hex colour) for an inter-model temperature spread."""
+    try:
+        value = float(spread)
+    except (TypeError, ValueError):
+        return _AGREEMENT_WIDE
+    if value != value:
+        return _AGREEMENT_WIDE
+    for limit, key, label, colour in _AGREEMENT_BANDS:
+        if value < limit:
+            return (key, label, colour)
+    return _AGREEMENT_WIDE
+
+
+def inversion_level(anomaly):
+    """(key, Greek label, hex colour) for an inversion anomaly in °C.
+
+    ``None`` means the atmosphere is behaving normally, which is what keeps
+    the card off the page on a well-mixed day.
+    """
+    try:
+        value = float(anomaly)
+    except (TypeError, ValueError):
+        return None
+    if value != value:  # NaN
+        return None
+    for limit, key, label, colour in _INVERSION_BANDS:
+        if value >= limit:
+            return (key, label, colour)
+    return None
+
+
+# The eight phases, as the fraction of the synodic month they sit near.
+# Αμφίκυρτος is the standard Greek astronomical term for a gibbous moon.
+_MOON_PHASES = (
+    (0.03, "new", "Νέα Σελήνη", "🌑"),
+    (0.22, "waxing-crescent", "Αύξουσα Ημισέληνος", "🌒"),
+    (0.28, "first-quarter", "Πρώτο Τέταρτο", "🌓"),
+    (0.47, "waxing-gibbous", "Αύξουσα Αμφίκυρτος", "🌔"),
+    (0.53, "full", "Πανσέληνος", "🌕"),
+    (0.72, "waning-gibbous", "Φθίνουσα Αμφίκυρτος", "🌖"),
+    (0.78, "last-quarter", "Τελευταίο Τέταρτο", "🌗"),
+    (0.97, "waning-crescent", "Φθίνουσα Ημισέληνος", "🌘"),
+)
+_MOON_NEW = ("new", "Νέα Σελήνη", "🌑")
+
+
+def moon_phase(fraction):
+    """(key, Greek name, emoji) for Open-Meteo's ``moon_phase`` fraction."""
+    try:
+        value = float(fraction) % 1.0
+    except (TypeError, ValueError):
+        return _MOON_NEW
+    if value != value:  # NaN
+        return _MOON_NEW
+    for limit, key, name, emoji in _MOON_PHASES:
+        if value < limit:
+            return (key, name, emoji)
+    return _MOON_NEW
+
+
+def moon_illumination(fraction):
+    """Share of the disc lit, 0 at new moon and 1 at full."""
+    try:
+        value = float(fraction) % 1.0
+    except (TypeError, ValueError):
+        return 0.0
+    return round((1.0 - math.cos(2.0 * math.pi * value)) / 2.0, 3)
+
+
+def stargazing_level(cloud, aqi, illumination):
+    """(key, Greek verdict, hex colour) for tonight's observing conditions.
+
+    Cloud is the thing that actually stops you seeing anything, so it leads;
+    moonlight and haze only matter once the sky is clear.
+    """
+    try:
+        cover = float(cloud)
+    except (TypeError, ValueError):
+        return None
+    if cover != cover:  # NaN
+        return None
+    bright = 0.0
+    try:
+        bright = float(illumination)
+    except (TypeError, ValueError):
+        bright = 0.0
+    hazy = False
+    try:
+        hazy = float(aqi) > 40.0
+    except (TypeError, ValueError):
+        hazy = False
+
+    if cover <= 20.0 and not hazy and bright <= 0.45:
+        return ("ideal", "Ιδανικές συνθήκες για αστροπαρατήρηση", "#7dd3fc")
+    if cover <= 25.0 and not hazy:
+        # Clear, but the moon will wash out the faint stuff.
+        return ("moonlit", "Καθαρός ουρανός, αλλά φωτεινό φεγγάρι", "#c4b5fd")
+    if cover <= 45.0:
+        return ("fair", "Καλές συνθήκες", "#4ade80")
+    if cover <= 75.0:
+        return ("poor", "Μέτριες συνθήκες", "#facc15")
+    return ("none", "Συννεφιά, όχι απόψε", "#94a3b8")
+
+
+# Layers by apparent temperature, coldest first so the first match wins.
+# Deliberately specific: "βάλε μπουφάν" tells you nothing you did not know,
+# while naming the actual garments is the whole point of the card.
+_OUTFIT_BANDS = (
+    (0.0, "severe", "Ισοθερμικά, βαρύ μπουφάν, σκούφος και γάντια", "🧣"),
+    (6.0, "cold", "Χειμωνιάτικο μπουφάν, ζεστά ρούχα", "🧥"),
+    (12.0, "cool", "Μπουφάν ή παλτό", "🧥"),
+    (18.0, "mild", "Ελαφρύ μπουφάν, φούτερ ή ζακέτα", "🧥"),
+    (25.0, "warm", "Κοντομάνικο, με ζακέτα για το βράδυ", "👕"),
+    (32.0, "hot", "Δροσερά, ελαφριά ρούχα", "🩳"),
+)
+_OUTFIT_SCORCHING = ("scorching", "Πολλή ζέστη — όσο πιο ελαφριά γίνεται", "🥵")
+
+# Short names, for when two bands have to appear in one line.
+_BAND_SHORT = {
+    "severe": "ισοθερμικά",
+    "cold": "χειμωνιάτικο",
+    "cool": "μπουφάν",
+    "mild": "ελαφρύ μπουφάν",
+    "warm": "κοντομάνικο",
+    "hot": "ελαφριά",
+    "scorching": "ελάχιστα",
+}
+
+# When the twelve hours ahead span this much, no single layer is the answer.
+OUTFIT_SWING = 10.0
+
+
+def outfit_swing(low, high):
+    """A headline naming both ends of a day too varied for one layer.
+
+    "Στρώσεις" on its own says nothing you could act on, which defeats the
+    point of the card. Naming the two garments does.
+    """
+    cold = outfit_layer(low)
+    warm = outfit_layer(high)
+    if cold is None or warm is None or cold[0] == warm[0]:
+        return None
+    return "Στρώσεις: %s για αρχή, %s για μετά" % (
+        _BAND_SHORT.get(cold[0], cold[1]), _BAND_SHORT.get(warm[0], warm[1]))
+
+# When the twelve hours ahead span ten degrees, no single layer is the answer.
+OUTFIT_LAYERS = ("layers", "Στρώσεις — η θερμοκρασία αλλάζει αρκετά", "🧥")
+
+
+def outfit_layer(apparent):
+    """(key, Greek suggestion, emoji) for what to wear, by feels-like °C."""
+    try:
+        value = float(apparent)
+    except (TypeError, ValueError):
+        return None
+    if value != value:  # NaN
+        return None
+    for limit, key, text, emoji in _OUTFIT_BANDS:
+        if value < limit:
+            return (key, text, emoji)
+    return _OUTFIT_SCORCHING
+
+
+# Extras layered on top of the main suggestion. Several can apply at once, so
+# they are a list rather than one "alert" that has to win.
+OUTFIT_UMBRELLA = ("umbrella", "Ομπρέλα", "☂️")
+OUTFIT_MAYBE_UMBRELLA = ("maybe-umbrella", "Ίσως ομπρέλα", "🌂")
+OUTFIT_RAINCOAT = ("raincoat", "Αδιάβροχο, όχι ομπρέλα", "🧥")
+OUTFIT_SUNSCREEN = ("sunscreen", "Αντηλιακό", "🧴")
+OUTFIT_HAT = ("hat", "Καπέλο", "🧢")
+OUTFIT_WIND = ("wind", "Δυνατός αέρας", "💨")
+OUTFIT_ICE = ("ice", "Προσοχή στον πάγο", "⚠️")
+# A coat, not an onion. The onion was a deliberate pun on "layers" and it read
+# as food next to clothing advice, which is not a trade worth making.
+# One line, only when two conditions combine into advice worth spelling out.
+OUTFIT_ADVICE = {
+    "wind-and-rain": "Δυνατός αέρας με βροχή — καλύτερα αδιάβροχο παρά ομπρέλα.",
+    "big-swing": "Μεγάλη διαφορά μέσα στη μέρα, πάρτε κάτι για τα δύο άκρα.",
+    "freezing": "Παγωνιά — καλύψτε πρόσωπο και χέρια.",
+    "scorching": "Ζέστη — νερό μαζί και σκιά το μεσημέρι.",
+    "wind-chill": "Ο αέρας κόβει, αισθάνεται αρκετά πιο κρύο απ' ό,τι δείχνει.",
+}
+
+
+# The dew point is what "muggy" actually means. Relative humidity alone
+# misleads: 60% at 5 C is a dry day and 60% at 25 C is sticky, while the dew
+# point is the same number in both.
+_COMFORT_BANDS = (
+    (0.0, "crisp", "Ξηρός και δροσερός αέρας", "#7dd3fc"),
+    (10.0, "dry", "Στεγνός αέρας", "#a5d8f3"),
+    (16.0, "comfortable", "Άνετη ατμόσφαιρα", "#4ade80"),
+    (20.0, "humid", "Αίσθηση υγρασίας", "#facc15"),
+)
+_COMFORT_MUGGY = ("muggy", "Αποπνικτική υγρασία", "#fb923c")
+
+
+def comfort_level(dew_point):
+    """(key, Greek label, hex colour) for a dew point in °C."""
+    try:
+        value = float(dew_point)
+    except (TypeError, ValueError):
+        return None
+    if value != value:  # NaN
+        return None
+    for limit, key, label, colour in _COMFORT_BANDS:
+        if value < limit:
+            return (key, label, colour)
+    return _COMFORT_MUGGY
+
+
+# How today's solar energy compares with the same date's ten-year average.
+_SOLAR_BANDS = (
+    (40.0, "poor", "Συννεφιά, χαμηλή απόδοση", "#94a3b8"),
+    (70.0, "fair", "Μέτρια ηλιοφάνεια", "#facc15"),
+    (100.0, "good", "Καλή ηλιοφάνεια", "#4ade80"),
+)
+_SOLAR_EXCELLENT = ("excellent", "Εξαιρετική ηλιοφάνεια", "#38bdf8")
+
+
+def solar_level(share):
+    """(key, Greek label, hex colour) for a percentage of the normal yield."""
+    try:
+        value = float(share)
+    except (TypeError, ValueError):
+        return None
+    if value != value:  # NaN
+        return None
+    for limit, key, label, colour in _SOLAR_BANDS:
+        if value < limit:
+            return (key, label, colour)
+    return _SOLAR_EXCELLENT
+
+
+def solar_text(share):
+    try:
+        value = float(share)
+    except (TypeError, ValueError):
+        return ""
+    if value < 40:
+        return "χαμηλή για την εποχή"
+    if value < 70:
+        return "κοντά στα κανονικά"
+    if value < 100:
+        return "καλή για την εποχή"
+    return "πάνω από τα κανονικά"
+
+
+# The Vigla pass sits at about 1773 m, so rain in town can be snow up there
+# with nobody the wiser. The freezing level is the honest signal, not the
+# valley temperature.
+_ROAD_LEVELS = (
+    (20.0, "closed", "Πολύ χιόνι στο διάσελο", "#f472b6"),
+    (8.0, "severe", "Έντονη χιονόπτωση στο διάσελο", "#fb923c"),
+    (1.0, "warn", "Πιθανή χιονόπτωση στη Βίγλα", "#facc15"),
+)
+_ROAD_NOTE = ("note", "Χιόνι στο διάσελο", "#bae6fd")
+
+
+def road_level(risk_hours, fall, depth):
+    """(key, Greek label, hex colour) for the mountain road.
+
+    Depth on the ground leads, because it is what is actually lying there;
+    falling snow only becomes serious once enough of it is forecast.
+    """
+    try:
+        depth = float(depth or 0)
+        fall = float(fall or 0)
+        risk = int(risk_hours or 0)
+    except (TypeError, ValueError):
+        return _ROAD_NOTE
+    if depth >= 20 or fall >= 15:
+        return _ROAD_LEVELS[0][1:]
+    if depth >= 5 or fall >= 8:
+        return _ROAD_LEVELS[1][1:]
+    if risk > 0:
+        return _ROAD_LEVELS[2][1:]
+    return _ROAD_NOTE
+
+
+def road_text(key, risk_hours):
+    """The one line a driver needs, keyed to how bad it looks."""
+    if key == "closed":
+        return "Αλυσίδες ή χιονολάστιχα απαραίτητα, ίσως χρειαστεί κλείσιμο."
+    if key == "severe":
+        return "Απαραίτητες αλυσίδες ή χιονολάστιχα."
+    if key == "warn":
+        hours = "ώρα" if risk_hours == 1 else "ώρες"
+        return "Προσοχή στο πέρασμα — %d %s με πιθανό χιόνι." % (risk_hours, hours)
+    return "Λίγο χιόνι ψηλά, ο δρόμος συνήθως ανοιχτός."
+
+
+# The mountain card answers a different question in winter than in summer:
+# "can I get up there and is there snow" versus "is it worth driving up to
+# escape the heat". Two vocabularies rather than one.
+_MOUNTAIN_LABELS = {
+    "winter": ("Χειμερινή σεζόν", "🎿"),
+    "summer": ("Καλοκαιρινή απόδραση", "🥾"),
+}
+
+
+def mountain_season(month, depth=0.0, fall=0.0):
+    """Winter from November to March, or any time it snows.
+
+    The snow test comes first so an unseasonal fall in October or April still
+    switches the card over — the month is the rule, the snow is the override.
+    Fresh snow counts as well as lying snow: a dump in October is a ski day
+    even before there is anything settled on the ground.
+    """
+    try:
+        if float(depth or 0) >= 2.0 or float(fall or 0) >= 2.0:
+            return "winter"
+    except (TypeError, ValueError):
+        pass
+    try:
+        month = int(month)
+    except (TypeError, ValueError):
+        return "summer"
+    return "winter" if month >= 11 or month <= 3 else "summer"
+
+
+def mountain_label(season):
+    """(Greek label, emoji) for a season key."""
+    return _MOUNTAIN_LABELS.get(season, _MOUNTAIN_LABELS["summer"])
+
+
+def winter_hint(road_key, temp, wind, depth):
+    """One line for a winter visit, worst thing first."""
+    if road_key in ("warn", "severe", "closed"):
+        return "Απαραίτητες αλυσίδες ή χιονολάστιχα για το διάσελο."
+    if isinstance(temp, (int, float)) and temp <= -6:
+        return "Δυνατό κρύο στο ύψωμα — πολλά στρώματα και γάντια."
+    if isinstance(wind, (int, float)) and wind >= 45:
+        return "Δυνατός αέρας στο ύψωμα — προσοχή στους αναβατήρες."
+    if not depth or depth < 2.0:
+        return "Δεν έχει χιόνι ακόμα — ο δρόμος είναι συνήθως ανοιχτός."
+    return "Καλές συνθήκες για σκι στο Πισοδέρι."
+
+
+def summer_hint(gap, temp, wind):
+    """One line for a summer visit. The temperature gap is the whole point."""
+    if isinstance(gap, (int, float)) and gap >= 8:
+        return "Πάνω από 8° πιο δροσερά από την πόλη — αξίζει η ανάβαση."
+    if isinstance(wind, (int, float)) and wind >= 40:
+        return "Δυνατός αέρας στο ύψωμα — πάρε κάτι ζεστό μαζί."
+    if isinstance(temp, (int, float)) and temp >= 24:
+        return "Ζέστη ακόμα και ψηλά — ξεκίνα νωρίς το πρωί."
+    if isinstance(temp, (int, float)) and temp <= 8:
+        return "Δροσερό ακόμα και το καλοκαίρι — πάρε ζακέτα."
+    return "Ιδανική θερμοκρασία για πεζοπορία στο δάσος της οξιάς."
+
+
+def mountain_gap_text(gap):
+    """How much cooler the mountain is, phrased for a headline."""
+    try:
+        value = float(gap)
+    except (TypeError, ValueError):
+        return ""
+    if value <= 0:
+        return "ίδια περίπου με την πόλη"
+    return "%.1f° πιο δροσερά από την πόλη" % value
+
+
+def normal_text(delta):
+    """How today compares with the decade's average for the same date."""
+    try:
+        value = float(delta)
+    except (TypeError, ValueError):
+        return ""
+    if value != value:  # NaN
+        return ""
+    if abs(value) < 0.5:
+        return "κοντά στα κανονικά για την εποχή"
+    return "%.1f°C %s από το κανονικό" % (
+        abs(value), "θερμότερα" if value > 0 else "ψυχρότερα")
+
+
+def greeting_word(hour):
+    """Καλημέρα before noon, Καλησπέρα after.
+
+    Καληνύχτα is deliberately absent. In Greek it is a farewell, not a
+    greeting, so a page must never open with it.
+    """
+    try:
+        value = int(hour)
+    except (TypeError, ValueError):
+        return "Καλησπέρα"
+    return "Καλημέρα" if 5 <= value <= 12 else "Καλησπέρα"
+
+
+# The one-line observation that follows the greeting. Keyed by the condition
+# that wins, checked in this order.
+GREETING_LINES = {
+    "snow": "Χιόνι σήμερα, με προσοχή στους δρόμους.",
+    "storm": "Καταιγίδα σήμερα, καλύτερα να μην είστε έξω.",
+    "rain": "Βροχερή μέρα σήμερα.",
+    "fog": "Ομίχλη σήμερα, προσοχή στην οδήγηση.",
+    "frost": "Παγωνιά σήμερα, ντυθείτε καλά.",
+    "cold": "Κρύο σήμερα.",
+    "heat": "Ζέστη σήμερα, πιείτε νερό.",
+    "clear-night": "Ξάστερος ουρανός απόψε.",
+    "clear-day": "Καθαρός ουρανός σήμερα.",
+    "cloud": "Συννεφιά σήμερα.",
+}
+
+
+def uv_level(value):
+    """(Greek label, hex colour) for a UV index value."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return ("—", "#94a3b8")
+    for limit, label, colour in _UV_BANDS:
+        if v < limit:
+            return (label, colour)
+    return _UV_TOP
+
+
+def aqi_level(value):
+    """(Greek label, hex colour) for a European AQI value."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return ("—", "#94a3b8")
+    for limit, label, colour in _AQI_BANDS:
+        if v < limit:
+            return (label, colour)
+    return _AQI_TOP
+
+
+def visibility_text(metres):
+    """Greek visibility quality word from a distance in metres."""
+    try:
+        v = float(metres)
+    except (TypeError, ValueError):
+        return "—"
+    if v >= 40000:
+        return _UV_QUALITY[0]
+    if v >= 20000:
+        return _UV_QUALITY[1]
+    if v >= 4000:
+        return _UV_QUALITY[2]
+    if v >= 1000:
+        return _UV_QUALITY[3]
+    return _UV_QUALITY[4]
+
+
+# --------------------------------------------------------------------------
+# Dates and times
+# --------------------------------------------------------------------------
+
+WEEKDAYS = ("Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη",
+            "Παρασκευή", "Σάββατο", "Κυριακή")
+WEEKDAYS_SHORT = ("Δευ", "Τρι", "Τετ", "Πεμ", "Παρ", "Σαβ", "Κυρ")
+MONTHS_GENITIVE = ("Ιανουαρίου", "Φεβρουαρίου", "Μαρτίου", "Απριλίου",
+                   "Μαΐου", "Ιουνίου", "Ιουλίου", "Αυγούστου",
+                   "Σεπτεμβρίου", "Οκτωβρίου", "Νοεμβρίου", "Δεκεμβρίου")
+
+# Three-letter forms, for the axis of a small chart where the genitive is too
+# long to sit under a bar.
+MONTHS_SHORT = ("Ιαν", "Φεβ", "Μαρ", "Απρ", "Μάι", "Ιούν",
+                "Ιούλ", "Αύγ", "Σεπ", "Οκτ", "Νοέ", "Δεκ")
+
+
+def month_short(month):
+    """Three-letter Greek month name, 1-12."""
+    try:
+        month = int(month)
+    except (TypeError, ValueError):
+        return ""
+    return MONTHS_SHORT[month - 1] if 1 <= month <= 12 else ""
+
+
+def weekday_name(date):
+    """Full Greek weekday, e.g. ``"Τρίτη"``."""
+    return WEEKDAYS[date.weekday()]
+
+
+def weekday_short(date):
+    """Abbreviated Greek weekday, e.g. ``"Τρι"``."""
+    return WEEKDAYS_SHORT[date.weekday()]
+
+
+def month_name(date):
+    """Greek month name in the genitive, e.g. ``"Οκτωβρίου"``."""
+    return MONTHS_GENITIVE[date.month - 1]
+
+
+def long_date(date):
+    """e.g. ``"Τρίτη 6 Οκτωβρίου"``."""
+    return "%s %d %s" % (weekday_name(date), date.day, month_name(date))
+
+
+def day_label(date, today):
+    """``"Σήμερα"`` / ``"Αύριο"`` / weekday name."""
+    delta = (date - today).days
+    if delta == 0:
+        return "Σήμερα"
+    if delta == 1:
+        return "Αύριο"
+    return weekday_name(date)
+
+
+def format_hhmm(iso_timestamp):
+    """``"2026-10-06T07:35"`` -> ``"07:35"``.
+
+    Also tolerates a full ISO timestamp and a bare ``"07:35"``.
+    """
+    if not iso_timestamp or not isinstance(iso_timestamp, str):
+        return "—"
+    text = iso_timestamp.strip()
+    if "T" in text:
+        text = text.split("T", 1)[1]
+    text = text[:5]
+    return text if len(text) == 5 and text[2] == ":" else "—"
+
+
+def format_duration(seconds):
+    """Seconds -> ``"11ω 33λ"``; falls back to ``"—"``."""
+    try:
+        total = int(round(float(seconds)))
+    except (TypeError, ValueError):
+        return "—"
+    if total < 0:
+        return "—"
+    hours, remainder = divmod(total, 3600)
+    minutes = remainder // 60
+    if hours and minutes:
+        return "%dω %02dλ" % (hours, minutes)
+    if hours:
+        return "%dω" % hours
+    return "%dλ" % minutes
+
+
+def format_interval(seconds):
+    """Refresh interval in words: ``600`` -> ``"10 λεπτά"``.
+
+    Short intervals stay in seconds, because "1 λεπτά" would be wrong and
+    "0 λεπτά" is useless.
+    """
+    try:
+        total = int(seconds)
+    except (TypeError, ValueError):
+        return "—"
+    if total < 120:
+        return "%d δευτ." % total
+    minutes = total // 60
+    if minutes == 1:
+        return "1 λεπτό"
+    return "%d λεπτά" % minutes
+
+
+# --------------------------------------------------------------------------
+# Meteoalarm warnings
+# --------------------------------------------------------------------------
+
+# Meteoalarm "awareness_type" parameter, e.g. "1; Wind" -> the part after ";".
+_HAZARDS = {
+    "wind": ("Άνεμος", "\U0001f4a8"),
+    "rain": ("Βροχή", "\U0001f327\ufe0f"),
+    "rain-flood": ("Βροχή και πλημμύρες", "\U0001f327\ufe0f"),
+    "thunderstorm": ("Καταιγίδες", "\u26c8\ufe0f"),
+    "snow-ice": ("Χιόνι και πάγος", "\u2744\ufe0f"),
+    "blizzard": ("Χιονοθύελλα", "\U0001f328\ufe0f"),
+    "avalanche": ("Χιονοστιβάδα", "\U0001f3d4\ufe0f"),
+    "fog": ("Ομίχλη", "\U0001f32b\ufe0f"),
+    "high-temperature": ("Καύσωνας", "\U0001f321\ufe0f"),
+    "low-temperature": ("Ψύχος", "\u2744\ufe0f"),
+    "coastal-event": ("Παράκτια φαινόμενα", "\U0001f30a"),
+    "forest-fire": ("Πυρκαγιά", "\U0001f525"),
+    "flood": ("Πλημμύρα", "\U0001f30a"),
+    "rainfall": ("Βροχόπτωση", "\U0001f327\ufe0f"),
+    "extreme-temperature": ("Ακραίες θερμοκρασίες", "\U0001f321\ufe0f"),
+}
+
+# Meteoalarm awareness level: "2; Yellow; Moderate".
+_LEVELS = (
+    ("green", "Πράσινη", "#4ade80"),
+    ("yellow", "Κίτρινη", "#facc15"),
+    ("orange", "Πορτοκαλί", "#fb923c"),
+    ("red", "Κόκκινη", "#ef4444"),
+)
+
+_SEVERITY_LEVEL = {
+    "minor": "green",
+    "moderate": "yellow",
+    "severe": "orange",
+    "extreme": "red",
+}
+
+
+def hazard(code):
+    """(Greek hazard name, emoji) from a Meteoalarm awareness_type code."""
+    key = (code or "").strip().lower()
+    if key in _HAZARDS:
+        return _HAZARDS[key]
+    return (key.replace("-", " ").capitalize() or "Προειδοποίηση", "\u26a0\ufe0f")
+
+
+def warning_rank(level_key):
+    """Numeric severity rank (0 = green … 3 = red) for sorting alerts."""
+    for index, (key, _label, _colour) in enumerate(_LEVELS):
+        if key == level_key:
+            return index
+    return 1
+
+
+def warning_level(awareness_level=None, severity=None):
+    """(level key, Greek label, hex colour) for a Meteoalarm warning.
+
+    ``awareness_level`` looks like ``"2; Yellow; Moderate"`` and is the most
+    reliable signal; ``severity`` is the CAP fallback.
+    """
+    if awareness_level:
+        parts = [p.strip() for p in str(awareness_level).split(";")]
+        for part in reversed(parts):
+            low = part.lower()
+            for index, (key, label, colour) in enumerate(_LEVELS):
+                if key == low:
+                    return (key, label, colour)
+            if low.isdigit() and 1 <= int(low) <= 4:
+                key, label, colour = _LEVELS[int(low) - 1]
+                return (key, label, colour)
+    key = _SEVERITY_LEVEL.get((severity or "").strip().lower(), "yellow")
+    for candidate in _LEVELS:
+        if candidate[0] == key:
+            return candidate
+    return _LEVELS[1]
+
+
+# --------------------------------------------------------------------------
+# Number formatting
+# --------------------------------------------------------------------------
+
+
+def number(value, decimals=0, dash="—"):
+    """Format a number defensively; ``None``/NaN become ``dash``."""
+    if value is None:
+        return dash
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return dash
+    if v != v or v in (float("inf"), float("-inf")):  # NaN / inf
+        return dash
+    if decimals <= 0:
+        return "%d" % int(round(v))
+    return ("%." + str(decimals) + "f") % v
