@@ -9,10 +9,10 @@
 "use strict";
 
 (function () {
-  var KEY = "florina.mode";
-  var MODES = ["auto", "light", "dark"];
-  var root = document.documentElement;
-  var media = window.matchMedia("(prefers-color-scheme: light)");
+  const KEY = "florina.mode";
+  const MODES = ["auto", "light", "dark"];
+  const root = document.documentElement;
+  const media = window.matchMedia("(prefers-color-scheme: light)");
 
   function stored() {
     try {
@@ -84,7 +84,7 @@
     else setTimeout(done, 600);
   }
 
-  var api = {
+  const api = {
     modes: MODES.slice(),
     get: preferred,
     resolve: function () { return resolve(preferred()); },
@@ -118,14 +118,14 @@
      *capability*, and the honest starting value for a touch device is reduced,
      because that is already what it renders - the switch then means "give me
      the full thing anyway", which is the point of it. */
-  var FX_KEY = "florina.fx";
-  var fxMedia = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const FX_KEY = "florina.fx";
+  const fxMedia = window.matchMedia("(prefers-reduced-motion: reduce)");
   /* Chromium-only, and ignored by Firefox. Without it in here the switch would
      claim "full" on a machine whose operating system had already turned
      translucency off - and, before the stylesheet change that goes with this,
      the claim was simply false because nothing could turn the blur back on. */
-  var fxTransparency = window.matchMedia("(prefers-reduced-transparency: reduce)");
-  var hoverMedia = window.matchMedia("(hover: hover) and (pointer: fine)");
+  const fxTransparency = window.matchMedia("(prefers-reduced-transparency: reduce)");
+  const hoverMedia = window.matchMedia("(hover: hover) and (pointer: fine)");
 
   function fxStored() {
     try {

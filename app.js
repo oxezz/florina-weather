@@ -7,11 +7,11 @@
 "use strict";
 
 (function () {
-  var API = "/api/weather";
-  var REFRESH = Math.max(30, Number(document.body.dataset.refresh) || 180);
+  const API = "/api/weather";
+  const REFRESH = Math.max(30, Number(document.body.dataset.refresh) || 180);
 
   /* Memoized computed values - cached during renders to avoid recalculation */
-  var memoized = {
+  const memoized = {
     chartPadding: null,
     chartAxisY: null,
     chartPrecipTop: null,
@@ -20,7 +20,7 @@
     chartStep: null
   };
 
-  var state = {
+  const state = {
     timer: null,
     inflight: false,
     lastGenerated: null,
@@ -70,7 +70,7 @@
       the long task at all, because the cost was the layout it triggered.
       Collect the nodes and pay for one reflow instead of eighteen. */
   /* Limited to 10 items and cleared after flush to prevent memory leaks */
-  var flashQueue = [];
+  const flashQueue = [];
 
   function flash(node) {
     flashQueue.push(node);
@@ -153,10 +153,10 @@
     return node;
   }
 
-  var SVG = "http://www.w3.org/2000/svg";
+  const SVG = "http://www.w3.org/2000/svg";
   function svg(tag, attrs) {
-    var node = document.createElementNS(SVG, tag);
-    for (var key in attrs) {
+    const node = document.createElementNS(SVG, tag);
+    for (const key in attrs) {
       if (Object.prototype.hasOwnProperty.call(attrs, key)) {
         node.setAttribute(key, attrs[key]);
       }
@@ -322,7 +322,7 @@
      14 ms per load at 4x CPU throttle - and this used to run on every render
      for a value decided entirely by the class the code had just set. Cached
      against that class string: one read per theme change, not per render. */
-  var themeColor = { key: null, value: "" };
+  const themeColor = { key: null, value: "" };
 
   function syncThemeColor() {
     var meta = document.querySelector('meta[name="theme-color"]');
@@ -1384,8 +1384,8 @@
      Labelled as older data through the existing stale flag, because the rule
      for this app is that stale weather is worse than none - and stale weather
      that says it is stale is worse than neither. */
-  var LAST_REPORT = "florina:last-report";
-  var KEEP_FOR_S = 6 * 3600;   // past this the numbers mean nothing anyway
+  const LAST_REPORT = "florina:last-report";
+  const KEEP_FOR_S = 6 * 3600;   // past this the numbers mean nothing anyway
 
   function storeStorage(entry) {
     try {

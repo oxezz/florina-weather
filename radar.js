@@ -21,43 +21,42 @@
 "use strict";
 
 (function () {
-  var panel = document.getElementById("radar-panel");
+  const panel = document.getElementById("radar-panel");
   if (!panel) return;
 
-  var canvas = document.getElementById("radar-cv");
-  var ctx = canvas.getContext("2d");
-  var timeEl = document.getElementById("radar-time");
-  var noteEl = document.getElementById("radar-note");
-  var playBtn = document.getElementById("radar-play");
-  var scrub = document.getElementById("radar-scrub");
+  const canvas = document.getElementById("radar-cv");
+  const ctx = canvas.getContext("2d");
+  const timeEl = document.getElementById("radar-time");
+  const noteEl = document.getElementById("radar-note");
+  const playBtn = document.getElementById("radar-play");
+  const scrub = document.getElementById("radar-scrub");
 
-  var SIZE = 320;                      /* logical px */
-  var REFRESH_MS = 600000;             /* matches the server's 10-minute step */
-  var MAX_AGE_S = 2400;                /* stale radar is worse than none */
-  var TOWNS = [
+  const SIZE = 320;                      /* logical px */
+  const REFRESH_MS = 600000;             /* matches the server's 10-minute step */
+  const MAX_AGE_S = 2400;                /* stale radar is worse than none */
+  const TOWNS = [
     ["Καστοριά", 40.5192, 21.2687],
     ["Έδεσσα", 40.8022, 22.0476],
     ["Μοναστήρι", 41.0297, 21.3347],
     ["Πτολεμαΐδα", 40.5167, 21.6833]
   ];
-  var clock = new Intl.DateTimeFormat("el-GR", {
+  const clock = new Intl.DateTimeFormat("el-GR", {
     hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Europe/Athens"
   });
-  var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  var PLACE = "Φλώρινα";   /* replaced by the payload */
-  var TOWNS = [
+  const PLACE = "Φλώρινα";   /* replaced by the payload */
+  const TOWNS = [
     ["Καστοριά", 40.5192, 21.2687],
     ["Έδεσσα", 40.8022, 22.0476],
     ["Μοναστήρι", 41.0297, 21.3347],
     ["Πτολεμαΐδα", 40.5167, 21.6833]
   ];
-  var geo = null, borders = [], lakes = [];
-  var data = null, frames = [], colors = [], layer = null;
-  var current = 0, playing = false, timer = 0, visible = false, loadedAt = 0;
-  var radarDebounce = null;
+  const geo = null, borders = [], lakes = [];
+  let current = 0, playing = false, timer = 0, visible = false, loadedAt = 0;
+  const radarDebounce = null;
 
-  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = canvas.height = SIZE * dpr;
 
   /* ---- data ------------------------------------------------------------ */
