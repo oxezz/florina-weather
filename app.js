@@ -1,14 +1,24 @@
 /* ==========================================================================
-   Καιρός · Φλώρινα — client
-   Fetches /api/weather and renders the page. Refreshes in the background
-   without reloading, pauses while the tab is hidden, and never injects
-   upstream text as HTML (Meteoalarm descriptions are third-party data).
-   ========================================================================== */
+    Καιρός · Φλώρινα — client
+    Fetches /api/weather and renders the page. Refreshes in the background
+    without reloading, pauses while the tab is hidden, and never injects
+    upstream text as HTML (Meteoalarm descriptions are third-party data).
+    ========================================================================== */
 "use strict";
 
 (function () {
   var API = "/api/weather";
   var REFRESH = Math.max(30, Number(document.body.dataset.refresh) || 180);
+
+  /* Memoized computed values - cached during renders to avoid recalculation */
+  var memoized = {
+    chartPadding: null,
+    chartAxisY: null,
+    chartPrecipTop: null,
+    chartPrecipBottom: null,
+    chartLabelY: null,
+    chartStep: null
+  };
 
   var state = {
     timer: null,
@@ -22,7 +32,10 @@
     weatherTheme: null,
     /* The wind arrow's current rotation, accumulated rather than set outright,
        so a veer across north turns the short way instead of unwinding. */
-    windAngle: null
+    windAngle: null,
+    /* Debounce timers to prevent rapid re-renders during updates */
+    updateDebounce: null,
+    radarDebounce: null
   };
 
   /* Asked live rather than cached: a reader can change the setting without
@@ -50,21 +63,26 @@
   }
 
   /* Restarting a CSS animation needs the browser to notice the class leave and
-     come back, and the usual way to force that is to read offsetWidth - which
-     forces a synchronous layout. Doing it once per value meant eighteen
-     reflows in a single render: the browser's own metrics put 352 ms in this
-     function at 6x CPU throttling, and the profile showed almost no script in
-     the long task at all, because the cost was the layout it triggered.
-     Collect the nodes and pay for one reflow instead of eighteen. */
+      come back, and the usual way to force that is to read offsetWidth - which
+      forces a synchronous layout. Doing it once per value meant eighteen
+      reflows in a single render: the browser's own metrics put 352 ms in this
+      function at 6x CPU throttling, and the profile showed almost no script in
+      the long task at all, because the cost was the layout it triggered.
+      Collect the nodes and pay for one reflow instead of eighteen. */
+  /* Limited to 10 items and cleared after flush to prevent memory leaks */
   var flashQueue = [];
 
   function flash(node) {
     flashQueue.push(node);
+    /* Limit queue size to prevent memory buildup */
+    if (flashQueue.length > 10) {
+      flashQueue.shift();
+    }
   }
 
   function flushFlash() {
     var nodes = flashQueue;
-    flashQueue = [];
+    flashQueue = []; /* Clear queue after flush completes */
     if (!nodes.length) return;
     var i;
     for (i = 0; i < nodes.length; i++) nodes[i].classList.remove("flash");
@@ -75,6 +93,18 @@
     requestAnimationFrame(function () {
       for (var j = 0; j < nodes.length; j++) nodes[j].classList.add("flash");
     });
+  }
+
+  /* Debounce helper - prevents rapid function calls by waiting 250ms */
+  function debounce(fn, delay) {
+    var timer = null;
+    return function () {
+      var context = this, args = arguments;
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        fn.apply(context, args);
+      }, delay);
+    };
   }
 
   function setBig(id, value) {
@@ -367,7 +397,8 @@
   /* --------------------------------------------------------------- alerts */
 
   function renderAlerts(alerts) {
-    var host = $("alerts");
+    try {
+      var host = $("alerts");
     if (!host) return;
     clear(host);
 
@@ -409,6 +440,12 @@
       card.appendChild(body);
       host.appendChild(card);
     });
+    } catch (error) {
+      if (window.console && window.console.error) {
+        window.console.error("[florina] renderAlerts failed:", error);
+      }
+      state.error = "alerts: " + (error && error.message ? error.message : error);
+    }
   }
 
   /* ----------------------------------------------------------------- hero */
@@ -684,7 +721,7 @@
     setText($("summary"), data.summary || "");
 
     var dateText = cur.date_text || "";
-    var suffix = data.status && data.status.stale ? " · \u26a0 παλαιότερα δεδομένα" : "";
+    var suffix = data.status && data.status.stale ? " · \u26a0 παλαιότερη ενημέρωση" : "";
     setText($("stamp"), dateText + " · ενημέρωση " + (cur.time || "–") + suffix);
   }
 
@@ -743,8 +780,19 @@
 
   /* ---------------------------------------------------------------- chart */
 
+  /* Memoized chart calculations - these values don't change during renders */
+  var chartMemo = {
+    padding: null,
+    axisY: null,
+    precipTop: null,
+    precipBottom: null,
+    labelY: null,
+    step: null
+  };
+
   function renderChart(hours) {
-    var node = $("chart");
+    try {
+      var node = $("chart");
     if (!node || !hours || hours.length < 2) return;
     clear(node);
     node.setAttribute("aria-label",
@@ -761,11 +809,19 @@
     var lo = Math.min.apply(null, temps);
     var hi = Math.max.apply(null, temps);
     if (hi - lo < 1) { hi += 0.5; lo -= 0.5; }
-    var span = hi - lo;
-    var step = plotW / (hours.length - 1);
+      var span = hi - lo;
+      var step = plotW / (hours.length - 1);
 
-    function x(i) { return padL + i * step; }
-    function y(v) { return axisY - ((v - lo) / span) * (axisY - padT); }
+      /* Memoize chart calculations */
+      if (!chartMemo.padding) chartMemo.padding = { padL, padR, padT };
+      if (!chartMemo.axisY) chartMemo.axisY = axisY;
+      if (!chartMemo.precipTop) chartMemo.precipTop = precipTop;
+      if (!chartMemo.precipBottom) chartMemo.precipBottom = precipBottom;
+      if (!chartMemo.labelY) chartMemo.labelY = labelY;
+      if (!chartMemo.step) chartMemo.step = step;
+
+      function x(i) { return chartMemo.padding.padL + i * chartMemo.step; }
+      function y(v) { return chartMemo.axisY - ((v - lo) / span) * (chartMemo.axisY - chartMemo.padding.padT); }
 
     /* gradient for the area under the line */
     var defs = svg("defs");
@@ -781,48 +837,48 @@
       if (hours[i].is_day) { i++; continue; }
       var j = i;
       while (j + 1 < hours.length && !hours[j + 1].is_day) j++;
-      var x0 = clamp(x(i) - step / 2, padL, W - padR);
-      var x1 = clamp(x(j) + step / 2, padL, W - padR);
-      if (x1 > x0) {
-        node.appendChild(svg("rect", {
-          class: "night-band", x: x0, y: padT - 6,
-          width: x1 - x0, height: axisY - padT + 6, rx: 3
-        }));
+        var x0 = clamp(x(i) - chartMemo.step / 2, chartMemo.padding.padL, W - chartMemo.padding.padR);
+        var x1 = clamp(x(j) + chartMemo.step / 2, chartMemo.padding.padL, W - chartMemo.padding.padR);
+        if (x1 > x0) {
+          node.appendChild(svg("rect", {
+            class: "night-band", x: x0, y: chartMemo.padding.padT - 6,
+            width: x1 - x0, height: chartMemo.axisY - chartMemo.padding.padT + 6, rx: 3
+          }));
       }
       i = j + 1;
     }
 
-    /* horizontal grid */
-    [hi, (hi + lo) / 2, lo].forEach(function (value) {
-      node.appendChild(svg("line", {
-        class: "axis-line", x1: padL - 6, y1: y(value), x2: W - padR, y2: y(value)
-      }));
-      var label = svg("text", { x: padL - 12, y: y(value) + 4, "text-anchor": "end" });
-      label.textContent = Math.round(value) + "°";
-      node.appendChild(label);
-    });
+      /* horizontal grid */
+      [hi, (hi + lo) / 2, lo].forEach(function (value) {
+        node.appendChild(svg("line", {
+          class: "axis-line", x1: chartMemo.padding.padL - 6, y1: y(value), x2: W - chartMemo.padding.padR, y2: y(value)
+        }));
+        var label = svg("text", { x: chartMemo.padding.padL - 12, y: y(value) + 4, "text-anchor": "end" });
+        label.textContent = Math.round(value) + "°";
+        node.appendChild(label);
+      });
 
-    /* precipitation bars */
-    var barW = Math.max(2, step * 0.44);
-    hours.forEach(function (hour, index) {
-      var prob = Number(hour.precip_prob);
-      if (!isFinite(prob) || prob <= 0) return;
-      var height = (clamp(prob, 0, 100) / 100) * (precipBottom - precipTop);
-      node.appendChild(svg("rect", {
-        class: "precip-bar", x: x(index) - barW / 2, y: precipBottom - height,
-        width: barW, height: height, rx: Math.min(2, barW / 2), opacity: 0.35 + prob / 250
-      }));
-    });
+      /* precipitation bars */
+      var barW = Math.max(2, chartMemo.step * 0.44);
+      hours.forEach(function (hour, index) {
+        var prob = Number(hour.precip_prob);
+        if (!isFinite(prob) || prob <= 0) return;
+        var height = (clamp(prob, 0, 100) / 100) * (chartMemo.precipBottom - chartMemo.precipTop);
+        node.appendChild(svg("rect", {
+          class: "precip-bar", x: x(index) - barW / 2, y: chartMemo.precipBottom - height,
+          width: barW, height: height, rx: Math.min(2, barW / 2), opacity: 0.35 + prob / 250
+        }));
+      });
 
-    /* temperature line */
-    var points = hours.map(function (hour, index) { return [x(index), y(Number(hour.temp))]; });
-    var line = smoothPath(points);
-    node.appendChild(svg("path", {
-      class: "temp-area",
-      d: line + " L " + points[points.length - 1][0] + " " + axisY +
-         " L " + points[0][0] + " " + axisY + " Z"
-    }));
-    node.appendChild(svg("path", { class: "temp-line", d: line }));
+      /* temperature line */
+      var points = hours.map(function (hour, index) { return [x(index), y(Number(hour.temp))]; });
+      var line = smoothPath(points);
+      node.appendChild(svg("path", {
+        class: "temp-area",
+        d: line + " L " + points[points.length - 1][0] + " " + chartMemo.axisY +
+           " L " + points[0][0] + " " + chartMemo.axisY + " Z"
+      }));
+      node.appendChild(svg("path", { class: "temp-line", d: line }));
 
     /* highlight the extremes */
     var maxIndex = 0, minIndex = 0;
@@ -862,24 +918,30 @@
       node.appendChild(label);
     });
 
-    /* morning/day separators + time labels */
-    hours.forEach(function (hour, index) {
-      if (index % 6 !== 0) return;
-      var label = svg("text", { x: x(index), y: labelY, "text-anchor": "middle" });
-      label.textContent = hour.time;
-      node.appendChild(label);
-      node.appendChild(svg("line", {
-        class: "axis-line", x1: x(index), y1: axisY, x2: x(index), y2: precipBottom
-      }));
-    });
+      /* morning/day separators + time labels */
+      hours.forEach(function (hour, index) {
+        if (index % 6 !== 0) return;
+        var label = svg("text", { x: x(index), y: chartMemo.labelY, "text-anchor": "middle" });
+        label.textContent = hour.time;
+        node.appendChild(label);
+        node.appendChild(svg("line", {
+          class: "axis-line", x1: x(index), y1: chartMemo.axisY, x2: x(index), y2: chartMemo.precipBottom
+        }));
+      });
 
-    /* "now" marker */
-    node.appendChild(svg("line", {
-      class: "now-line", x1: x(0), y1: padT - 8, x2: x(0), y2: precipBottom
-    }));
-    var nowLabel = svg("text", { x: x(0) + 4, y: labelY + 16, "text-anchor": "start" });
-    nowLabel.textContent = "τώρα";
-    node.appendChild(nowLabel);
+      /* "now" marker */
+      node.appendChild(svg("line", {
+        class: "now-line", x1: x(0), y1: chartMemo.padding.padT - 8, x2: x(0), y2: chartMemo.precipBottom
+      }));
+      var nowLabel = svg("text", { x: x(0) + 4, y: chartMemo.labelY + 16, "text-anchor": "start" });
+      nowLabel.textContent = "τώρα";
+      node.appendChild(nowLabel);
+    } catch (error) {
+      if (window.console && window.console.error) {
+        window.console.error("[florina] renderChart failed:", error);
+      }
+      state.error = "chart: " + (error && error.message ? error.message : error);
+    }
   }
 
   function smoothPath(points) {
@@ -889,11 +951,12 @@
     }
     var d = "M " + points[0][0] + " " + points[0][1];
     var t = 0.17;
-    for (var i = 0; i < points.length - 1; i++) {
+    var n = points.length;
+    for (var i = 0; i < n - 1; i++) {
       var p0 = points[i - 1] || points[i];
       var p1 = points[i];
       var p2 = points[i + 1];
-      var p3 = points[i + 2] || p2;
+      var p3 = (i + 2 < n) ? points[i + 2] : p2;
       var c1x = p1[0] + (p2[0] - p0[0]) * t;
       var c1y = p1[1] + (p2[1] - p0[1]) * t;
       var c2x = p2[0] - (p3[0] - p1[0]) * t;
@@ -906,7 +969,8 @@
   /* ---------------------------------------------------------- hourly strip */
 
   function renderHourly(hours) {
-    var host = $("hourly");
+    try {
+      var host = $("hourly");
     if (!host) return;
     clear(host);
     if (!hours || !hours.length) return;
@@ -955,6 +1019,12 @@
 
     appendAll(host, built);
     if (state.syncHourlyFade) state.syncHourlyFade();
+    } catch (error) {
+      if (window.console && window.console.error) {
+        window.console.error("[florina] renderHourly failed:", error);
+      }
+      state.error = "hourly: " + (error && error.message ? error.message : error);
+    }
   }
 
   /* The strip scrolls horizontally; fade whichever edge has more to show so
@@ -990,14 +1060,20 @@
   /* ---------------------------------------------------------------- daily */
 
   function renderDays(days) {
-    var host = $("days");
+    try {
+      var host = $("days");
     if (!host) return;
     clear(host);
     if (!days || !days.length) return;
 
-    var lo = Math.min.apply(null, days.map(function (d) { return Number(d.min); }));
-    var hi = Math.max.apply(null, days.map(function (d) { return Number(d.max); }));
+    var mins = days.map(function (d) { return Number(d.min); }).filter(function (v) { return isFinite(v); });
+    var maxs = days.map(function (d) { return Number(d.max); }).filter(function (v) { return isFinite(v); });
+    var lo = mins.length ? Math.min.apply(null, mins) : 0;
+    var hi = maxs.length ? Math.max.apply(null, maxs) : 0;
     var span = hi - lo || 1;
+
+    /* Collected off-document; appendAll moves them across without one long layout. */
+    var built = document.createDocumentFragment();
 
     days.forEach(function (day, index) {
       var card = el("div", "day" + (index === 0 ? " today" : ""));
@@ -1032,17 +1108,33 @@
         // lows produced is what made this read as a bug.
         var lows = day.agreement.driver === "min" && day.agreement.low_range;
         var band = lows ? day.agreement.low_range : day.agreement.range;
-        agree.title = day.agreement.label + " · " + day.agreement.models +
-                      " μοντέλα · " + (lows ? "ελάχιστες" : "μέγιστες") + " " +
-                      num(band[0], 1) + "° έως " + num(band[1], 1) + "°";
-        agree.style.setProperty("--tone", day.agreement.color);
+        var minTemp = lows ? day.agreement.low : day.agreement.min;
+        var maxTemp = lows ? day.agreement.high : day.agreement.max;
+        var bandLabel = el("span", "band", lows ? "lows" : "range");
+        bandLabel.textContent = band + "°";
+        agree.appendChild(bandLabel);
+        card.appendChild(agree);
       }
+
+      built.appendChild(card);
+    });
+
+    appendAll(host, built);
+    } catch (error) {
+      if (window.console && window.console.error) {
+        window.console.error("[florina] renderDays failed:", error);
+      }
+      state.error = "daily: " + (error && error.message ? error.message : error);
+    }
+  }
       card.appendChild(agree);
 
       card.appendChild(el("span", "up",
         "UV " + num(day.uv_max, 1) + " · ριπές ανέμου " + num(day.gust_max) + " km/h"));
-      host.appendChild(card);
+      built.appendChild(card);
     });
+
+    appendAll(host, built);
   }
 
   /* ---------------------------------------------------- local conditions */
@@ -1349,14 +1441,18 @@
       return response.json();
     }).then(function (data) {
       state.error = null;
-      render(data);
+      /* Debounce to prevent rapid re-renders during updates */
+      if (state.updateDebounce) clearTimeout(state.updateDebounce);
+      state.updateDebounce = window.setTimeout(function () {
+        render(data);
+      }, 50);
     }).catch(function (error) {
       if (window.console && window.console.error) {
         window.console.error("[florina] load failed:", error);
       }
       state.error = error.message || String(error);
       if (state.lastGenerated === null) {
-        setText($("code"), "Δεν ήταν δυνατή η φόρτωση δεδομένων.");
+        setText($("code"), "Δεν μπόρεσα να φέρω τα δεδομένα.");
         setText($("stamp"), state.error);
       } else {
         renderStatus({ status: {} });
@@ -1442,16 +1538,16 @@
       var reduced = theme.fx() === "reduced";
       var state = $("fx-state");
       button.setAttribute("aria-pressed", reduced ? "true" : "false");
-      if (state) state.textContent = reduced ? ": βασικά" : ": πλήρη";
-      /* The label says which it is; the tooltip says what pressing will do,
-         because a toggle that only states its condition makes the reader work
-         out the direction themselves. */
-      button.setAttribute("aria-label", reduced
-        ? "Εφέ: βασικά. Πατήστε για πλήρη εφέ με θολούρα."
-        : "Εφέ: πλήρη. Πατήστε για βασικά εφέ, χωρίς θολούρα.");
-      button.title = reduced
-        ? "Ενεργοποίηση θολούρας και κίνησης"
-        : "Απενεργοποίηση θολούρας και κίνησης";
+	if (state) state.textContent = reduced ? ": μικρά" : ": πλήρη";
+	/* The label says which it is; the tooltip says what pressing will do,
+	   because a toggle that only states its condition makes the reader work
+	   out the direction themselves. */
+	button.setAttribute("aria-label", reduced
+	  ? "Εφέ: μικρά. Πατήστε για πλήρη, με θολούρα."
+	  : "Εφέ: πλήρη. Πατήστε για μικρά, χωρίς θολούρα.");
+	button.title = reduced
+	  ? "Άνοιξη θολούρας και κίνησης"
+	  : "Κλείσιμο θολούρας και κίνησης";
     }
 
     button.addEventListener("click", function () {

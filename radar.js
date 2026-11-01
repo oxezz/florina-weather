@@ -55,6 +55,7 @@
   var geo = null, borders = [], lakes = [];
   var data = null, frames = [], colors = [], layer = null;
   var current = 0, playing = false, timer = 0, visible = false, loadedAt = 0;
+  var radarDebounce = null;
 
   var dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = canvas.height = SIZE * dpr;
@@ -64,6 +65,7 @@
   function expand(runs, n) {
     var cells = new Uint8Array(n * n), at = 0, total = 0;
     for (var i = 0; i < runs.length; i += 2) {
+      if (i + 1 >= runs.length) return null;
       var run = runs[i + 1];
       if (run === undefined || !isFinite(run) || run < 0) return null;
       at += run;
@@ -110,7 +112,7 @@
         panel.hidden = false;
         canvas.hidden = playBtn.hidden = !wet;
         timeEl.hidden = !wet;
-        noteEl.textContent = wet ? "" : "Δεν εντοπίζεται βροχή σε ακτίνα " + json.km + " χλμ.";
+        noteEl.textContent = wet ? "" : "Δεν φαίνεται βροχή στα " + json.km + " χλμ.";
         if (scrub) {
           /* One frame is not a timeline, and neither is a dry hour. */
           scrub.hidden = !wet || frames.length < 2;
@@ -118,6 +120,11 @@
         }
         if (wet) { current = frames.length - 1; draw(); play(!reduceMotion); }
         else { stop(); }
+        /* Debounce radar updates to prevent rapid re-renders */
+        if (radarDebounce) clearTimeout(radarDebounce);
+        radarDebounce = setTimeout(function () {
+          tick();
+        }, 250);
         /* Redraw when the outlines land, so a dry card still has context. */
         geo.then(function (g) {
           if (!g) return;
@@ -154,70 +161,76 @@
   }
 
   function draw() {
-    if (!data) return;
-    var n = data.n, cells = frames[current];
-    var lctx = layer.getContext("2d");
-    var img = lctx.createImageData(n, n);
-    for (var i = 0; i < cells.length; i++) {
-      var c = cells[i] ? colors[cells[i] - 1] : null;
-      if (c) {
-        img.data[i * 4] = c[0]; img.data[i * 4 + 1] = c[1];
-        img.data[i * 4 + 2] = c[2]; img.data[i * 4 + 3] = c[3];
+    try {
+      if (!data) return;
+      var n = data.n, cells = frames[current];
+      var lctx = layer.getContext("2d");
+      var img = lctx.createImageData(n, n);
+      for (var i = 0; i < cells.length; i++) {
+        var c = cells[i] ? colors[cells[i] - 1] : null;
+        if (c) {
+          img.data[i * 4] = c[0]; img.data[i * 4 + 1] = c[1];
+          img.data[i * 4 + 2] = c[2]; img.data[i * 4 + 3] = c[3];
+        }
+      }
+      lctx.putImageData(img, 0, 0);
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, SIZE, SIZE);
+
+      /* Rivers and lakes take the card's text colour, so both themes work. */
+      var ink = getComputedStyle(canvas).color;
+      ctx.strokeStyle = ctx.fillStyle = ink;
+      ctx.lineWidth = 1;
+
+      /* Geography goes UNDER the rain, so where it matters - inside a shower -
+         the actual weather wins and the outline is only a hint. Without it the
+         card is a grid of squares and 60 km out has nothing to anchor to. */
+      ctx.save();
+      ctx.globalAlpha = 0.30;
+      borders.forEach(function (ring) { pathRing(ring, false); ctx.stroke(); });
+      ctx.globalAlpha = 0.20;
+      lakes.forEach(function (ring) { pathRing(ring, true); ctx.fill(); });
+      ctx.restore();
+
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(layer, 0, 0, SIZE, SIZE);
+
+      ctx.strokeStyle = ctx.fillStyle = ink;
+      ctx.globalAlpha = 0.28;
+      for (var km = 30; km <= data.km; km += 30) {
+        ctx.beginPath();
+        ctx.arc(SIZE / 2, SIZE / 2, km / data.km * SIZE / 2, 0, 6.2832);
+        ctx.stroke();
+        ctx.globalAlpha = 0.45;
+        ctx.font = "9px system-ui, sans-serif";
+        ctx.textAlign = "left";
+        ctx.fillText(km + "", SIZE / 2 + km / data.km * SIZE / 2 + 3, SIZE / 2 + 10);
+        ctx.globalAlpha = 0.28;
+      }
+      ctx.globalAlpha = 0.75;
+      ctx.font = "11px system-ui, sans-serif";
+      TOWNS.forEach(function (t) {
+        var p = project(t[1], t[2]);
+        if (p[0] < 4 || p[0] > SIZE - 4 || p[1] < 4 || p[1] > SIZE - 4) return;
+        ctx.beginPath(); ctx.arc(p[0], p[1], 2, 0, 6.2832); ctx.fill();
+        ctx.textAlign = p[0] > SIZE * 0.75 ? "right" : "left";
+        ctx.fillText(t[0], p[0] + (ctx.textAlign === "left" ? 5 : -5), p[1] - 4);
+      });
+      ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.arc(SIZE / 2, SIZE / 2, 4, 0, 6.2832); ctx.fill();
+      ctx.textAlign = "left";
+      ctx.fillText(PLACE, SIZE / 2 + 7, SIZE / 2 + 4);
+
+      timeEl.textContent = clock.format(new Date(data.t[current] * 1000));
+      /* Keep the handle with the playhead; tick() calls this too. */
+      if (scrub && !scrub.hidden) scrub.value = String(current);
+    } catch (error) {
+      if (window.console && window.console.error) {
+        window.console.error("[florina] radar draw failed:", error);
       }
     }
-    lctx.putImageData(img, 0, 0);
-
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, SIZE, SIZE);
-
-    /* Rivers and lakes take the card's text colour, so both themes work. */
-    var ink = getComputedStyle(canvas).color;
-    ctx.strokeStyle = ctx.fillStyle = ink;
-    ctx.lineWidth = 1;
-
-    /* Geography goes UNDER the rain, so where it matters - inside a shower -
-       the actual weather wins and the outline is only a hint. Without it the
-       card is a grid of squares and 60 km out has nothing to anchor to. */
-    ctx.save();
-    ctx.globalAlpha = 0.30;
-    borders.forEach(function (ring) { pathRing(ring, false); ctx.stroke(); });
-    ctx.globalAlpha = 0.20;
-    lakes.forEach(function (ring) { pathRing(ring, true); ctx.fill(); });
-    ctx.restore();
-
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(layer, 0, 0, SIZE, SIZE);
-
-    ctx.strokeStyle = ctx.fillStyle = ink;
-    ctx.globalAlpha = 0.28;
-    for (var km = 30; km <= data.km; km += 30) {
-      ctx.beginPath();
-      ctx.arc(SIZE / 2, SIZE / 2, km / data.km * SIZE / 2, 0, 6.2832);
-      ctx.stroke();
-      ctx.globalAlpha = 0.45;
-      ctx.font = "9px system-ui, sans-serif";
-      ctx.textAlign = "left";
-      ctx.fillText(km + "", SIZE / 2 + km / data.km * SIZE / 2 + 3, SIZE / 2 + 10);
-      ctx.globalAlpha = 0.28;
-    }
-    ctx.globalAlpha = 0.75;
-    ctx.font = "11px system-ui, sans-serif";
-    TOWNS.forEach(function (t) {
-      var p = project(t[1], t[2]);
-      if (p[0] < 4 || p[0] > SIZE - 4 || p[1] < 4 || p[1] > SIZE - 4) return;
-      ctx.beginPath(); ctx.arc(p[0], p[1], 2, 0, 6.2832); ctx.fill();
-      ctx.textAlign = p[0] > SIZE * 0.75 ? "right" : "left";
-      ctx.fillText(t[0], p[0] + (ctx.textAlign === "left" ? 5 : -5), p[1] - 4);
-    });
-    ctx.globalAlpha = 1;
-    ctx.beginPath(); ctx.arc(SIZE / 2, SIZE / 2, 4, 0, 6.2832); ctx.fill();
-    ctx.textAlign = "left";
-    ctx.fillText(PLACE, SIZE / 2 + 7, SIZE / 2 + 4);
-
-    timeEl.textContent = clock.format(new Date(data.t[current] * 1000));
-    /* Keep the handle with the playhead; tick() calls this too. */
-    if (scrub && !scrub.hidden) scrub.value = String(current);
   }
 
   /* ---- loop ------------------------------------------------------------ */
@@ -231,7 +244,7 @@
     clearTimeout(timer);
     playing = !!on && frames.length > 1 && visible && !document.hidden;
     playBtn.innerHTML = playing ? "&#10074;&#10074;" : "&#9654;";
-    playBtn.setAttribute("aria-label", playing ? "Παύση" : "Αναπαραγωγή");
+    playBtn.setAttribute("aria-label", playing ? "Πάυση" : "Αναπαραγωγή");
     if (playing) timer = setTimeout(tick, 550);
     playBtn.dataset.want = on ? "1" : "";
   }
