@@ -7,6 +7,9 @@ most.
 """
 
 import datetime
+import email.message
+import gzip
+import io
 import os
 import sys
 import threading
@@ -185,6 +188,58 @@ class FetchingTests(unittest.TestCase):
 
         self.assertIsNotNone(snap["forecast"], "the forecast was dropped")
         self.assertNotIn("forecast", snap["errors"])
+
+
+class UpstreamDiagnosticsTests(unittest.TestCase):
+
+    def test_gzipped_http_error_is_decoded_and_secrets_are_redacted(self):
+        url = "https://api.example.test/v1/forecast?key=secret-value"
+        headers = email.message.Message()
+        headers["Content-Encoding"] = "gzip"
+        headers["Retry-After"] = "30"
+        body = gzip.compress(b"Service temporarily unavailable; key=secret-value")
+
+        def opener(_url, _timeout):
+            raise urllib.error.HTTPError(
+                url, 503, "Service Unavailable", headers, io.BytesIO(body))
+
+        with self.assertRaises(sources.SourceError) as caught:
+            sources.get_json(url, attempts=1, opener=opener)
+
+        error = caught.exception
+        diagnostic = error.as_dict()
+        self.assertEqual(diagnostic["http_status"], 503)
+        self.assertEqual(diagnostic["upstream"], "api.example.test")
+        self.assertEqual(diagnostic["endpoint"], "/v1/forecast")
+        self.assertEqual(diagnostic["retry_after"], "30")
+        self.assertIn("Service temporarily unavailable", diagnostic["detail"])
+        self.assertNotIn("secret-value", str(error))
+        self.assertNotIn("secret-value", diagnostic["detail"])
+
+    def test_health_exposes_structured_safe_failure_and_clears_on_success(self):
+        url = "https://api.example.test/v1/forecast?apikey=top-secret"
+
+        def failing(_url, _timeout):
+            raise urllib.error.HTTPError(url, 503, "Unavailable", {}, None)
+
+        service = sources.WeatherService(sources.Config(), opener=failing)
+        with self.assertRaises(sources.SourceError):
+            service._cached(
+                "forecast", 0,
+                lambda: sources.get_json(url, attempts=1, opener=failing))
+
+        health = service.health()
+        self.assertFalse(health["ok"])
+        self.assertIn("HTTP 503", health["last_error"]["forecast"])
+        failure = health["last_failure"]["forecast"]
+        self.assertEqual(failure["http_status"], 503)
+        self.assertEqual(failure["upstream"], "api.example.test")
+        self.assertEqual(failure["endpoint"], "/v1/forecast")
+        self.assertNotIn("top-secret", repr(health))
+
+        service._cached("forecast", 0, lambda: {"current": {}}, skip_ttl=True)
+        self.assertTrue(service.health()["ok"])
+        self.assertNotIn("forecast", service.health()["last_failure"])
 
 
 class NegativeCacheTests(unittest.TestCase):

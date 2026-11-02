@@ -216,6 +216,7 @@ class ApiTests(unittest.TestCase):
             status, _headers, data = server.json("/api/health")
             self.assertEqual(status, 200)
             self.assertIn("ok", data)
+            self.assertIn("last_failure", data)
 
     def test_upstream_failure_is_a_json_503_for_the_client(self):
         with RunningServer(failing_opener) as server:

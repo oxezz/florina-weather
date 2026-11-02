@@ -10,9 +10,11 @@ run the whole stack without touching the internet.
 from __future__ import annotations
 
 import gzip
+import io
 import json
 import logging
 import os
+import re
 import ssl
 import threading
 import time
@@ -173,6 +175,106 @@ DEFAULT_MODELS = ("best_match", "icon_eu", "ecmwf_ifs025", "gfs_seamless")
 
 class SourceError(RuntimeError):
     """Raised when an upstream source cannot be read."""
+
+    def __init__(self, message, kind="upstream", http_status=None,
+                 upstream=None, endpoint=None, detail=None, retry_after=None):
+        super().__init__(message)
+        self.kind = kind
+        self.http_status = http_status
+        self.upstream = upstream
+        self.endpoint = endpoint
+        self.detail = detail
+        self.retry_after = retry_after
+
+    def as_dict(self):
+        """A safe, structured diagnostic with no request query string."""
+        result = {"kind": self.kind, "message": str(self)}
+        for key in ("http_status", "upstream", "endpoint", "detail",
+                    "retry_after"):
+            value = getattr(self, key)
+            if value is not None:
+                result[key] = value
+        return result
+
+
+_SECRET_QUERY_KEYS = {
+    "key", "api_key", "apikey", "token", "access_token", "secret", "password",
+}
+
+
+def _safe_detail(value, url=""):
+    """Bound and redact error text before it reaches logs or public health."""
+    text = str(value or "")
+    if url:
+        parsed = urllib.parse.urlsplit(url)
+        safe_url = urllib.parse.urlunsplit(
+            (parsed.scheme, parsed.netloc, parsed.path, "", ""))
+        text = text.replace(url, safe_url)
+        for key, secret in urllib.parse.parse_qsl(
+                parsed.query, keep_blank_values=True):
+            if key.lower() in _SECRET_QUERY_KEYS and secret:
+                for candidate in (secret, urllib.parse.quote(secret, safe=""),
+                                  urllib.parse.quote_plus(secret)):
+                    text = text.replace(candidate, "[redacted]")
+    text = re.sub(
+        r"(?i)(https?://[^/\s?#]+(?:/[^\s?#]*)?)\?[^\s\"']+",
+        r"\1?[redacted]", text)
+    text = re.sub(
+        r"(?i)([?&](?:key|api_key|apikey|token|access_token|secret|password)=)"
+        r"[^&\s\"']+",
+        r"\1[redacted]", text)
+    return " ".join(text.split())[:300]
+
+
+def _upstream_location(url):
+    """Return only the upstream host and path; never include query values."""
+    parsed = urllib.parse.urlsplit(url)
+    host = parsed.hostname or "unknown"
+    if parsed.port:
+        host += ":%d" % parsed.port
+    return host, parsed.path or "/"
+
+
+def _http_error_detail(exc, url):
+    """Read a small, human-readable excerpt from a possibly gzipped response."""
+    try:
+        raw = exc.read(16 * 1024)
+        encoding = (exc.headers.get("Content-Encoding", "")
+                    if exc.headers else "").lower()
+        if "gzip" in encoding:
+            with gzip.GzipFile(fileobj=io.BytesIO(raw)) as stream:
+                raw = stream.read(2048)
+        detail = _safe_detail(raw.decode("utf-8", "replace"), url)
+        return detail or None
+    except (AttributeError, EOFError, OSError, ValueError):
+        return "Could not decode upstream error response"
+    finally:
+        exc.close()
+
+
+def _http_source_error(exc, url):
+    host, endpoint = _upstream_location(url)
+    retry_after = None
+    if exc.headers:
+        retry_after = _safe_detail(exc.headers.get("Retry-After", "")) or None
+    detail = _http_error_detail(exc, url)
+    return SourceError(
+        "HTTP %s from %s%s" % (exc.code, host, endpoint),
+        kind="http", http_status=exc.code, upstream=host, endpoint=endpoint,
+        detail=detail, retry_after=retry_after)
+
+
+def _response_source_error(exc, url):
+    host, endpoint = _upstream_location(url)
+    detail = _safe_detail(exc, url)
+    if isinstance(exc, (json.JSONDecodeError, UnicodeDecodeError)):
+        kind = "invalid_response"
+        message = "Invalid JSON response from %s%s" % (host, endpoint)
+    else:
+        kind = "network"
+        message = "%s from %s%s" % (type(exc).__name__, host, endpoint)
+    return SourceError(message, kind=kind, upstream=host, endpoint=endpoint,
+                       detail=detail or None)
 
 
 # --------------------------------------------------------------------------
@@ -374,20 +476,18 @@ def get_json(url, params=None, timeout=20.0, attempts=3, opener=None):
                 raw = _urlopen(url, timeout)
             return json.loads(raw.decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            detail = ""
-            try:
-                detail = exc.read().decode("utf-8", "replace")[:300]
-            except Exception:  # pragma: no cover - body already consumed
-                pass
+            error = _http_source_error(exc, url)
             # 4xx (other than 429) means we sent a bad request: retrying is pointless.
             if 400 <= exc.code < 500 and exc.code != 429:
-                raise SourceError("HTTP %s from %s: %s" % (exc.code, url, detail)) from exc
-            last_error = SourceError("HTTP %s from %s: %s" % (exc.code, url, detail))
+                raise error from None
+            last_error = error
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            last_error = _response_source_error(exc, url)
         except Exception as exc:  # URLError, timeout, bad JSON, ...
-            last_error = SourceError("%s: %s" % (type(exc).__name__, exc))
+            last_error = _response_source_error(exc, url)
         if attempt < attempts:
             time.sleep(0.6 * attempt)
-    raise last_error or SourceError("could not fetch %s" % url)
+    raise last_error or SourceError("Could not fetch upstream data", kind="network")
 
 
 def get_text(url, params=None, timeout=20.0, attempts=3, opener=None):
@@ -407,14 +507,15 @@ def get_text(url, params=None, timeout=20.0, attempts=3, opener=None):
                 raw = _urlopen(url, timeout)
             return raw.decode("utf-8", "replace")
         except urllib.error.HTTPError as exc:
+            error = _http_source_error(exc, url)
             if 400 <= exc.code < 500 and exc.code != 429:
-                raise SourceError("HTTP %s from %s" % (exc.code, url)) from exc
-            last_error = SourceError("HTTP %s from %s" % (exc.code, url))
+                raise error from None
+            last_error = error
         except Exception as exc:  # URLError, timeout, ...
-            last_error = SourceError("%s: %s" % (type(exc).__name__, exc))
+            last_error = _response_source_error(exc, url)
         if attempt < attempts:
             time.sleep(0.6 * attempt)
-    raise last_error or SourceError("could not fetch %s" % url)
+    raise last_error or SourceError("Could not fetch upstream data", kind="network")
 
 
 def _urlopen(url, timeout):
@@ -496,6 +597,7 @@ class WeatherService:
         self._failures = {}
         self._last_force = None
         self.last_error = {}
+        self.last_failure = {}
         self.last_success = {}
 
     # -- individual sources -------------------------------------------------
@@ -744,7 +846,13 @@ class WeatherService:
             try:
                 value = loader()
             except Exception as exc:  # noqa: BLE001 - never 500 the page for this
-                self.last_error[key] = str(exc)
+                self.last_error[key] = _safe_detail(exc) or type(exc).__name__
+                failure = (exc.as_dict() if isinstance(exc, SourceError) else {
+                    "kind": "source_error",
+                    "message": self.last_error[key],
+                })
+                failure["at"] = self._clock().isoformat()
+                self.last_failure[key] = failure
                 self._failures[key] = self._clock()
                 if entry is not None and age is not None and age < self.config.max_stale:
                     log.warning("serving stale %s (age %.0fs): %s", key, age, exc)
@@ -752,6 +860,7 @@ class WeatherService:
                 raise
             self.last_success[key] = self._clock()
             self.last_error.pop(key, None)
+            self.last_failure.pop(key, None)
             self._failures.pop(key, None)
             entry = self.cache.put(key, value)
             return value, 0.0, False, None
@@ -887,4 +996,5 @@ class WeatherService:
             "tls": tls_source(),
             "last_success": {k: v.isoformat() for k, v in self.last_success.items()},
             "last_error": dict(self.last_error),
+            "last_failure": {k: dict(v) for k, v in self.last_failure.items()},
         }

@@ -128,13 +128,15 @@ context, οπότε κάθε κλήση HTTPS αποτυγχάνει με `CERTI
 | `cacert.pem` | CA bundle της Mozilla, για hosts χωρίς trust store |
 | `tools/` | Scripts που φτιάχνουν στατικά αρχεία, όπως τη μοιραζόμενη εικόνα |
 | `research/` | Scripts που παράγουν νούμερα τα οποία στον κώδικα είναι σταθερές |
-| `tests/` | 474 tests, όλα offline |
+| `tests/` | 478 tests, όλα offline |
 
 ### API
 
 * `GET /` — η σελίδα
 * `GET /api/weather` — το πλήρες JSON· με `?force` παρακάμπτεται το cache της πρόγνωσης
-* `GET /api/health` — τελευταία επιτυχία και τελευταίο σφάλμα ανά πηγή
+* `GET /api/health` — τελευταία επιτυχία και σφάλμα ανά πηγή· το
+  `last_failure` δίνει τύπο, HTTP status, upstream host/path και ασφαλές
+  απόσπασμα απάντησης χωρίς query parameters ή API keys
 
 Τα σφάλματα επιστρέφονται ως HTML όταν περιηγείται browser και ως JSON όταν
 σταλεί `Accept: application/json`, ώστε ο client να μπορεί πάντα να διαβάσει την
