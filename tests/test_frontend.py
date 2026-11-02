@@ -799,6 +799,13 @@ class SkeletonTests(unittest.TestCase):
         self.assertIn("dropSkeletons", self.js)
         self.assertIn("data-skeleton", self.js)
 
+    def test_a_failed_initial_load_replaces_the_hero_skeletons(self):
+        load = self.js[self.js.index("function load(force)"):
+                       self.js.index("function schedule()", self.js.index("function load(force)"))]
+        self.assertIn('setText($("temp"), "–");', load)
+        self.assertIn('setText($("summary"), "Θα δοκιμάσουμε ξανά αυτόματα.");', load)
+        self.assertIn("dropSkeletons();", load)
+
 
 class PwaTests(unittest.TestCase):
     """Installability: manifest, icons, service worker and the iOS meta tags."""
@@ -875,7 +882,7 @@ class PwaTests(unittest.TestCase):
         shell = int(re.search(r"var NETWORK_TIMEOUT = (\d+)", self.sw).group(1))
         self.assertGreater(api, shell)
         self.assertIn("timeout || NETWORK_TIMEOUT", self.sw)
-        self.assertIn("API_TIMEOUT)", self.sw)
+        self.assertIn("API_TIMEOUT, API_CACHE_MAX_AGE)", self.sw)
 
     def test_versioned_assets_skip_the_network(self):
         """Their URL names bytes that cannot change, so revalidating them is
@@ -899,6 +906,12 @@ class PwaTests(unittest.TestCase):
 
     def test_worker_ignores_non_ok_responses(self):
         self.assertIn("response.ok", self.sw)
+
+    def test_weather_server_errors_fall_back_to_recent_cached_data(self):
+        self.assertIn("var API_CACHE_MAX_AGE = 6 * 60 * 60 * 1000;", self.sw)
+        self.assertIn("response.status >= 500", self.sw)
+        self.assertIn('Date.parse(cached.headers.get("Date") || "")', self.sw)
+        self.assertIn("cachedResponse(key, maxCacheAge)", self.sw)
 
     def test_client_registers_the_worker(self):
         js = read("app.js")

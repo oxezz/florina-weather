@@ -1354,6 +1354,10 @@
       return response.json();
     }).then(function (data) {
       state.error = null;
+      if (state.fromCache) {
+        data.status = data.status || {};
+        data.status.stale = true;
+      }
       render(data);
     }).catch(function (error) {
       if (window.console && window.console.error) {
@@ -1361,8 +1365,11 @@
       }
       state.error = error.message || String(error);
       if (state.lastGenerated === null) {
-        setText($("code"), "Δεν ήταν δυνατή η φόρτωση δεδομένων.");
+        setText($("temp"), "–");
+        setText($("code"), "Τα δεδομένα καιρού δεν είναι διαθέσιμα.");
+        setText($("summary"), "Θα δοκιμάσουμε ξανά αυτόματα.");
         setText($("stamp"), state.error);
+        dropSkeletons();
       } else {
         renderStatus({ status: {} });
       }

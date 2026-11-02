@@ -37,6 +37,7 @@ var NETWORK_TIMEOUT = 4000;
    fetch, so 4 s would time out on a bad day and show yesterday's page while
    the fresh answer was on its way. */
 var API_TIMEOUT = 9000;
+var API_CACHE_MAX_AGE = 6 * 60 * 60 * 1000;
 
 var SHELL = [
   "/",
@@ -91,7 +92,7 @@ self.addEventListener("fetch", function (event) {
 
   if (url.pathname === "/api/weather") {
     event.respondWith(networkFirst(request, url.origin + "/api/weather",
-                                   API_TIMEOUT));
+                                   API_TIMEOUT, API_CACHE_MAX_AGE));
     return;
   }
   if (request.mode === "navigate") {
@@ -142,7 +143,21 @@ function tagAsCached(response) {
   });
 }
 
-function networkFirst(request, cacheKey, timeout) {
+function cachedResponse(key, maxAge) {
+  return caches.match(key).then(function (cached) {
+    if (!cached) return null;
+    if (maxAge) {
+      var storedAt = Date.parse(cached.headers.get("Date") || "");
+      var now = Date.now();
+      if (!isFinite(storedAt) || storedAt > now || now - storedAt > maxAge) {
+        return null;
+      }
+    }
+    return tagAsCached(cached);
+  });
+}
+
+function networkFirst(request, cacheKey, timeout, maxCacheAge) {
   var key = cacheKey || request;
   var network = fetch(request);
 
@@ -152,9 +167,16 @@ function networkFirst(request, cacheKey, timeout) {
     store(key, response);
   }).catch(function () { /* offline: the catch below handles it */ });
 
-  return withTimeout(network, timeout || NETWORK_TIMEOUT).catch(function () {
-    return caches.match(key).then(function (cached) {
-      if (cached) return tagAsCached(cached);
+  return withTimeout(network, timeout || NETWORK_TIMEOUT).then(function (response) {
+    if (response.status >= 500) {
+      return cachedResponse(key, maxCacheAge).then(function (cached) {
+        return cached || response;
+      });
+    }
+    return response;
+  }).catch(function () {
+    return cachedResponse(key, maxCacheAge).then(function (cached) {
+      if (cached) return cached;
       // Last resort for a navigation with nothing cached.
       if (request.mode === "navigate") {
         return caches.match("/").then(tagAsCached);
