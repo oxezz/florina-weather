@@ -955,11 +955,6 @@
 
     appendAll(host, built);
     if (state.syncHourlyFade) state.syncHourlyFade();
-  } catch (error) {
-    if (window.console && window.console.error) {
-      window.console.error('[florina] renderHourly failed:', error);
-    }
-    state.error = 'hourly: ' + (error && error.message ? error.message : error);
   }
 
   /* The strip scrolls horizontally; fade whichever edge has more to show so
@@ -1004,6 +999,9 @@
     var hi = Math.max.apply(null, days.map(function (d) { return Number(d.max); }));
     var span = hi - lo || 1;
 
+    /* Collected off-document; appendAll moves them across without one long layout. */
+    var built = document.createDocumentFragment();
+
     days.forEach(function (day, index) {
       var card = el("div", "day" + (index === 0 ? " today" : ""));
       card.appendChild(el("span", "dn", day.label));
@@ -1046,13 +1044,10 @@
 
       card.appendChild(el("span", "up",
         "UV " + num(day.uv_max, 1) + " · ριπές ανέμου " + num(day.gust_max) + " km/h"));
-      host.appendChild(card);
+      built.appendChild(card);
     });
-  } catch (error) {
-    if (window.console && window.console.error) {
-      window.console.error('[florina] renderDays failed:', error);
-    }
-    state.error = 'daily: ' + (error && error.message ? error.message : error);
+
+    appendAll(host, built);
   }
 
   /* ---------------------------------------------------- local conditions */

@@ -46,12 +46,6 @@
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const PLACE = "Φλώρινα";   /* replaced by the payload */
-  const TOWNS = [
-    ["Καστοριά", 40.5192, 21.2687],
-    ["Έδεσσα", 40.8022, 22.0476],
-    ["Μοναστήρι", 41.0297, 21.3347],
-    ["Πτολεμαΐδα", 40.5167, 21.6833]
-  ];
   const geo = null, borders = [], lakes = [];
   let current = 0, playing = false, timer = 0, visible = false, loadedAt = 0;
   const radarDebounce = null;
