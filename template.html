@@ -445,8 +445,13 @@
   </div>
 </footer>
 
-<script src="/app.js?v={{VERSION}}"></script>
-<script src="/radar.js?v={{VERSION}}"></script>
+<!-- defer rather than a bare end-of-body script: the download then starts
+     while the parser is still working through the markup instead of after it,
+     which on a slow connection is the difference between the data fetch and
+     the script arriving together or one after the other. Execution order is
+     preserved (app.js still runs before radar.js), just off the critical path. -->
+<script src="/app.js?v={{VERSION}}" defer></script>
+<script src="/radar.js?v={{VERSION}}" defer></script>
 </body>
 </html>
 

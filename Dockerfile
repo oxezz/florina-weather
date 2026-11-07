@@ -11,9 +11,11 @@ RUN pip install --no-cache-dir tzdata
 WORKDIR /app
 
 # Only the files the server actually serves. cacert.pem is the fallback trust
-# store for hosts whose image ships no CA bundle.
-COPY app.py greek.py report.py sources.py cacert.pem ./
-COPY template.html style.css app.js theme.js manifest.webmanifest sw.js ./
+# store for hosts whose image ships no CA bundle. app.py imports radar,
+# geography and notify unconditionally, so leaving them out is a crash on
+# start, not a missing feature.
+COPY app.py greek.py report.py sources.py radar.py geography.py notify.py cacert.pem ./
+COPY template.html style.css app.js theme.js radar.js manifest.webmanifest sw.js ./
 COPY favicon.svg icon-square.svg icon-180.png icon-192.png icon-512.png icon-maskable-512.png ./
 
 ENV PYTHONUNBUFFERED=1 \

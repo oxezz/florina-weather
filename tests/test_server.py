@@ -147,6 +147,20 @@ class ShellTests(unittest.TestCase):
             self.assertEqual(body, b"")
             self.assertGreater(int(headers["Content-Length"]), 0)
 
+    def test_the_shell_revalidates_with_an_etag(self):
+        """The shell only changes with a deploy, and the service worker drives
+        navigations network-first, so revalidation is the common repeat visit:
+        it should cost a 304 with an empty body, not the whole page again."""
+        with RunningServer(recording_opener({})) as server:
+            status, headers, _body = server.request("/")
+            self.assertEqual(status, 200)
+            tag = headers.get("ETag")
+            self.assertTrue(tag, "the shell should carry an ETag")
+            status, _headers, body = server.request(
+                "/", headers={"If-None-Match": tag})
+            self.assertEqual(status, 304)
+            self.assertEqual(body, b"")
+
 
 class ApiTests(unittest.TestCase):
 

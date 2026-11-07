@@ -45,10 +45,10 @@
   });
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  const PLACE = "Φλώρινα";   /* replaced by the payload */
-  const geo = null, borders = [], lakes = [];
+  let PLACE = "Φλώρινα";   /* replaced by the payload */
+  let geo = null, borders = [], lakes = [];
   let current = 0, playing = false, timer = 0, visible = false, loadedAt = 0;
-  const radarDebounce = null;
+  let data = null, colors = [], frames = [], layer = null;
 
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = canvas.height = SIZE * dpr;
@@ -113,11 +113,6 @@
         }
         if (wet) { current = frames.length - 1; draw(); play(!reduceMotion); }
         else { stop(); }
-        /* Debounce radar updates to prevent rapid re-renders */
-        if (radarDebounce) clearTimeout(radarDebounce);
-        radarDebounce = setTimeout(function () {
-          tick();
-        }, 250);
         /* Redraw when the outlines land, so a dry card still has context. */
         geo.then(function (g) {
           if (!g) return;

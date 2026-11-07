@@ -9,6 +9,8 @@ import json
 import os
 import collections
 import re
+import shutil
+import subprocess
 import sys
 import unittest
 
@@ -48,6 +50,17 @@ class TemplateTests(unittest.TestCase):
         self.assertNotIn("{{", rendered)
         self.assertIn("Φλώρινα", rendered)
         self.assertIn("Δυτική Μακεδονία", rendered)
+
+    def test_app_scripts_download_while_the_markup_is_still_parsing(self):
+        """A bare end-of-body script is discovered only when the parser reaches
+        it. defer moves the download off the critical path while keeping the
+        execution order, which on a slow connection is the whole difference."""
+        for name in ("app.js", "radar.js"):
+            tag = re.search(
+                r'<script src="/%s\?v=\{\{VERSION\}\}"([^>]*)>' % name,
+                self.template)
+            self.assertIsNotNone(tag, "no script tag for " + name)
+            self.assertIn("defer", tag.group(1), name + " is not deferred")
 
     def test_the_inversion_hint_follows_the_configuration(self):
         """The hint used to name Florina and 1.073 m in prose, so running the
@@ -907,6 +920,14 @@ class PwaTests(unittest.TestCase):
     def test_worker_ignores_non_ok_responses(self):
         self.assertIn("response.ok", self.sw)
 
+    def test_install_icons_are_not_precached(self):
+        """~64 KB of PNGs that only the OS reads, at install time, while
+        online. Precaching them made every first visit pay for them."""
+        shell = self.sw.split("var SHELL = [")[1].split("];")[0]
+        for icon in ("icon-180.png", "icon-192.png", "icon-512.png",
+                     "icon-maskable-512.png"):
+            self.assertNotIn(icon, shell)
+
     def test_weather_server_errors_fall_back_to_recent_cached_data(self):
         self.assertIn("var API_CACHE_MAX_AGE = 6 * 60 * 60 * 1000;", self.sw)
         self.assertIn("response.status >= 500", self.sw)
@@ -1339,6 +1360,25 @@ class StylesheetTests(unittest.TestCase):
         self.assertTrue(blocks, "no print block at all")
         combined = "\n".join(blocks)
         self.assertIn("content-visibility: visible", combined)
+
+
+class RadarRuntimeTests(unittest.TestCase):
+    """Execute radar.js for real, against a minimal DOM.
+
+    String matching could not see the strict-mode ReferenceError that kept
+    the radar card hidden for a whole release; an interpreter can.
+    """
+
+    def test_radar_js_runs_and_shows_the_panel(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node is not installed")
+        result = subprocess.run(
+            [node, os.path.join(HERE, "radar_smoke.js")],
+            capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0,
+                         result.stderr.strip() or result.stdout.strip())
+        self.assertIn("radar-smoke-ok", result.stdout)
 
 
 if __name__ == "__main__":

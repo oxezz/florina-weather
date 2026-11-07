@@ -128,7 +128,7 @@ context, οπότε κάθε κλήση HTTPS αποτυγχάνει με `CERTI
 | `cacert.pem` | CA bundle της Mozilla, για hosts χωρίς trust store |
 | `tools/` | Scripts που φτιάχνουν στατικά αρχεία, όπως τη μοιραζόμενη εικόνα |
 | `research/` | Scripts που παράγουν νούμερα τα οποία στον κώδικα είναι σταθερές |
-| `tests/` | 478 tests, όλα offline |
+| `tests/` | 482 tests, όλα offline |
 
 ### API
 

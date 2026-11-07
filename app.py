@@ -39,7 +39,7 @@ import radar
 import report as report_mod
 import sources
 
-__version__ = "3.19.3"
+__version__ = "3.20.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(BASE_DIR, "template.html")
@@ -416,15 +416,31 @@ class Handler(BaseHTTPRequestHandler):
                        "text/html; charset=utf-8")
             return
         body = page.encode("utf-8")
-        self._send(HTTPStatus.OK, body, "text/html; charset=utf-8", {
+        # The shell only changes with a deploy or a config change, both of which
+        # change the bytes, so an ETag turns every repeat navigation into a
+        # 304 with an empty body instead of re-sending the whole page. The
+        # service worker drives navigations network-first, which makes this
+        # the common case on a slow connection.
+        tag = _etag(body)
+        headers = {
             "Cache-Control": "no-cache",
+            "ETag": tag,
+            "Vary": "Accept-Encoding",
             "Content-Security-Policy": (
                 "default-src 'self'; img-src 'self' data:; "
                 "style-src 'self' 'unsafe-inline'; script-src 'self'; "
                 "worker-src 'self'; manifest-src 'self'; connect-src 'self'; "
                 "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
             ),
-        })
+        }
+        if self.headers.get("If-None-Match") == tag:
+            self.send_response(HTTPStatus.NOT_MODIFIED)
+            for key, value in headers.items():
+                self.send_header(key, value)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        self._send(HTTPStatus.OK, body, "text/html; charset=utf-8", headers)
 
     def _maybe_alert(self, payload):
         """Fire a frost alert if one is due.
@@ -618,8 +634,16 @@ def main(argv=None):
                                      place=config.place)
         radar_instance.start()
 
+    # Warm the forecast cache in the background so the first visitor after a
+    # cold start gets a cached answer instead of paying for the upstream fetch.
+    # snapshot() records per-source errors rather than raising, and a slow
+    # first fetch here overlaps the wait for the first request anyway.
+    service = sources.WeatherService(config)
+    threading.Thread(target=service.snapshot, name="cache-warmup",
+                     daemon=True).start()
+
     try:
-        httpd = create_server(config, radar_instance=radar_instance)
+        httpd = create_server(config, service=service, radar_instance=radar_instance)
     except OSError as exc:
         log.error("cannot bind %s:%s — %s", config.host, config.port, exc)
         log.error("Try another port:  python app.py --port 8080")

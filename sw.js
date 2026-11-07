@@ -43,10 +43,10 @@ var SHELL = [
   "/",
   "/manifest.webmanifest",
   "/favicon.svg",
-  "/icon-192.png",
-  "/icon-512.png",
-  "/icon-maskable-512.png",
-  "/icon-180.png",
+  // The PNG install icons (~64 KB) are deliberately NOT here: only the OS
+  // reads them, when adding to the home screen — which needs a network
+  // anyway. Precaching them made every first visit download them for nothing,
+  // which on a slow connection competes with the weather fetch that follows.
   // The page shell also needs the scripts and the stylesheet, or an offline
   // launch renders unstyled and says nothing. These must carry the same ?v= the
   // page asks for: a cache is keyed by the whole URL, so a bare "/app.js" here
